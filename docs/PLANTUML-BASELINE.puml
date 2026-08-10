@@ -1,0 +1,473 @@
+' Fonte: SDD-MVP-Gestao-Financeira.md, AGENTS.md e CODEX-IMPLEMENTATION-BACKLOG.md
+' Regra: os invariantes anotados neste diagrama não podem mudar sem autorização explícita do usuário.
+
+@startuml platform_context
+title Plataforma SaaS de Gestão Financeira de Obras — Contexto e módulos
+left to right direction
+skinparam shadowing false
+skinparam linetype ortho
+skinparam componentStyle rectangle
+
+actor "Proprietário\nda plataforma" as owner
+actor "Suporte\nda plataforma" as support
+actor "Empresa assinante\n(tenant)" as company_user
+actor "Funcionário\nda empresa" as employee
+actor "Cliente final\n(aceite externo)" as final_customer
+
+rectangle "Frontend futuro\n(aplicação separada)" as frontend
+component "API REST Spring Boot" as api
+database "PostgreSQL\nFlyway" as db
+cloud "Gateway de pagamento\n(adaptador; Asaas inicial)" as payment
+cloud "E-mail" as mail
+cloud "Object storage\n(anexos e documentos)" as storage
+
+package "Módulos de plataforma" {
+  [platform] as platform
+  [identity] as identity
+  [tenancy] as tenancy
+  [access] as access
+  [governance] as governance
+}
+
+package "Módulos da operação do tenant" {
+  [customers] as customers
+  [works] as works
+  [contracts] as contracts
+  [measurements] as measurements
+  [receivables] as receivables
+  [payables] as payables
+  [reporting] as reporting
+  [documents] as documents
+  [notifications] as notifications
+}
+
+owner --> frontend
+support --> frontend
+company_user --> frontend
+employee --> frontend
+frontend --> api : HTTPS /api/v1
+
+api --> platform
+api --> identity
+api --> tenancy
+api --> access
+api --> governance
+api --> customers
+api --> works
+api --> contracts
+api --> measurements
+api --> receivables
+api --> payables
+api --> reporting
+api --> documents
+api --> notifications
+
+platform --> payment : cobrança recorrente\n+webhook idempotente
+notifications --> mail
+documents --> storage
+
+platform --> db
+identity --> db
+tenancy --> db
+access --> db
+governance --> db
+customers --> db
+works --> db
+contracts --> db
+measurements --> db
+receivables --> db
+payables --> db
+reporting --> db
+documents --> db
+
+final_customer <-[#darkgreen]- measurements : planilha/PDF enviado\nfora do sistema
+
+note bottom of api
+  Backend atual: monólito modular.
+  O frontend futuro nunca acessa banco,
+  gateway ou storage diretamente.
+end note
+
+note bottom of tenancy
+  INVARIANTE:
+  company_id vem do contexto autenticado.
+  Nunca do payload livre do tenant.
+end note
+@enduml
+
+@startuml core_domain
+title Domínio principal — Cliente Final, Obra, Contrato e financeiro
+left to right direction
+skinparam shadowing false
+skinparam linetype ortho
+skinparam classAttributeIconSize 0
+
+class Company {
+  +id: UUID
+  +companyId: UUID
+  +status
+}
+
+class FinalCustomer <<table: final_customer>> {
+  +id: UUID
+  +companyId: UUID
+  +tipo: PF|PJ
+}
+
+class Work <<table: obra>> {
+  +id: UUID
+  +companyId: UUID
+  +finalCustomerId: UUID
+  +executionLocationType
+  +status
+}
+
+class Contract {
+  +id: UUID
+  +companyId: UUID
+  +workId: UUID
+  +status
+  +netValue()
+  +billableBalance()
+}
+
+class ServiceTemplate {
+  +id: UUID
+  +companyId: UUID
+}
+
+class ContractService {
+  +id: UUID
+  +contractId: UUID
+  +status
+  +grossValue
+  +serviceDiscount
+}
+
+class Measurement {
+  +id: UUID
+  +workId: UUID
+  +contractId: UUID?
+  +status
+}
+
+class MeasurementVersion {
+  +id: UUID
+  +status
+  +headerDiscount
+}
+
+class MeasurementItem {
+  +id: UUID
+  +billingType
+  +formula
+  +totalKg
+  +totalValue
+}
+
+class BillingInstallment {
+  +id: UUID
+  +contractId: UUID
+  +dueDate
+  +status
+}
+
+class BillingAllocation {
+  +id: UUID
+  +kind: SERVICE|CONTRACT_DISCOUNT
+  +netAmount
+}
+
+class Invoice {
+  +id: UUID
+  +contractId: UUID
+  +number
+  +issueDate
+  +status
+}
+
+class InvoiceItem {
+  +id: UUID
+  +amount
+}
+
+class Receivable {
+  +id: UUID
+  +billingInstallmentId: UUID
+  +dueDate
+  +status
+}
+
+class ReceivableSettlement {
+  +id: UUID
+  +amount
+  +receivedAt
+}
+
+class Payable {
+  +id: UUID
+  +companyId: UUID
+  +financialScope: WORK|COMPANY
+  +workId: UUID?
+  +contractId: UUID?
+  +amount
+  +status
+}
+
+class PayableSettlement {
+  +id: UUID
+  +amount
+  +paidAt
+}
+
+class WorkFinancialSummary <<read model>> {
+  +billedRevenue
+  +invoicedRevenue
+  +receivedRevenue
+  +plannedResult
+  +cashResult
+}
+
+Company "1" --> "0..*" FinalCustomer : cadastra
+FinalCustomer "1" --> "0..*" Work : possui
+Work "1" --> "0..*" Contract : possui
+Contract "1" --> "0..*" ContractService : contém
+ServiceTemplate "1" ..> "0..*" ContractService : copia para
+
+Work "1" --> "0..*" Measurement : possui
+Measurement "1" --> "1..*" MeasurementVersion : versiona
+MeasurementVersion "1" --> "1..*" MeasurementItem : contém
+MeasurementItem "0..1" ..> "0..1" ContractService : gera uma vez\napós aceite
+
+Contract "1" --> "0..*" BillingInstallment : fatura
+BillingInstallment "1" --> "1..*" BillingAllocation : aloca
+BillingAllocation "0..*" --> "0..1" ContractService : serviço
+Contract "1" --> "0..*" Invoice : possui
+Invoice "1" --> "1..*" InvoiceItem : contém
+InvoiceItem "0..*" --> "1" BillingAllocation : documenta
+BillingInstallment "1" --> "1" Receivable : gera
+Receivable "1" --> "0..*" ReceivableSettlement : recebe
+
+Company "1" --> "0..*" Payable : registra
+Work "0..1" --> "0..*" Payable : escopo WORK
+Contract "0..1" --> "0..*" Payable : detalhe opcional
+Payable "1" --> "0..*" PayableSettlement : recebe pagamento
+
+Work ..> WorkFinancialSummary : consolida
+Contract ..> WorkFinancialSummary : receita derivada
+Payable ..> WorkFinancialSummary : somente escopo WORK
+
+note top of Work
+  INVARIANTE:
+  Obra é tabela própria.
+  Uma obra tem um cliente final
+  e pode ter vários contratos.
+  Local: cliente, prestadora ou outro.
+end note
+
+note top of Contract
+  INVARIANTE:
+  Faturamento, saldo, parcela, NF
+  e conta a receber são do contrato.
+  Contrato pode não ter serviço.
+end note
+
+note bottom of BillingAllocation
+  Fonte canônica do saldo faturável.
+  NF e contas a receber não
+  consomem saldo uma segunda vez.
+end note
+
+note bottom of Payable
+  WORK: workId obrigatório;
+  contractId opcional e da mesma obra.
+  COMPANY: workId e contractId nulos.
+  Ex.: EPI pode ser da obra sem contrato.
+end note
+
+note bottom of WorkFinancialSummary
+  Receita e lucro são calculados:
+  - previsto = faturamento líquido
+    menos gastos WORK;
+  - caixa = recebimentos menos
+    pagamentos WORK.
+  Gastos COMPANY ficam fora.
+end note
+@enduml
+
+@startuml governance_subscription
+title Segurança, governança, assinatura e cobrança
+left to right direction
+skinparam shadowing false
+skinparam linetype ortho
+skinparam classAttributeIconSize 0
+
+class User {
+  +id: UUID
+  +email
+  +status
+}
+
+class CompanyUser {
+  +companyId: UUID
+}
+
+class PlatformUser {
+  +globalRole
+}
+
+class Role
+class Permission {
+  +module
+  +action
+}
+
+class ChangeRequest {
+  +entityType
+  +operation
+  +beforeSnapshot
+  +proposedSnapshot
+  +status
+}
+
+class AuditEvent {
+  +actorId
+  +companyId
+  +action
+  +beforeAfter
+  +occurredAt: Instant
+}
+
+class Plan
+class PlanBundle
+class Subscription {
+  +trialUntil
+  +status
+  +priceSnapshot
+}
+
+class PlatformCharge {
+  +dueDate
+  +status
+}
+
+class TrustUnlock {
+  +reason
+  +startsAt
+  +expiresAt
+}
+
+interface PaymentGateway {
+  +createSubscription()
+  +receiveWebhook()
+  +reconcile()
+}
+
+class AsaasAdapter <<infrastructure>>
+
+User "1" --> "0..1" CompanyUser : usuário de empresa
+User "1" --> "0..1" PlatformUser : proprietário/suporte
+CompanyUser "*" --> "1" Role
+Role "*" --> "*" Permission
+
+CompanyUser "1" --> "0..*" ChangeRequest : solicita
+User "0..1" --> "0..*" ChangeRequest : aprova/rejeita
+ChangeRequest --> "0..*" AuditEvent : gera
+User --> "0..*" AuditEvent : executa
+PlatformUser --> "0..*" AuditEvent : atua em tenant alvo
+
+Company "1" --> "0..*" Subscription : contrata
+Subscription "*" --> "1..*" Plan : inclui
+PlanBundle "*" --> "1..*" Plan : precifica combinação
+Subscription "1" --> "0..*" PlatformCharge : gera
+PlatformCharge "1" --> "0..2" TrustUnlock : permite
+PaymentGateway <|.. AsaasAdapter
+AsaasAdapter ..> PlatformCharge : webhook idempotente
+
+note top of CompanyUser
+  INVARIANTE:
+  Usuário de empresa pertence
+  a exatamente uma empresa.
+end note
+
+note top of PlatformUser
+  Suporte pode atuar em empresas,
+  mas não aprova, exclui, muda plano,
+  dados estruturais ou papéis.
+end note
+
+note right of ChangeRequest
+  Sem alçada direta:
+  proposta não altera dado oficial
+  e não entra em relatório.
+  Solicitante nunca se autoaprova.
+end note
+
+note bottom of AuditEvent
+  Append-only e imutável.
+  Retenção mínima: 5 anos.
+end note
+
+note bottom of PlatformCharge
+  Trial: 30 dias.
+  Vencida: consulta.
+  D+5: inadimplente em consulta.
+  D+10: bloqueio total.
+end note
+@enduml
+
+@startuml execution_roadmap
+title Roteiro de implementação Codex — dependências e nível recomendado
+left to right direction
+skinparam shadowing false
+skinparam linetype ortho
+skinparam rectangle {
+  RoundCorner 8
+}
+
+rectangle "Fase 0\nFundação e migrations\nTerra M/H + Sol X review" as f0
+rectangle "Fase 1\nIdentidade, tenant,\nacesso, auditoria\nSol X/U" as f1
+rectangle "Fase 2\nPlanos, trial,\ncobrança SaaS\nTerra X / Sol X" as f2
+rectangle "Fase 3\nCliente final, obra,\ncontrato e serviços\nTerra H/X" as f3
+rectangle "Fase 4\nMedições e documentos\nTerra X/U + Sol X" as f4
+rectangle "Fase 5\nFaturamento, NF,\ncontas a receber\nSol U" as f5
+rectangle "Fase 6\nGastos, lucro por obra,\nfluxo de caixa\nSol X/U" as f6
+rectangle "Fase 7\nRelatórios e exportações\nTerra H/X" as f7
+rectangle "Fase 8\nRegressão, segurança,\noperação e release\nSol U" as f8
+
+f0 --> f1
+f1 --> f3
+f3 --> f5
+f5 --> f6
+f6 --> f7
+f7 --> f8
+
+f1 --> f2 : pode ocorrer\nem paralelo
+f3 --> f4
+f4 --> f5 : conversão de medição\nusa serviço/contrato
+f2 --> f8 : webhook, dunning\ne bloqueio testados
+
+note bottom of f5
+  Tarefas mais críticas:
+  saldo canônico, concorrência,
+  desconto contratual, NF parcial
+  e estornos.
+end note
+
+note bottom of f6
+  Receita vem dos contratos.
+  Lucro e gastos são consolidados
+  na obra. Gastos COMPANY ficam
+  apenas no caixa geral.
+end note
+
+legend right
+  Terra leve: edição mecânica
+  Terra médio: CRUD delimitado
+  Terra alto: módulo com regras
+  Terra xhigh: alteração transversal
+  Terra ultra: fluxo crítico
+  Sol xhigh/ultra: revisão de
+  segurança, arquitetura e financeiro
+endlegend
+@enduml
