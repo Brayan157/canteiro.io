@@ -1,0 +1,13 @@
+CREATE TABLE company (
+    id UUID PRIMARY KEY,
+    corporate_name VARCHAR(255) NOT NULL,
+    trade_name VARCHAR(255),
+    document VARCHAR(20) UNIQUE NOT NULL,
+    email VARCHAR(255) UNIQUE NOT NULL,
+    phone VARCHAR(20),
+    address VARCHAR(255),
+    active BOOLEAN NOT NULL DEFAULT TRUE,
+    logo VARCHAR(255),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
