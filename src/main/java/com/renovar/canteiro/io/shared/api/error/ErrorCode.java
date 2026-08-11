@@ -1,0 +1,13 @@
+package com.renovar.canteiro.io.shared.api.error;
+
+public enum ErrorCode {
+    VALIDATION_FAILED,
+    MALFORMED_REQUEST,
+    RESOURCE_NOT_FOUND,
+    BUSINESS_RULE_VIOLATION,
+    ACCESS_DENIED,
+    UNAUTHENTICATED,
+    INVALID_PAGINATION,
+    INVALID_FILTER,
+    INTERNAL_ERROR
+}
