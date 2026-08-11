@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  push:
+    branches: [main, feature/**]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: Testes, lint e cobertura
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Configurar Java 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+
+      - name: Tornar Gradle Wrapper executável
+        run: chmod +x gradlew
+
+      - name: Executar quality gates
+        run: ./gradlew --no-daemon check jacocoTestReport

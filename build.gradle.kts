@@ -1,5 +1,11 @@
+import org.gradle.api.plugins.quality.Checkstyle
+import org.gradle.testing.jacoco.tasks.JacocoCoverageVerification
+import org.gradle.testing.jacoco.tasks.JacocoReport
+
 plugins {
 	java
+	jacoco
+	checkstyle
 	id("org.springframework.boot") version "4.1.0"
 	id("io.spring.dependency-management") version "1.1.7"
 }
@@ -44,4 +50,46 @@ dependencies {
 
 tasks.withType<Test> {
 	useJUnitPlatform()
+}
+
+checkstyle {
+	toolVersion = "10.26.1"
+	configFile = file("config/checkstyle/checkstyle.xml")
+	isIgnoreFailures = false
+}
+
+tasks.withType<Checkstyle> {
+	reports {
+		xml.required.set(true)
+		html.required.set(true)
+	}
+}
+
+jacoco {
+	toolVersion = "0.8.13"
+}
+
+tasks.withType<JacocoReport> {
+	dependsOn(tasks.test)
+	reports {
+		xml.required.set(true)
+		html.required.set(true)
+	}
+}
+
+tasks.withType<JacocoCoverageVerification> {
+	dependsOn(tasks.test)
+	violationRules {
+		rule {
+			limit {
+				counter = "INSTRUCTION"
+				value = "COVEREDRATIO"
+				minimum = "0.15".toBigDecimal()
+			}
+		}
+	}
+}
+
+tasks.check {
+	dependsOn(tasks.jacocoTestCoverageVerification)
 }
