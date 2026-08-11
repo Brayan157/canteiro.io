@@ -1,17 +1,19 @@
-package com.renovar.canteiro.io.entity;
+package com.renovar.canteiro.io.platform.company.infrastructure.persistence;
 
+import com.renovar.canteiro.io.shared.infrastructure.persistence.jpa.BaseJpaEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
-import lombok.*;
-import lombok.experimental.SuperBuilder;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 
 @Getter
 @Entity
-@SuperBuilder
-@NoArgsConstructor(access = AccessLevel.PROTECTED)
 @Table(name = "company")
-public class Company extends BaseEntity {
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
+public class CompanyJpaEntity extends BaseJpaEntity {
+
     @Column(name = "corporate_name", nullable = false)
     private String corporateName;
 
@@ -30,14 +32,13 @@ public class Company extends BaseEntity {
     @Column(name = "address")
     private String address;
 
-    @Column(name = "active")
-    private Boolean active = true;
+    @Column(name = "active", nullable = false)
+    private boolean active;
 
     @Column(name = "logo")
     private String logo;
 
-    @Builder
-    public Company(
+    public CompanyJpaEntity(
             String corporateName,
             String tradeName,
             String document,
@@ -45,7 +46,7 @@ public class Company extends BaseEntity {
             String phone,
             String address,
             String logo,
-            Boolean active
+            boolean active
     ) {
         this.corporateName = corporateName;
         this.tradeName = tradeName;
@@ -54,29 +55,26 @@ public class Company extends BaseEntity {
         this.phone = phone;
         this.address = address;
         this.logo = logo;
-        this.active = active != null ? active : true;
+        this.active = active;
     }
-    public void activate() {
-        this.active = true;
-    }
-    public void deactivate() {
-        this.active = false;
-    }
-    public void updateContact(String email, String phone) {
-        this.email = email;
-        this.phone = phone;
-    }
-    public void updateBasicInformation(
+
+    public void update(
             String corporateName,
             String tradeName,
             String document,
+            String email,
+            String phone,
             String address,
-            String logo
+            String logo,
+            boolean active
     ) {
         this.corporateName = corporateName;
         this.tradeName = tradeName;
         this.document = document;
+        this.email = email;
+        this.phone = phone;
         this.address = address;
         this.logo = logo;
+        this.active = active;
     }
 }

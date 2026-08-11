@@ -1,9 +1,11 @@
-package com.renovar.canteiro.io.entity;
+package com.renovar.canteiro.io.shared.infrastructure.persistence.jpa;
 
-import jakarta.persistence.*;
+import jakarta.persistence.Column;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.MappedSuperclass;
 import lombok.Getter;
-import lombok.Setter;
-import lombok.experimental.SuperBuilder;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
@@ -12,7 +14,8 @@ import java.util.UUID;
 
 @Getter
 @MappedSuperclass
-public abstract class BaseEntity {
+public abstract class BaseJpaEntity {
+
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
