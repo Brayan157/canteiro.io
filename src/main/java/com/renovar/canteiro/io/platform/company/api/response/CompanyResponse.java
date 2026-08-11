@@ -1,6 +1,6 @@
 package com.renovar.canteiro.io.platform.company.api.response;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.UUID;
 
 public record CompanyResponse(
@@ -13,7 +13,7 @@ public record CompanyResponse(
         String address,
         String logo,
         boolean active,
-        LocalDateTime createdAt,
-        LocalDateTime updatedAt
+        Instant createdAt,
+        Instant updatedAt
 ) {
 }

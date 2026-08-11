@@ -13,6 +13,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @Import(TestcontainersConfiguration.class)
@@ -52,6 +53,8 @@ class CompanyApplicationServiceIntegrationTest {
         assertEquals(created.getId(), updated.getId());
         assertEquals(created.getId(), persistedAfterUpdate.getId());
         assertEquals("Updated trade name", persistedAfterUpdate.getTradeName());
+        assertNotNull(persistedAfterUpdate.getCreatedAt());
+        assertNotNull(persistedAfterUpdate.getUpdatedAt());
         assertEquals(companiesBefore + 1, companyApplicationService.findAll().size());
 
         companyApplicationService.deactivate(created.getId());

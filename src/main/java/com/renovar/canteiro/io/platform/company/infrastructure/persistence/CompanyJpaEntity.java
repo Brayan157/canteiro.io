@@ -4,38 +4,45 @@ import com.renovar.canteiro.io.shared.infrastructure.persistence.jpa.BaseJpaEnti
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 @Getter
 @Entity
-@Table(name = "company")
+@Table(
+        name = "company",
+        uniqueConstraints = {
+                @UniqueConstraint(name = "uk_company_document", columnNames = "document"),
+                @UniqueConstraint(name = "uk_company_email", columnNames = "email")
+        }
+)
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class CompanyJpaEntity extends BaseJpaEntity {
 
-    @Column(name = "corporate_name", nullable = false)
+    @Column(name = "corporate_name", nullable = false, length = 255)
     private String corporateName;
 
-    @Column(name = "trade_name")
+    @Column(name = "trade_name", length = 255)
     private String tradeName;
 
-    @Column(name = "document", nullable = false, unique = true, length = 20)
+    @Column(name = "document", nullable = false, length = 20)
     private String document;
 
-    @Column(name = "email", nullable = false, unique = true)
+    @Column(name = "email", nullable = false, length = 255)
     private String email;
 
-    @Column(name = "phone")
+    @Column(name = "phone", length = 20)
     private String phone;
 
-    @Column(name = "address")
+    @Column(name = "address", length = 255)
     private String address;
 
     @Column(name = "active", nullable = false)
     private boolean active;
 
-    @Column(name = "logo")
+    @Column(name = "logo", length = 255)
     private String logo;
 
     public CompanyJpaEntity(

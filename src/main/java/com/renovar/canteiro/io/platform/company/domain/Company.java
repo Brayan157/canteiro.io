@@ -2,7 +2,7 @@ package com.renovar.canteiro.io.platform.company.domain;
 
 import lombok.Getter;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.UUID;
 
 @Getter
@@ -17,8 +17,8 @@ public final class Company {
     private String address;
     private String logo;
     private boolean active;
-    private final LocalDateTime createdAt;
-    private final LocalDateTime updatedAt;
+    private final Instant createdAt;
+    private final Instant updatedAt;
 
     private Company(
             UUID id,
@@ -30,8 +30,8 @@ public final class Company {
             String address,
             String logo,
             boolean active,
-            LocalDateTime createdAt,
-            LocalDateTime updatedAt
+            Instant createdAt,
+            Instant updatedAt
     ) {
         this.id = id;
         this.corporateName = corporateName;
@@ -68,8 +68,8 @@ public final class Company {
             String address,
             String logo,
             boolean active,
-            LocalDateTime createdAt,
-            LocalDateTime updatedAt
+            Instant createdAt,
+            Instant updatedAt
     ) {
         return new Company(id, corporateName, tradeName, document, email, phone, address, logo, active, createdAt, updatedAt);
     }
