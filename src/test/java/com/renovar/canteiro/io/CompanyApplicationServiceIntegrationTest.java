@@ -6,8 +6,6 @@ import com.renovar.canteiro.io.platform.company.application.UpdateCompanyCommand
 import com.renovar.canteiro.io.platform.company.domain.Company;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.context.annotation.Import;
 
 import java.util.UUID;
 
@@ -16,9 +14,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-@Import(TestcontainersConfiguration.class)
-@SpringBootTest
-class CompanyApplicationServiceIntegrationTest {
+class CompanyApplicationServiceIntegrationTest extends AbstractPostgresIntegrationTest {
 
     @Autowired
     private CompanyApplicationService companyApplicationService;
