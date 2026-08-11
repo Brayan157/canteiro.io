@@ -14,5 +14,7 @@
 As configurações comuns não contêm credenciais. O perfil padrão é `local`; em
 produção, defina explicitamente `SPRING_PROFILES_ACTIVE=prod`.
 
-O arquivo `.env` é ignorado pelo Git. Copie `.env.example` para `.env` e
-substitua a senha de desenvolvimento antes de iniciar os containers.
+O arquivo `.env` é ignorado pelo Git e carregado automaticamente pelo perfil
+`local`. Copie `.env.example` para `.env` e substitua a senha de
+desenvolvimento antes de iniciar os containers. Assim, o IntelliJ também pode
+executar a API sem cadastrar manualmente as variáveis de ambiente.
