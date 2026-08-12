@@ -18,6 +18,7 @@ public class CompanyApiMapper {
         );
     }
 
+
     public UpdateCompanyCommand toCommand(CompanyUpdateRequest request) {
         return new UpdateCompanyCommand(
                 request.corporateName(), request.tradeName(), request.document(), request.email(),
