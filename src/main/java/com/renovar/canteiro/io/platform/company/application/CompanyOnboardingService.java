@@ -1,5 +1,7 @@
 package com.renovar.canteiro.io.platform.company.application;
 
+import com.renovar.canteiro.io.access.application.InitialCompanyOwnerAccess;
+import com.renovar.canteiro.io.access.application.InitialCompanyOwnerAccessProvisioner;
 import com.renovar.canteiro.io.governance.application.AuditEventRecorder;
 import com.renovar.canteiro.io.identity.application.AccountActivationEmailSender;
 import com.renovar.canteiro.io.identity.application.AccountActivationProperties;
@@ -45,6 +47,7 @@ public class CompanyOnboardingService {
     private final ActivationTokenHasher activationTokenHasher;
     private final AccountActivationEmailSender accountActivationEmailSender;
     private final AccountActivationProperties accountActivationProperties;
+    private final InitialCompanyOwnerAccessProvisioner initialCompanyOwnerAccessProvisioner;
     private final AuditEventRecorder auditEventRecorder;
     private final Clock clock;
 
@@ -77,6 +80,9 @@ public class CompanyOnboardingService {
         ));
         User owner = userRepository.save(User.create(ownerEmail, UserType.COMPANY));
         companyUserRepository.save(CompanyUser.create(owner.getId(), company.getId()));
+        InitialCompanyOwnerAccess initialOwnerAccess = initialCompanyOwnerAccessProvisioner.provision(
+                company.getId(), owner.getId()
+        );
 
         Instant selectedAt = clock.instant();
         List<java.util.UUID> selectedPlanIds = priceQuote.planIds().stream().sorted().toList();
@@ -90,7 +96,10 @@ public class CompanyOnboardingService {
                 "selectedPlanIds", selectedPlanIds,
                 "quotedAmount", priceQuote.amount(),
                 "pricingSource", priceQuote.source().name(),
-                "planBundleId", priceQuote.planBundleId() == null ? "" : priceQuote.planBundleId().toString()
+                "planBundleId", priceQuote.planBundleId() == null ? "" : priceQuote.planBundleId().toString(),
+                "initialOwnerRoleId", initialOwnerAccess.roleId().toString(),
+                "initialOwnerRoleName", initialOwnerAccess.roleName(),
+                "initialOwnerPermissionCodes", initialOwnerAccess.permissionCodes()
         ));
         return new CompanyOnboardingResult(company.getId(), owner.getId(), owner.getEmail(), selectedPlanIds, priceQuote);
     }

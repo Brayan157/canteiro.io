@@ -16,4 +16,4 @@ Fluxo seguro recomendado:
 
 As respostas de criação guardam IDs necessários em variáveis da collection. As requisições de desativação ficam em subpastas separadas e devem ser usadas somente nos registros `DEMO` criados pela própria collection.
 
-O módulo de acesso da Company exige permissões já atribuídas. O onboarding atual cria o proprietário pendente, mas a atribuição inicial de papel não faz parte da F02-04.
+O onboarding cria o proprietário pendente e atribui a ele o papel inicial `Company Administrator`, com todas as permissões ativas do catálogo. Após ativar a conta, esse proprietário pode administrar usuários, papéis e alçadas da própria Company.
