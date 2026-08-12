@@ -2,8 +2,8 @@
 
 **Nome comercial:** a definir  
 **Repositório atual:** Canteiro.io  
-**Versão do documento:** 0.1  
-**Data:** 10 de agosto de 2026  
+**Versão do documento:** 0.2<br>
+**Data:** 12 de agosto de 2026<br>
 **Status:** requisitos de negócio consolidados; recomendações técnicas identificadas como tal  
 
 ## 1. Objetivo
@@ -116,10 +116,12 @@ O frontend será um projeto separado no futuro e consumirá a API REST Spring. E
 | D-11 | Uma NF pertence a um único contrato e pode distribuir seu valor entre vários serviços desse contrato. Um serviço pode ser faturado em várias NFs. |
 | D-12 | O sistema não permite que o faturamento acumulado aprovado ultrapasse o valor líquido do contrato. |
 | D-13 | Uma redução de valor/desconto do contrato que deixaria o valor líquido abaixo do faturamento líquido já aprovado é bloqueada até haver estorno, crédito ou renegociação correspondente. |
-| D-14 | Desconto de contrato é uma linha de ajuste contratual de faturamento, separada dos valores dos serviços; ele não regrava nem rateia os preços dos serviços. |
-| D-15 | Controle de faturamento, parcelas, saldo faturável, NFs e contas a receber pertencem ao contrato. A obra somente consolida esses valores entre seus contratos. |
-| D-16 | Receita, custos, gastos vinculados e lucro são apurados no nível da obra, somando os resultados dos seus contratos e os gastos diretamente atribuídos à obra. |
-| D-17 | Todo gasto possui escopo Obra ou Empresa. Gasto de Empresa não possui obra/contrato, integra caixa e relatórios gerais da empresa, mas não altera lucro de qualquer obra. |
+| D-14 | O onboarding público de uma empresa exige ao menos um plano. Ele cria a Company, o proprietário inicial pendente, o vínculo com a Company, as seleções de plano e o token de ativação; não depende de aprovação manual da plataforma. |
+| D-15 | O proprietário inicial recebe automaticamente o papel `Company Administrator` com todas as permissões ativas do catálogo controlado no momento do onboarding. Após ativar a conta, possui alçada direta efetiva, sem deixar de gerar auditoria nas ações futuras. |
+| D-16 | Desconto de contrato é uma linha de ajuste contratual de faturamento, separada dos valores dos serviços; ele não regrava nem rateia os preços dos serviços. |
+| D-17 | Controle de faturamento, parcelas, saldo faturável, NFs e contas a receber pertencem ao contrato. A obra somente consolida esses valores entre seus contratos. |
+| D-18 | Receita, custos, gastos vinculados e lucro são apurados no nível da obra, somando os resultados dos seus contratos e os gastos diretamente atribuídos à obra. |
+| D-19 | Todo gasto possui escopo Obra ou Empresa. Gasto de Empresa não possui obra/contrato, integra caixa e relatórios gerais da empresa, mas não altera lucro de qualquer obra. |
 
 ## 4. Atores e acesso
 
@@ -167,6 +169,8 @@ Perfis iniciais sugeridos:
 | Auditor financeiro | Aprova somente faturamento, NFs, recebimentos, pagamentos, custos e despesas. |
 | Operador de cadastro | Cria ou altera dados, enviando-os para aprovação quando não tiver alçada direta. |
 | Relatórios | Consulta e exporta dados autorizados, sem alterar registros. |
+
+No onboarding, o perfil `Empresa master` é materializado como o papel `Company Administrator` e atribuído ao proprietário inicial. Ele recebe todas as permissões ativas do catálogo controlado disponível naquele momento. Esse perfil permite que uma empresa com um único usuário trabalhe sem pendências inviáveis de aprovar; empresas maiores podem posteriormente criar e atribuir papéis mais restritos.
 
 ### 4.3 Fluxo de aprovação
 
@@ -305,19 +309,20 @@ Transições financeiras obrigatórias:
 ### 5.6 Assinaturas e inadimplência da plataforma
 
 1. A empresa escolhe pelo menos um plano para criar e utilizar a conta.
-2. Planos são cumulativos. A precificação usa pacotes de combinação configurados pelo proprietário, para que combinações como Plano 1 + Plano 2 tenham preço promocional sem alterar preços individuais.
-3. Cada contratação mantém foto do preço, desconto, composição e vigência para preservar histórico.
-4. O período de teste é de 30 dias.
-5. A integração será encapsulada por uma interface de gateway. A implementação inicial recomendada é Asaas, pois sua documentação oficial suporta cobranças recorrentes por boleto, Pix e cartão de crédito, além de webhooks de cobrança. O cartão pode ser cobrado automaticamente; Pix e boleto têm geração recorrente de cobrança, mas o pagador realiza o pagamento. Veja a documentação oficial do Asaas: https://docs.asaas.com/docs/faq-assinaturas
-6. Eventos de webhook devem ser idempotentes, assinados/verificados e reconciliados com consulta periódica ao gateway.
-7. A regra de inadimplência será:
+2. O onboarding é público e não exige aceite manual da plataforma: cria o proprietário pendente, o papel administrativo inicial, as seleções de plano e um token de ativação enviado por e-mail. A ativação define a senha do proprietário e libera seu login; não é aprovação da Company.
+3. Planos são cumulativos. A precificação usa pacotes de combinação configurados pelo proprietário, para que combinações como Plano 1 + Plano 2 tenham preço promocional sem alterar preços individuais.
+4. Cada contratação mantém foto do preço, desconto, composição e vigência para preservar histórico.
+5. O período de teste é de 30 dias.
+6. A integração será encapsulada por uma interface de gateway. A implementação inicial recomendada é Asaas, pois sua documentação oficial suporta cobranças recorrentes por boleto, Pix e cartão de crédito, além de webhooks de cobrança. O cartão pode ser cobrado automaticamente; Pix e boleto têm geração recorrente de cobrança, mas o pagador realiza o pagamento. Veja a documentação oficial do Asaas: https://docs.asaas.com/docs/faq-assinaturas
+7. Eventos de webhook devem ser idempotentes, assinados/verificados e reconciliados com consulta periódica ao gateway.
+8. A regra de inadimplência será:
    - vencimento não pago: avisos por e-mail;
    - após o vencimento: acesso somente para consulta;
    - a partir de 5 dias: status de inadimplente e manutenção de consulta;
    - aproximadamente a partir de 10 dias: bloqueio total;
    - pagamento confirmado: restaura o acesso conforme a assinatura ativa;
    - desbloqueio de confiança: até dois por cobrança vencida, gravando autor, motivo, início e expiração configurável.
-8. A plataforma mantém sua própria tabela de cobranças e eventos; o gateway não será a única fonte de verdade.
+9. A plataforma mantém sua própria tabela de cobranças e eventos; o gateway não será a única fonte de verdade.
 
 ## 6. Arquitetura proposta
 
