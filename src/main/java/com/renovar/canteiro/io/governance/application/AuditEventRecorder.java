@@ -57,6 +57,32 @@ public class AuditEventRecorder {
         ));
     }
 
+    /**
+     * Records the public creation of a company using its pending initial owner as
+     * the accountable actor. This is intentionally narrow: unauthenticated
+     * onboarding must not become a generic audit-context bypass.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public AuditEvent recordInitialCompanyOnboarding(
+            UUID companyId,
+            UUID ownerUserId,
+            Map<String, Object> afterData
+    ) {
+        return auditEventRepository.append(AuditEvent.create(
+                companyId,
+                ownerUserId,
+                AuditActorType.COMPANY_USER,
+                AuditModule.COMPANY,
+                AuditAction.CREATE,
+                "Company",
+                companyId,
+                null,
+                toPayload(afterData),
+                toMetadataPayload(Map.of("origin", "public-onboarding")),
+                clock.instant()
+        ));
+    }
+
     private AuditActor resolveActor() {
         return tenantContextHolder.currentTenant()
                 .map(tenant -> new AuditActor(tenant.userId(), tenant.companyId(), AuditActorType.COMPANY_USER))

@@ -34,6 +34,16 @@ public class JpaCompanyRepository implements CompanyRepository {
     }
 
     @Override
+    public Optional<Company> findByDocument(String document) {
+        return companyJpaRepository.findByDocument(document).map(companyPersistenceMapper::toDomain);
+    }
+
+    @Override
+    public Optional<Company> findByEmail(String email) {
+        return companyJpaRepository.findByEmailIgnoreCase(email).map(companyPersistenceMapper::toDomain);
+    }
+
+    @Override
     public List<Company> findAll() {
         return companyJpaRepository.findAll().stream().map(companyPersistenceMapper::toDomain).toList();
     }

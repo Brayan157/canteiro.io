@@ -1,0 +1,153 @@
+{
+  "info": {
+    "name": "canteiro.io — Fase 2",
+    "description": "Collection para testar os endpoints implementados até F02-04. Use apenas dados de demonstração. As operações de desativação são lógicas (não apagam histórico), mas foram separadas para evitar execução acidental.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "demoSuffix", "value": "20260812" },
+    { "key": "priceValidFrom", "value": "2026-08-12" },
+    { "key": "planId", "value": "" },
+    { "key": "featureId", "value": "" },
+    { "key": "bundleId", "value": "" },
+    { "key": "companyId", "value": "" },
+    { "key": "ownerUserId", "value": "" },
+    { "key": "roleId", "value": "" },
+    { "key": "employeeUserId", "value": "" },
+    { "key": "permissionId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "00 — Autenticação",
+      "description": "Os tokens de ativação e redefinição chegam pelo e-mail configurado. Login, refresh e logout salvam tokens no ambiente quando a resposta for bem-sucedida.",
+      "item": [
+        {
+          "name": "Ativar conta",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"activationToken\": \"{{activationToken}}\",\n  \"password\": \"{{password}}\"\n}" },
+            "url": "{{baseUrl}}/api/v1/auth/activate"
+          }
+        },
+        {
+          "name": "Login — proprietário de plataforma",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{platformOwnerEmail}}\",\n  \"password\": \"{{password}}\"\n}" },
+            "url": "{{baseUrl}}/api/v1/auth/login"
+          },
+          "event": [{ "listen": "test", "script": { "exec": ["if (pm.response.code === 200) {", "  const body = pm.response.json();", "  pm.environment.set('platformAccessToken', body.accessToken);", "  pm.environment.set('platformRefreshToken', body.refreshToken);", "}"] } }]
+        },
+        {
+          "name": "Login — usuário da empresa",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{companyOwnerEmail}}\",\n  \"password\": \"{{password}}\"\n}" },
+            "url": "{{baseUrl}}/api/v1/auth/login"
+          },
+          "event": [{ "listen": "test", "script": { "exec": ["if (pm.response.code === 200) {", "  const body = pm.response.json();", "  pm.environment.set('companyAccessToken', body.accessToken);", "  pm.environment.set('companyRefreshToken', body.refreshToken);", "}"] } }]
+        },
+        {
+          "name": "Renovar sessão da plataforma",
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"refreshToken\": \"{{platformRefreshToken}}\"\n}" }, "url": "{{baseUrl}}/api/v1/auth/refresh" },
+          "event": [{ "listen": "test", "script": { "exec": ["if (pm.response.code === 200) {", "  const body = pm.response.json();", "  pm.environment.set('platformAccessToken', body.accessToken);", "  pm.environment.set('platformRefreshToken', body.refreshToken);", "}"] } }]
+        },
+        {
+          "name": "Encerrar sessão da plataforma",
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"refreshToken\": \"{{platformRefreshToken}}\"\n}" }, "url": "{{baseUrl}}/api/v1/auth/logout" }
+        },
+        {
+          "name": "Solicitar redefinição de senha",
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{companyOwnerEmail}}\"\n}" }, "url": "{{baseUrl}}/api/v1/auth/password-reset/request" }
+        },
+        {
+          "name": "Confirmar redefinição de senha",
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"passwordResetToken\": \"{{passwordResetToken}}\",\n  \"newPassword\": \"{{password}}\"\n}" }, "url": "{{baseUrl}}/api/v1/auth/password-reset/confirm" }
+        }
+      ]
+    },
+    {
+      "name": "01 — Catálogo da plataforma (PLATFORM_OWNER)",
+      "description": "Requer platformAccessToken de um PLATFORM_OWNER. Execute Cria plano → Cria funcionalidade → Associa funcionalidade → Define preço. Todos os dados de demonstração usam demoSuffix e as respostas guardam os IDs automaticamente.",
+      "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{platformAccessToken}}", "type": "string" }] },
+      "item": [
+        { "name": "Listar planos", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/platform/catalog/plans" } },
+        {
+          "name": "Criar plano de demonstração",
+          "event": [{ "listen": "prerequest", "script": { "exec": ["pm.collectionVariables.set('demoSuffix', Date.now().toString());", "pm.collectionVariables.set('priceValidFrom', new Date().toISOString().slice(0, 10));"] } }, { "listen": "test", "script": { "exec": ["if (pm.response.code === 201) pm.collectionVariables.set('planId', pm.response.json().id);"] } }],
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"code\": \"DEMO_PLAN_{{demoSuffix}}\",\n  \"name\": \"Plano demonstração\",\n  \"description\": \"Criado pela collection Postman\"\n}" }, "url": "{{baseUrl}}/api/v1/platform/catalog/plans" }
+        },
+        { "name": "Atualizar plano", "request": { "method": "PATCH", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Plano demonstração atualizado\",\n  \"description\": \"Atualização de teste\"\n}" }, "url": "{{baseUrl}}/api/v1/platform/catalog/plans/{{planId}}" } },
+        { "name": "Adicionar preço vigente ao plano", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"amount\": 99.90,\n  \"validFrom\": \"{{priceValidFrom}}\",\n  \"validUntil\": null\n}" }, "url": "{{baseUrl}}/api/v1/platform/catalog/plans/{{planId}}/prices" } },
+        { "name": "Listar funcionalidades", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/platform/catalog/features" } },
+        {
+          "name": "Criar funcionalidade de demonstração",
+          "event": [{ "listen": "test", "script": { "exec": ["if (pm.response.code === 201) pm.collectionVariables.set('featureId', pm.response.json().id);"] } }],
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"code\": \"DEMO_FEATURE_{{demoSuffix}}\",\n  \"type\": \"MODULE\",\n  \"name\": \"Módulo demonstração\",\n  \"description\": \"Criado pela collection Postman\"\n}" }, "url": "{{baseUrl}}/api/v1/platform/catalog/features" }
+        },
+        { "name": "Atualizar funcionalidade", "request": { "method": "PATCH", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Módulo demonstração atualizado\",\n  \"description\": \"Atualização de teste\"\n}" }, "url": "{{baseUrl}}/api/v1/platform/catalog/features/{{featureId}}" } },
+        { "name": "Associar funcionalidade ao plano", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"featureId\": \"{{featureId}}\"\n}" }, "url": "{{baseUrl}}/api/v1/platform/catalog/plans/{{planId}}/features" } },
+        { "name": "Criar pacote de demonstração", "event": [{ "listen": "test", "script": { "exec": ["if (pm.response.code === 201) pm.collectionVariables.set('bundleId', pm.response.json().id);"] } }], "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"code\": \"DEMO_BUNDLE_{{demoSuffix}}\",\n  \"name\": \"Pacote demonstração\",\n  \"description\": \"Criado pela collection Postman\"\n}" }, "url": "{{baseUrl}}/api/v1/platform/catalog/bundles" } },
+        { "name": "Listar pacotes", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/platform/catalog/bundles" } },
+        { "name": "Atualizar pacote", "request": { "method": "PATCH", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Pacote demonstração atualizado\",\n  \"description\": \"Atualização de teste\"\n}" }, "url": "{{baseUrl}}/api/v1/platform/catalog/bundles/{{bundleId}}" } },
+        { "name": "Adicionar plano ao pacote", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"planId\": \"{{planId}}\"\n}" }, "url": "{{baseUrl}}/api/v1/platform/catalog/bundles/{{bundleId}}/plans" } },
+        { "name": "Adicionar preço vigente ao pacote", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"amount\": 89.90,\n  \"validFrom\": \"{{priceValidFrom}}\",\n  \"validUntil\": null\n}" }, "url": "{{baseUrl}}/api/v1/platform/catalog/bundles/{{bundleId}}/prices" } },
+        {
+          "name": "Operações de desativação (execute somente nos dados DEMO)",
+          "description": "São exclusões lógicas e preservam histórico. Não execute em registros reais.",
+          "item": [
+            { "name": "Desativar plano DEMO", "request": { "method": "PATCH", "url": "{{baseUrl}}/api/v1/platform/catalog/plans/{{planId}}/deactivate" } },
+            { "name": "Desativar funcionalidade DEMO", "request": { "method": "PATCH", "url": "{{baseUrl}}/api/v1/platform/catalog/features/{{featureId}}/deactivate" } },
+            { "name": "Desativar pacote DEMO", "request": { "method": "PATCH", "url": "{{baseUrl}}/api/v1/platform/catalog/bundles/{{bundleId}}/deactivate" } }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "02 — Onboarding de Company (público)",
+      "description": "Não requer token. Execute após criar e precificar o plano de demonstração. O endpoint cria Company, usuário proprietário pendente, seleção de plano e token de ativação.",
+      "item": [
+        {
+          "name": "Criar Company com plano obrigatório",
+          "event": [{ "listen": "test", "script": { "exec": ["if (pm.response.code === 201) {", "  const body = pm.response.json();", "  pm.collectionVariables.set('companyId', body.companyId);", "  pm.collectionVariables.set('ownerUserId', body.ownerUserId);", "  pm.environment.set('companyOwnerEmail', body.ownerEmail);", "}"] } }],
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"corporateName\": \"Construtora Demo {{demoSuffix}} Ltda\",\n  \"tradeName\": \"Canteiro Demo\",\n  \"document\": \"DOC-{{demoSuffix}}\",\n  \"email\": \"contato+{{demoSuffix}}@example.com\",\n  \"phone\": \"11999999999\",\n  \"address\": \"Rua de Demonstração, 100\",\n  \"ownerEmail\": \"admin+{{demoSuffix}}@example.com\",\n  \"planIds\": [\"{{planId}}\"]\n}" }, "url": "{{baseUrl}}/api/v1/onboarding/companies" }
+        }
+      ]
+    },
+    {
+      "name": "03 — Acesso da Company (token autorizado)",
+      "description": "Requer companyAccessToken de um usuário que já possua as permissões apropriadas. O proprietário recém-criado no onboarding ainda não recebe papéis automaticamente; estes endpoints dependem da configuração de acesso existente.",
+      "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{companyAccessToken}}", "type": "string" }] },
+      "item": [
+        { "name": "Listar permissões", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/company/access/permissions?page=0&size=20&sort=module,asc" } },
+        { "name": "Listar papéis", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/company/access/roles?page=0&size=20&sort=name,asc" } },
+        { "name": "Criar papel de demonstração", "event": [{ "listen": "test", "script": { "exec": ["if (pm.response.code === 201) pm.collectionVariables.set('roleId', pm.response.json().id);"] } }], "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Operador Demo {{demoSuffix}}\",\n  \"description\": \"Papel criado pela collection Postman\"\n}" }, "url": "{{baseUrl}}/api/v1/company/access/roles" } },
+        { "name": "Atualizar papel de demonstração", "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Operador Demo {{demoSuffix}} Atualizado\",\n  \"description\": \"Atualização de teste\"\n}" }, "url": "{{baseUrl}}/api/v1/company/access/roles/{{roleId}}" } },
+        { "name": "Substituir permissões do papel", "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"permissionIds\": [\"{{permissionId}}\"]\n}" }, "url": "{{baseUrl}}/api/v1/company/access/roles/{{roleId}}/permissions" } },
+        { "name": "Listar colaboradores", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/company/access/employees?page=0&size=20&sort=createdAt,desc" } },
+        { "name": "Criar colaborador de demonstração", "event": [{ "listen": "test", "script": { "exec": ["if (pm.response.code === 201) pm.collectionVariables.set('employeeUserId', pm.response.json().id);"] } }], "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"email\": \"employee+{{demoSuffix}}@example.com\"\n}" }, "url": "{{baseUrl}}/api/v1/company/access/employees" } },
+        { "name": "Substituir papéis do colaborador", "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"roleIds\": [\"{{roleId}}\"]\n}" }, "url": "{{baseUrl}}/api/v1/company/access/employees/{{employeeUserId}}/roles" } },
+        { "name": "Consultar alçada de alteração", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/company/access/change-authorizations/USERS/CREATE" } },
+        {
+          "name": "Operações de desativação (execute somente nos dados DEMO)",
+          "description": "Preservam o histórico, mas removem o acesso do colaborador/papel de demonstração.",
+          "item": [
+            { "name": "Desativar colaborador DEMO", "request": { "method": "PATCH", "url": "{{baseUrl}}/api/v1/company/access/employees/{{employeeUserId}}/deactivate" } },
+            { "name": "Desativar papel DEMO", "request": { "method": "PATCH", "url": "{{baseUrl}}/api/v1/company/access/roles/{{roleId}}/deactivate" } }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "04 — Suporte de plataforma (PLATFORM_OWNER)",
+      "description": "Requer platformAccessToken de PLATFORM_OWNER. Cria um usuário global de suporte pendente de ativação.",
+      "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{platformAccessToken}}", "type": "string" }] },
+      "item": [
+        { "name": "Criar usuário de suporte", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"email\": \"support+{{demoSuffix}}@example.com\"\n}" }, "url": "{{baseUrl}}/api/v1/platform/support-users" } }
+      ]
+    }
+  ]
+}

@@ -10,5 +10,9 @@ public interface CompanyRepository {
 
     Optional<Company> findById(UUID id);
 
+    Optional<Company> findByDocument(String document);
+
+    Optional<Company> findByEmail(String email);
+
     List<Company> findAll();
 }
