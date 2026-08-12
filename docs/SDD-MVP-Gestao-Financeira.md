@@ -313,8 +313,8 @@ Transições financeiras obrigatórias:
 3. Planos são cumulativos. A precificação usa pacotes de combinação configurados pelo proprietário, para que combinações como Plano 1 + Plano 2 tenham preço promocional sem alterar preços individuais.
 4. Cada contratação mantém foto do preço, desconto, composição e vigência para preservar histórico.
 5. O período de teste é de 30 dias, iniciado quando o proprietário inicial ativa a conta pelo token. Ao fim do trial, a assinatura passa para aguardando pagamento; a cobrança e a liberação por pagamento são tratadas pelo fluxo de gateway posterior.
-6. A integração será encapsulada por uma interface de gateway. A implementação inicial recomendada é Asaas, pois sua documentação oficial suporta cobranças recorrentes por boleto, Pix e cartão de crédito, além de webhooks de cobrança. O cartão pode ser cobrado automaticamente; Pix e boleto têm geração recorrente de cobrança, mas o pagador realiza o pagamento. Veja a documentação oficial do Asaas: https://docs.asaas.com/docs/faq-assinaturas
-7. Eventos de webhook devem ser idempotentes, assinados/verificados e reconciliados com consulta periódica ao gateway.
+6. A integração é encapsulada pela porta `PaymentGateway`, com solicitação de cobrança contendo chave de idempotência e resultado normalizado. A implementação inicial recomendada é Asaas, pois sua documentação oficial suporta cobranças recorrentes por boleto, Pix e cartão de crédito, além de webhooks de cobrança. O cartão pode ser cobrado automaticamente; Pix e boleto têm geração recorrente de cobrança, mas o pagador realiza o pagamento. Veja a documentação oficial do Asaas: https://docs.asaas.com/docs/faq-assinaturas
+7. Webhooks chegam como payload bruto e cabeçalhos; o adapter deve verificar a autenticidade antes de traduzi-los para eventos neutros. Os eventos autenticados devem ser idempotentes, persistidos e reconciliados com consulta periódica ao gateway.
 8. A regra de inadimplência será:
    - vencimento não pago: avisos por e-mail;
    - após o vencimento: acesso somente para consulta;

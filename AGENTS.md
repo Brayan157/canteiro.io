@@ -210,8 +210,8 @@ Nunca substitua Work por Contract, nem mova faturamento de Contract para Work.
 
 1. A Company precisa escolher ao menos um plano para criar/usar conta e possui teste de 30 dias. O onboarding cria o proprietário inicial pendente, seu papel administrativo inicial e o token de ativação; não há aprovação manual da Company pela plataforma. O trial começa na ativação desse proprietário e, terminado o prazo, a assinatura fica aguardando pagamento até a implementação da cobrança.
 2. Planos são cumulativos. Combinações promocionais são configuradas como pacotes; manter snapshot de preço, composição e vigência da contratação.
-3. Integração de pagamento usa porta/adaptador. Asaas é a recomendação inicial, mas o domínio não pode ficar acoplado ao SDK/provedor.
-4. Eventos de webhook são autenticados, idempotentes, persistidos e reconciliados; o gateway não é a única fonte de verdade.
+3. Integração de pagamento usa a porta `PaymentGateway` e adapter. Asaas é a recomendação inicial, mas o domínio não pode ficar acoplado ao SDK/provedor. A porta recebe solicitações de cobrança com chave de idempotência e traduz o resultado externo para contrato neutro.
+4. Webhook chega como payload bruto e cabeçalhos; apenas o adapter do gateway pode autenticá-lo e traduzi-lo em evento neutro. Eventos autenticados são idempotentes, persistidos e reconciliados; o gateway não é a única fonte de verdade.
 5. Cartão pode ser cobrado automaticamente; Pix/boleto geram cobranças recorrentes para pagamento do cliente.
 6. Regra de inadimplência: cobrança vencida envia e-mail; acesso vira consulta; a partir de 5 dias fica inadimplente em consulta; aproximadamente a partir de 10 dias ocorre bloqueio total.
 7. Há no máximo dois desbloqueios de confiança por cobrança vencida. Cada um registra autor, motivo, início e expiração.
