@@ -108,7 +108,7 @@
     },
     {
       "name": "02 — Onboarding de Company (público)",
-      "description": "Não requer token. Execute após criar e precificar o plano de demonstração. O endpoint cria Company, usuário proprietário pendente, seleção de plano e token de ativação.",
+      "description": "Não requer token. Execute após criar e precificar o plano de demonstração. O endpoint cria Company, usuário proprietário pendente, seleção de plano, papel inicial de administrador e token de ativação.",
       "item": [
         {
           "name": "Criar Company com plano obrigatório",

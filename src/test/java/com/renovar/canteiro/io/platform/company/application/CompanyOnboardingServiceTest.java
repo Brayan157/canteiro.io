@@ -1,5 +1,7 @@
 package com.renovar.canteiro.io.platform.company.application;
 
+import com.renovar.canteiro.io.access.application.InitialCompanyOwnerAccess;
+import com.renovar.canteiro.io.access.application.InitialCompanyOwnerAccessProvisioner;
 import com.renovar.canteiro.io.governance.application.AuditEventRecorder;
 import com.renovar.canteiro.io.identity.application.AccountActivationEmailSender;
 import com.renovar.canteiro.io.identity.application.AccountActivationProperties;
@@ -70,6 +72,8 @@ class CompanyOnboardingServiceTest {
     @Mock
     private AccountActivationEmailSender accountActivationEmailSender;
     @Mock
+    private InitialCompanyOwnerAccessProvisioner initialCompanyOwnerAccessProvisioner;
+    @Mock
     private AuditEventRecorder auditEventRecorder;
 
     private final AccountActivationProperties accountActivationProperties = new AccountActivationProperties(Duration.ofHours(24), null);
@@ -82,7 +86,8 @@ class CompanyOnboardingServiceTest {
         service = new CompanyOnboardingService(
                 companyRepository, userRepository, companyUserRepository, selectionRepository, catalogPricingService,
                 accountActivationTokenRepository, activationTokenGenerator, activationTokenHasher,
-                accountActivationEmailSender, accountActivationProperties, auditEventRecorder, clock
+                accountActivationEmailSender, accountActivationProperties, initialCompanyOwnerAccessProvisioner,
+                auditEventRecorder, clock
         );
     }
 
@@ -110,6 +115,9 @@ class CompanyOnboardingServiceTest {
         when(userRepository.save(any())).thenReturn(owner);
         when(activationTokenGenerator.generate()).thenReturn("activation-token");
         when(activationTokenHasher.hash("activation-token")).thenReturn("token-hash");
+        when(initialCompanyOwnerAccessProvisioner.provision(companyId, ownerId)).thenReturn(
+                new InitialCompanyOwnerAccess(UUID.randomUUID(), "Company Administrator", List.of("USERS.MANAGE_USERS"))
+        );
 
         CompanyOnboardingResult result = service.onboard(command(planId));
 
@@ -121,7 +129,9 @@ class CompanyOnboardingServiceTest {
         assertEquals(planId, selection.getValue().getPlanId());
         assertEquals(NOW, selection.getValue().getSelectedAt());
         verify(companyUserRepository).save(any());
+        verify(initialCompanyOwnerAccessProvisioner).provision(companyId, ownerId);
         verify(accountActivationEmailSender).send(eq("owner@example.com"), eq("activation-token"), any());
+        verify(auditEventRecorder).recordInitialCompanyOnboarding(eq(companyId), eq(ownerId), any());
     }
 
     @Test
