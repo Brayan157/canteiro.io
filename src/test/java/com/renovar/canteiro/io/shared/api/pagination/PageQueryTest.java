@@ -4,6 +4,7 @@ import com.renovar.canteiro.io.shared.api.error.ApiException;
 import com.renovar.canteiro.io.shared.api.error.ErrorCode;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 
 import java.util.List;
 import java.util.Set;
@@ -31,5 +32,14 @@ class PageQueryTest {
         );
 
         assertEquals(ErrorCode.INVALID_PAGINATION, exception.getErrorCode());
+    }
+
+    @Test
+    void acceptsSortValuesSplitBySpringRequestParameterBinding() {
+        Pageable pageable = new PageQuery(0, 20, List.of("module", "asc", "action", "desc"))
+                .toPageable(Set.of("module", "action"));
+
+        assertEquals(Sort.Direction.ASC, pageable.getSort().getOrderFor("module").getDirection());
+        assertEquals(Sort.Direction.DESC, pageable.getSort().getOrderFor("action").getDirection());
     }
 }
