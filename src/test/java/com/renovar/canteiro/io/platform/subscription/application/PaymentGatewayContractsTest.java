@@ -44,7 +44,7 @@ class PaymentGatewayContractsTest {
     @Test
     void requiresAnIdempotencyKeyForEveryChargeRequestedFromAGateway() {
         assertThrows(IllegalArgumentException.class, () -> new PaymentGatewayChargeRequest(
-                UUID.randomUUID(), new BigDecimal("99.90"), LocalDate.of(2026, 8, 20),
+                UUID.randomUUID(), "cus_sandbox", new BigDecimal("99.90"), LocalDate.of(2026, 8, 20),
                 PaymentGatewayBillingMethod.PIX, " "
         ));
     }

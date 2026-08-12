@@ -6,6 +6,8 @@ package com.renovar.canteiro.io.platform.subscription.application;
  */
 public interface PaymentGateway {
 
+    PaymentGatewayCustomerResult createCustomer(PaymentGatewayCustomerRequest request);
+
     PaymentGatewayChargeResult createCharge(PaymentGatewayChargeRequest request);
 
     PaymentGatewayWebhook verifyAndParseWebhook(PaymentGatewayWebhookRequest request);

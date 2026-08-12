@@ -7,6 +7,7 @@ import java.util.UUID;
 
 public record PaymentGatewayChargeRequest(
         UUID subscriptionId,
+        String externalCustomerId,
         BigDecimal amount,
         LocalDate dueDate,
         PaymentGatewayBillingMethod billingMethod,
@@ -17,6 +18,10 @@ public record PaymentGatewayChargeRequest(
         if (subscriptionId == null) {
             throw new IllegalArgumentException("A payment gateway charge requires a subscription");
         }
+        if (externalCustomerId == null || externalCustomerId.isBlank()) {
+            throw new IllegalArgumentException("A payment gateway charge requires an external customer id");
+        }
+        externalCustomerId = externalCustomerId.trim();
         if (amount == null || amount.signum() < 0) {
             throw new IllegalArgumentException("A payment gateway charge amount must be greater than or equal to zero");
         }
