@@ -17,6 +17,14 @@ services:
       timeout: 5s
       retries: 10
 
+  mailpit:
+    image: axllent/mailpit:v1.28
+    container_name: canteiro-mailpit
+    restart: unless-stopped
+    ports:
+      - "${MAILPIT_SMTP_PORT:-1025}:1025"
+      - "${MAILPIT_WEB_PORT:-8025}:8025"
+
   api:
     build:
       context: .
@@ -26,14 +34,22 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      mailpit:
+        condition: service_started
     environment:
       SPRING_PROFILES_ACTIVE: local
       SERVER_PORT: 8080
       DATABASE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:?POSTGRES_DB is required}
       DATABASE_USERNAME: ${POSTGRES_USER:?POSTGRES_USER is required}
       DATABASE_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      MAIL_HOST: mailpit
+      MAIL_PORT: 1025
+      MAIL_SMTP_AUTH: false
+      MAIL_SMTP_STARTTLS: false
+      MAIL_FROM: ${MAIL_FROM:-no-reply@canteiro.local}
     ports:
-      - "${APP_PORT:-8080}:8080"
+      - "${APP_PORT:-8081}:8080"
 
 volumes:
   postgres-data:

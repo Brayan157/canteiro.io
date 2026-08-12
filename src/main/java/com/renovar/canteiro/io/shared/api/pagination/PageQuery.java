@@ -39,18 +39,29 @@ public record PageQuery(Integer page, Integer size, List<String> sort) {
             return Sort.unsorted();
         }
 
-        List<Sort.Order> orders = sort.stream().map(value -> toOrder(value, allowedSortFields)).toList();
+        List<Sort.Order> orders = normalizedSortValues().stream()
+                .map(value -> toOrder(value, allowedSortFields))
+                .toList();
         return Sort.by(orders);
+    }
+
+    private List<String> normalizedSortValues() {
+        if (sort.stream().anyMatch(value -> value.contains(","))) {
+            return sort;
+        }
+        if (sort.size() % 2 != 0) {
+            throw invalidSortFormat();
+        }
+
+        return java.util.stream.IntStream.range(0, sort.size() / 2)
+                .mapToObj(index -> sort.get(index * 2) + "," + sort.get(index * 2 + 1))
+                .toList();
     }
 
     private Sort.Order toOrder(String value, Set<String> allowedSortFields) {
         String[] parts = value.split(",", -1);
         if (parts.length != 2 || parts[0].isBlank() || parts[1].isBlank()) {
-            throw new ApiException(
-                    HttpStatus.BAD_REQUEST,
-                    ErrorCode.INVALID_PAGINATION,
-                    "Sort must use the format field,asc or field,desc."
-            );
+            throw invalidSortFormat();
         }
         if (!allowedSortFields.contains(parts[0])) {
             throw new ApiException(HttpStatus.BAD_REQUEST, ErrorCode.INVALID_PAGINATION, "Sort field is not allowed.");
@@ -65,5 +76,13 @@ public record PageQuery(Integer page, Integer size, List<String> sort) {
                     "Sort direction must be asc or desc."
             );
         }
+    }
+
+    private ApiException invalidSortFormat() {
+        return new ApiException(
+                HttpStatus.BAD_REQUEST,
+                ErrorCode.INVALID_PAGINATION,
+                "Sort must use the format field,asc or field,desc."
+        );
     }
 }
