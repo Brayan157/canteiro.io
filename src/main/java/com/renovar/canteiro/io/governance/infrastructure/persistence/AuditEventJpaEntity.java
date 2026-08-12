@@ -15,6 +15,7 @@ import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.Immutable;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
@@ -25,6 +26,7 @@ import java.util.UUID;
 @Getter
 @Entity
 @Table(name = "audit_event")
+@Immutable
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class AuditEventJpaEntity {
 
