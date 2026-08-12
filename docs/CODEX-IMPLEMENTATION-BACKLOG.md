@@ -72,7 +72,7 @@ Regras para escolher o perfil:
 
 ## Fase 2 — Plataforma, planos, trial e cobrança SaaS
 
-**Progresso atual:** F02-01 a F02-08 concluídas. F02-09 a F02-14 permanecem pendentes.
+**Progresso atual:** F02-01 a F02-09 concluídas. F02-10 a F02-14 permanecem pendentes.
 
 | ID | Status | Tarefa pequena e verificável | Depende de | Perfil |
 |---|---|---|---|---|
@@ -84,7 +84,7 @@ Regras para escolher o perfil:
 | F02-06 | Concluído | Implementar trial de 30 dias e transições locais de assinatura. | F02-05 | Terra alto |
 | F02-07 | Concluído | Definir PaymentGateway como porta de aplicação e contratos de webhook. | F02-05 | Terra xhigh |
 | F02-08 | Concluído | Implementar adapter Asaas em sandbox, sem vazar SDK para domínio. | F02-07 | Sol xhigh |
-| F02-09 | Pendente | Persistir PlatformCharge e PaymentGatewayEvent com idempotência. | F02-08 | Sol xhigh |
+| F02-09 | Concluído | Persistir PlatformCharge e PaymentGatewayEvent com idempotência por provedor/chave, proteção concorrente, vínculo seguro ao tenant e testes de persistência. | F02-08 | Sol xhigh |
 | F02-10 | Pendente | Verificar assinatura, reprocessamento e reconciliação periódica de webhooks. | F02-09 | Sol xhigh |
 | F02-11 | Pendente | Implementar avisos de vencimento, acesso de consulta, inadimplência em D+5 e bloqueio em D+10. | F02-09 | Terra ultra |
 | F02-12 | Pendente | Implementar TrustUnlock: máximo de dois por cobrança vencida, com expiração e auditoria. | F02-11 | Terra xhigh |

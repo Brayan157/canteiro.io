@@ -12,6 +12,7 @@ import com.renovar.canteiro.io.platform.subscription.application.PaymentGatewayW
 import com.renovar.canteiro.io.platform.subscription.application.PaymentGatewayWebhookAuthenticationException;
 import com.renovar.canteiro.io.platform.subscription.application.PaymentGatewayWebhookEventType;
 import com.renovar.canteiro.io.platform.subscription.application.PaymentGatewayWebhookRequest;
+import com.renovar.canteiro.io.platform.subscription.domain.PaymentGatewayProviderCode;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
@@ -28,6 +29,7 @@ import java.util.Map;
 public final class AsaasSandboxPaymentGateway implements PaymentGateway {
 
     private static final DateTimeFormatter ASAAS_DATE_TIME = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    private static final PaymentGatewayProviderCode PROVIDER_CODE = new PaymentGatewayProviderCode("ASAAS");
 
     private final RestClient restClient;
     private final ObjectMapper objectMapper;
@@ -41,6 +43,11 @@ public final class AsaasSandboxPaymentGateway implements PaymentGateway {
         this.restClient = restClient;
         this.objectMapper = objectMapper;
         this.properties = properties;
+    }
+
+    @Override
+    public PaymentGatewayProviderCode providerCode() {
+        return PROVIDER_CODE;
     }
 
     @Override

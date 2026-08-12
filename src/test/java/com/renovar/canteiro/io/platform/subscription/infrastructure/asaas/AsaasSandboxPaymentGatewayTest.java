@@ -42,6 +42,11 @@ class AsaasSandboxPaymentGatewayTest {
     private MockRestServiceServer server;
     private AsaasSandboxPaymentGateway gateway;
 
+    @Test
+    void exposesItsCodeThroughTheProviderNeutralPort() {
+        assertEquals("ASAAS", gateway.providerCode().value());
+    }
+
     @BeforeEach
     void setUp() {
         RestClient.Builder builder = RestClient.builder()

@@ -314,7 +314,7 @@ Transições financeiras obrigatórias:
 4. Cada contratação mantém foto do preço, desconto, composição e vigência para preservar histórico.
 5. O período de teste é de 30 dias, iniciado quando o proprietário inicial ativa a conta pelo token. Ao fim do trial, a assinatura passa para aguardando pagamento; a cobrança e a liberação por pagamento são tratadas pelo fluxo de gateway posterior.
 6. A integração é encapsulada pela porta `PaymentGateway`, com criação neutra de pagador, solicitação de cobrança contendo chave de idempotência e resultado normalizado. O adapter inicial usa HTTP contra o sandbox do Asaas, isolado na infraestrutura e habilitado somente por configuração; nenhum contrato do domínio depende de DTO ou SDK do provedor. O Asaas suporta cobranças por boleto, Pix e cartão de crédito, além de webhooks de cobrança. O cartão pode ser cobrado automaticamente; Pix e boleto têm geração recorrente de cobrança, mas o pagador realiza o pagamento. Veja a documentação oficial do Asaas: https://docs.asaas.com/docs/faq-assinaturas
-7. Webhooks chegam como payload bruto e cabeçalhos; o adapter deve verificar a autenticidade antes de traduzi-los para eventos neutros. Os eventos autenticados devem ser idempotentes, persistidos e reconciliados com consulta periódica ao gateway.
+7. Webhooks chegam como payload bruto e cabeçalhos; o adapter deve verificar a autenticidade antes de traduzi-los para eventos neutros. Somente o evento neutro já autenticado é aceito para persistência em `PaymentGatewayEvent`, que registra origem, identificadores externos, tipo, ocorrência, recebimento, atributos e estado de processamento. A idempotência usa código neutro do provedor + identificador externo do evento, combinando bloqueio transacional e constraint única; a mesma chave com conteúdo diferente é rejeitada. A verificação/reprocessamento e a reconciliação periódica com o gateway pertencem ao fluxo posterior.
 8. A regra de inadimplência será:
    - vencimento não pago: avisos por e-mail;
    - após o vencimento: acesso somente para consulta;
@@ -322,7 +322,7 @@ Transições financeiras obrigatórias:
    - aproximadamente a partir de 10 dias: bloqueio total;
    - pagamento confirmado: restaura o acesso conforme a assinatura ativa;
    - desbloqueio de confiança: até dois por cobrança vencida, gravando autor, motivo, início e expiração configurável.
-9. A plataforma mantém sua própria tabela de cobranças e eventos; o gateway não será a única fonte de verdade.
+9. A plataforma mantém sua própria tabela de cobranças e eventos; o gateway não será a única fonte de verdade. `PlatformCharge` registra a Company derivada da assinatura, assinatura, código neutro do provedor, chave idempotente, identificadores externos, meio, valor, vencimento e estado normalizado. Código do provedor + chave idempotente também usa bloqueio transacional e constraint única, evitando nova chamada externa em repetição concorrente. A foreign key composta entre cobrança, assinatura e Company impede associação cruzada entre tenants.
 
 ## 6. Arquitetura proposta
 
