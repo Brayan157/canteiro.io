@@ -1,0 +1,14 @@
+package com.renovar.canteiro.io.platform.support.domain;
+
+public enum SupportOperation {
+    READ_OPERATIONAL_DATA,
+    CREATE_OPERATIONAL_DATA,
+    UPDATE_OPERATIONAL_DATA,
+    GENERATE_REPORT,
+    SEND_REPORT,
+    APPROVE_CHANGE,
+    DELETE_RECORD,
+    MANAGE_SUBSCRIPTION,
+    MANAGE_COMPANY_STRUCTURE,
+    MANAGE_COMPANY_ROLES
+}
