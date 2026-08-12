@@ -397,9 +397,12 @@ note top of PlatformUser
 end note
 
 note right of ChangeRequest
-  Sem alçada direta:
+  Sem alçada direta efetiva:
   proposta não altera dado oficial
   e não entra em relatório.
+  Solicitação + aprovação no mesmo
+  módulo/operação = alteração direta
+  auditada, sem pendência.
   Solicitante nunca se autoaprova.
 end note
 

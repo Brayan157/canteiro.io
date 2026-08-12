@@ -6,16 +6,15 @@
 <module name="Checker">
     <property name="charset" value="UTF-8"/>
 
-    <module name="RegexpSinglelineJava">
-        <property name="format" value="System\.(out|err)\.print(ln)?\("/>
-        <property name="maximum" value="0"/>
-        <property name="message" value="Use logging; do not write to standard output directly."/>
-    </module>
-
     <module name="TreeWalker">
         <module name="AvoidStarImport"/>
         <module name="IllegalImport">
             <property name="illegalClasses" value="java.sql.Date, java.sql.Time, java.sql.Timestamp"/>
+        </module>
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="System\.(out|err)\.print(ln)?\("/>
+            <property name="maximum" value="0"/>
+            <property name="message" value="Use logging; do not write to standard output directly."/>
         </module>
     </module>
 </module>

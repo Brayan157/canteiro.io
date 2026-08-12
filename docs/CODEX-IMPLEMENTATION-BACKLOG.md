@@ -44,29 +44,31 @@ Regras para escolher o perfil:
 
 ## Fase 1 — Identidade, tenant, papéis, aprovação e auditoria
 
-| ID | Tarefa pequena e verificável | Depende de | Perfil |
-|---|---|---|---|
-| F01-01 | Criar migration e domínio de User, CompanyUser e PlatformUser. | F00-09 | Terra alto |
-| F01-02 | Implementar hash de senha, ativação de conta e política de senha. | F01-01 | Terra alto |
-| F01-03 | Implementar login, access token, refresh token, logout e revogação. | F01-02 | Terra alto |
-| F01-04 | Implementar recuperação e redefinição de senha por token/e-mail. | F01-02 | Terra médio |
-| F01-05 | Criar TenantContext confiável a partir da autenticação. | F01-03 | Sol xhigh |
-| F01-06 | Criar teste negativo de leitura/mutação entre duas empresas. | F01-05 | Terra xhigh |
-| F01-07 | Criar Role, Permission, RolePermission e UserRole com permissões por módulo/ação. | F01-01 | Terra xhigh |
-| F01-08 | Criar catálogo inicial de permissões: consulta, direto, solicitação, aprovação, rejeição, exportação, envio e gestão. | F01-07 | Terra alto |
-| F01-09 | Criar endpoints para empresa gerir funcionários, perfis e atribuições permitidas. | F01-07 | Terra alto |
-| F01-10 | Implementar autorização de caso de uso, não apenas anotações de controller. | F01-05, F01-07 | Sol xhigh |
-| F01-11 | Criar usuário global de suporte e contexto seguro de empresa-alvo. | F01-10 | Terra xhigh |
-| F01-12 | Bloquear suporte de aprovar, excluir, alterar planos, dados estruturais e papéis. | F01-11 | Terra xhigh |
-| F01-13 | Criar migration/domínio de AuditEvent imutável. | F01-01 | Terra xhigh |
-| F01-14 | Criar interceptador/serviço para auditoria de ações diretas, antes/depois e ator. | F01-13 | Terra ultra |
-| F01-15 | Criar ChangeRequest genérica com snapshot, versão, solicitante e estado. | F01-10, F01-13 | Sol xhigh |
-| F01-16 | Implementar aprovação/rejeição atômica, motivo obrigatório e bloqueio de autoaprovação. | F01-15 | Sol xhigh |
-| F01-17 | Garantir que pendências não aparecem em consultas/relatórios operacionais. | F01-16 | Terra xhigh |
-| F01-18 | Auditar atuação de suporte e envio de relatório. | F01-11, F01-14 | Terra alto |
-| F01-19 | Revisar isolamento, permissões, autoaprovação e imutabilidade de auditoria. | F01-05 a F01-18 | Sol ultra |
+**Progresso atual:** F01-01 a F01-18 concluídas. F01-19 permanece pendente.
 
-**Gate da fase:** usuário só vê seu tenant; suporte tem alçada limitada; alteração sem alçada não muda dado oficial; autoaprovação é impossível; todos os testes de segurança passam.
+| ID | Status | Tarefa pequena e verificável | Depende de | Perfil |
+|---|---|---|---|---|
+| F01-01 | Concluído | Criar migration e domínio de User, CompanyUser e PlatformUser. | F00-09 | Terra alto |
+| F01-02 | Concluído | Implementar hash de senha, ativação de conta e política de senha. | F01-01 | Terra alto |
+| F01-03 | Concluído | Implementar login, access token, refresh token, logout e revogação. | F01-02 | Terra alto |
+| F01-04 | Concluído | Implementar recuperação e redefinição de senha por token/e-mail. | F01-02 | Terra médio |
+| F01-05 | Concluído | Criar TenantContext confiável a partir da autenticação. | F01-03 | Sol xhigh |
+| F01-06 | Concluído | Criar teste negativo de leitura/mutação entre duas empresas. | F01-05 | Terra xhigh |
+| F01-07 | Concluído | Criar Role, Permission, RolePermission e UserRole com permissões por módulo/ação. | F01-01 | Terra xhigh |
+| F01-08 | Concluído | Criar catálogo inicial de permissões: consulta; criação, edição e cancelamento diretos; solicitação, aprovação, rejeição, exportação, envio e gestão. | F01-07 | Terra alto |
+| F01-09 | Concluído | Criar endpoints para empresa gerir funcionários, perfis e atribuições permitidas. | F01-07 | Terra alto |
+| F01-10 | Concluído | Implementar autorização de caso de uso, não apenas anotações de controller, incluindo a alçada direta efetiva por módulo/operação. | F01-05, F01-07 | Sol xhigh |
+| F01-11 | Concluído | Criar usuário global de suporte e contexto seguro de empresa-alvo. | F01-10 | Terra xhigh |
+| F01-12 | Concluído | Bloquear suporte de aprovar, excluir, alterar planos, dados estruturais e papéis. | F01-11 | Terra xhigh |
+| F01-13 | Concluído | Criar migration/domínio de AuditEvent imutável. | F01-01 | Terra xhigh |
+| F01-14 | Concluído | Criar interceptador/serviço para auditoria de ações diretas, antes/depois e ator. | F01-13 | Terra ultra |
+| F01-15 | Concluído | Criar ChangeRequest genérica com snapshot, versão, solicitante e estado. | F01-10, F01-13 | Sol xhigh |
+| F01-16 | Concluído | Implementar aprovação/rejeição atômica, motivo obrigatório e bloqueio de autoaprovação. | F01-15 | Sol xhigh |
+| F01-17 | Concluído | Garantir que pendências não aparecem em consultas/relatórios operacionais. | F01-16 | Terra xhigh |
+| F01-18 | Concluído | Auditar atuação de suporte e envio de relatório. | F01-11, F01-14 | Terra alto |
+| F01-19 | Pendente | Revisar isolamento, permissões, autoaprovação e imutabilidade de auditoria. | F01-05 a F01-18 | Sol ultra |
+
+**Gate da fase:** usuário só vê seu tenant; suporte tem alçada limitada; alteração sem alçada direta efetiva não muda dado oficial; autoaprovação de solicitação é impossível; todos os testes de segurança passam.
 
 ## Fase 2 — Plataforma, planos, trial e cobrança SaaS
 

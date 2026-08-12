@@ -22,7 +22,7 @@ As seis decisões transversais estão registradas nos
 | Migrações | Flyway é a única fonte de schema; migration já aplicada nunca é editada, renomeada ou apagada. | Qualquer correção de `Company` cria nova migration compatível; `ddl-auto` não cria schema. |
 | Exclusão e histórico | Domínios financeiros e operacionais não sofrem exclusão física; usam status, inativação, cancelamento ou estorno rastreável. | F00-07 implementa exclusão lógica de `Company`, sem `DELETE` SQL. |
 | Tenancy | O tenant é a `Company`; `company_id` não é aceito livremente para usuário de empresa e todo acesso é filtrado no backend. | Fase 0 não cria atalho que contorne o futuro `TenantContext`; módulos persistentes terão testes negativos entre empresas na Fase 1. |
-| Aprovação e auditoria | Ação direta é auditada; ação sem alçada cria proposta pendente; solicitante não se autoaprova. | Fase 0 não simula aprovação em controllers nem grava auditoria incompleta como solução temporária. |
+| Aprovação e auditoria | Ação com alçada direta efetiva é auditada; solicitação e aprovação no mesmo módulo/operação também formam alçada direta efetiva. Ação sem ela cria proposta pendente; solicitante não se autoaprova. | Fase 0 não simula aprovação em controllers nem grava auditoria incompleta como solução temporária. |
 | Domínio financeiro | Hierarquia `Company → FinalCustomer → Work → Contract → ContractService`; faturamento/saldo pertencem ao contrato e resultado/gastos à obra. | A Fase 0 não cria CRUD financeiro nem altera essa hierarquia. |
 
 ## Decisões de implementação para a Fase 0

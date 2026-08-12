@@ -110,7 +110,7 @@ O frontend será um projeto separado no futuro e consumirá a API REST Spring. E
 | D-05 | Um serviço de contrato pertence a somente um contrato. Reutilização significa copiar um modelo ou serviço anterior, nunca compartilhar o mesmo registro entre contratos. |
 | D-06 | Uma medição pode ser criada sem contrato, mas deve pertencer a uma obra. Antes de produzir resultado financeiro, ela deve ser vinculada a um contrato existente da mesma obra ou criar um novo contrato nessa obra. |
 | D-07 | Aceite da medição ocorre fora do sistema. A empresa usuária registra o aceite internamente e guarda a evidência/anexo quando houver. |
-| D-08 | Toda inclusão, alteração, cancelamento e exclusão lógica é auditada. Somente ações sem alçada direta aguardam aprovação. |
+| D-08 | Toda inclusão, alteração, cancelamento e exclusão lógica é auditada. Ação com permissão direta, ou com a combinação de solicitação e aprovação no mesmo módulo/operação, possui alçada direta efetiva; somente as demais aguardam aprovação. |
 | D-09 | Usuário da empresa pertence a uma única empresa. Usuário de plataforma/suporte é global e pode atuar em várias empresas conforme suas permissões. |
 | D-10 | Não haverá exclusão física de dados financeiros, obras, contratos, serviços, NFs ou medições. O sistema usa cancelamento, inativação e histórico. |
 | D-11 | Uma NF pertence a um único contrato e pode distribuir seu valor entre vários serviços desse contrato. Um serviço pode ser faturado em várias NFs. |
@@ -140,8 +140,7 @@ A empresa não cria permissões novas em texto livre. Ela monta perfis a partir 
 Permissões devem separar, no mínimo:
 
 - consulta;
-- criação direta;
-- edição direta;
+- criação, edição e cancelamento diretos;
 - solicitação de criação/edição/cancelamento;
 - aprovação;
 - rejeição;
@@ -149,6 +148,13 @@ Permissões devem separar, no mínimo:
 - envio de relatório;
 - gestão de usuários;
 - gestão de papéis.
+
+Para cada módulo e operação, a API calcula a **alçada direta efetiva**: ela existe quando
+o usuário possui a permissão direta correspondente ou quando reúne a permissão de
+solicitação e a de aprovação para a mesma operação. A segunda combinação atende empresas
+pequenas: a alteração é aplicada diretamente, sem criar solicitação pendente, mas com
+`AuditEvent` completo. Aprovação isolada nunca concede direito de editar; solicitação
+isolada continua criando pendência.
 
 Módulos mínimos: empresa, usuários, clientes, contratos, serviços, descontos, medições, faturamento, NFs, contas a receber, contas a pagar, custos/despesas, relatórios e auditoria.
 
@@ -166,10 +172,10 @@ Perfis iniciais sugeridos:
 
 1. Usuário tenta criar, alterar ou cancelar um registro.
 2. A API verifica sua permissão para a ação e módulo.
-3. Se houver permissão direta, grava a alteração e cria um evento de auditoria.
-4. Caso contrário, cria uma Solicitação de Alteração com a proposta, os valores anteriores, os valores novos e o solicitante.
+3. A API calcula a alçada direta efetiva: permissão direta da ação, ou solicitação e aprovação reunidas para o mesmo módulo e operação. Se existir, grava a alteração e cria um evento de auditoria.
+4. Caso não exista alçada direta efetiva, cria uma Solicitação de Alteração com a proposta, os valores anteriores, os valores novos e o solicitante.
 5. O dado oficial continua inalterado e a proposta não entra em relatórios operacionais.
-6. Um auditor com a permissão daquele módulo aprova ou rejeita. O solicitante nunca aprova sua própria solicitação.
+6. Um auditor com a permissão daquele módulo aprova ou rejeita. O solicitante nunca aprova sua própria solicitação; a combinação de solicitação e aprovação evita esse caso por executar diretamente e registrar auditoria.
 7. Uma aprovação qualificada é suficiente. A aprovação aplica a proposta em transação atômica e cria eventos de auditoria.
 8. Rejeições exigem motivo. A solicitação poderá ser ajustada e reenviada como nova revisão.
 

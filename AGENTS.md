@@ -134,16 +134,17 @@ Nunca substitua Work por Contract, nem mova faturamento de Contract para Work.
 7. Suporte da plataforma pode consultar, cadastrar/editar dados operacionais autorizados e gerar/enviar relatórios.
 8. Suporte da plataforma não pode excluir registros, aprovar alterações de clientes, alterar planos/assinaturas, dados estruturais da empresa ou papéis de funcionários.
 9. Toda rota protegida valida autenticação, tenant e permissão no backend. Segurança de UI não é suficiente.
-10. Cada módulo novo deve ter teste negativo provando isolamento entre duas empresas.
+10. Todo caso de uso de suporte exige `SupportTargetContext` e chama `SupportAuthorizationService`; operações proibidas não podem receber bypass, inclusive para `PLATFORM_OWNER`.
+11. Cada módulo novo deve ter teste negativo provando isolamento entre duas empresas.
 
 ## 7. Papéis, alçadas, aprovação e auditoria — INVARIANTE
 
 1. A empresa monta perfis a partir de permissões granulares por módulo e ação; não usa permissões livres em texto.
-2. Separe permissões de consultar, criar/editar diretamente, solicitar alteração, aprovar, rejeitar, exportar, enviar relatório, gerir usuários e gerir papéis.
-3. Ação com alçada direta é aplicada imediatamente e sempre gera AuditEvent.
-4. Ação sem alçada direta cria ChangeRequest com entidade, operação, versão, valores antes/depois, proposta, solicitante e justificativa quando necessária.
+2. Separe permissões de consultar, criar/editar/cancelar diretamente, solicitar alteração, aprovar, rejeitar, exportar, enviar relatório, gerir usuários e gerir papéis.
+3. Há alçada direta efetiva quando o usuário possui a permissão direta da ação ou, para o mesmo módulo e operação, possui a permissão de solicitação e a de aprovação. A ação é aplicada imediatamente e sempre gera AuditEvent.
+4. Ação sem alçada direta efetiva cria ChangeRequest com entidade, operação, versão, valores antes/depois, proposta, solicitante e justificativa quando necessária.
 5. ChangeRequest não altera dado oficial e não entra em relatório operacional até aprovação.
-6. O solicitante nunca pode aprovar sua própria solicitação.
+6. O solicitante nunca pode aprovar sua própria solicitação. A combinação de solicitação e aprovação não é autoaprovação: ela concede alçada direta efetiva e, portanto, não cria ChangeRequest.
 7. Um auditor autorizado para o módulo aprova ou rejeita; rejeição exige motivo.
 8. Aprovação aplica a proposta em transação atômica e cria evento de auditoria.
 9. Status de aprovação e status de negócio são separados.
