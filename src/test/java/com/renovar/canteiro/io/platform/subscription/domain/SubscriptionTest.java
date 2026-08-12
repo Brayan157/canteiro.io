@@ -38,7 +38,28 @@ class SubscriptionTest {
         assertThrows(IllegalArgumentException.class, () -> Subscription.rehydrate(
                 UUID.randomUUID(), UUID.randomUUID(), SubscriptionStatus.PENDING_ACTIVATION,
                 new BigDecimal("99.90"), CatalogPricingSource.INDIVIDUAL_PLANS, UUID.randomUUID(),
-                LocalDate.of(2026, 8, 12), null, null
+                LocalDate.of(2026, 8, 12), null, null, null, null
         ));
+    }
+
+    @Test
+    void startsTrialForThirtyDaysAndMovesToAwaitingPaymentOnItsEndDate() {
+        Subscription subscription = Subscription.create(UUID.randomUUID(), individualPlanQuote());
+        LocalDate startedOn = LocalDate.of(2026, 8, 12);
+
+        assertEquals(true, subscription.startTrial(startedOn));
+        assertEquals(SubscriptionStatus.TRIAL, subscription.getStatus());
+        assertEquals(startedOn, subscription.getTrialStartedOn());
+        assertEquals(LocalDate.of(2026, 9, 11), subscription.getTrialEndsOn());
+        assertEquals(false, subscription.advanceTrial(LocalDate.of(2026, 9, 10)));
+        assertEquals(true, subscription.advanceTrial(LocalDate.of(2026, 9, 11)));
+        assertEquals(SubscriptionStatus.AWAITING_PAYMENT, subscription.getStatus());
+    }
+
+    private CatalogPriceQuote individualPlanQuote() {
+        return new CatalogPriceQuote(
+                Set.of(UUID.randomUUID()), new BigDecimal("99.90"), LocalDate.of(2026, 8, 12),
+                CatalogPricingSource.INDIVIDUAL_PLANS, null
+        );
     }
 }

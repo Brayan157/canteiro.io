@@ -15,11 +15,13 @@ public final class Subscription {
 
     private final UUID id;
     private final UUID companyId;
-    private final SubscriptionStatus status;
+    private SubscriptionStatus status;
     private final BigDecimal quotedAmount;
     private final CatalogPricingSource pricingSource;
     private final UUID planBundleId;
     private final LocalDate pricingEffectiveDate;
+    private LocalDate trialStartedOn;
+    private LocalDate trialEndsOn;
     private final Instant createdAt;
     private final Instant updatedAt;
 
@@ -31,6 +33,8 @@ public final class Subscription {
             CatalogPricingSource pricingSource,
             UUID planBundleId,
             LocalDate pricingEffectiveDate,
+            LocalDate trialStartedOn,
+            LocalDate trialEndsOn,
             Instant createdAt,
             Instant updatedAt
     ) {
@@ -41,6 +45,9 @@ public final class Subscription {
         this.pricingSource = requirePricingSource(pricingSource);
         this.planBundleId = requirePlanBundle(pricingSource, planBundleId);
         this.pricingEffectiveDate = requirePricingEffectiveDate(pricingEffectiveDate);
+        this.trialStartedOn = trialStartedOn;
+        this.trialEndsOn = trialEndsOn;
+        requireTrialDates(status, trialStartedOn, trialEndsOn);
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
     }
@@ -58,6 +65,8 @@ public final class Subscription {
                 quote.planBundleId(),
                 quote.effectiveDate(),
                 null,
+                null,
+                null,
                 null
         );
     }
@@ -70,6 +79,8 @@ public final class Subscription {
             CatalogPricingSource pricingSource,
             UUID planBundleId,
             LocalDate pricingEffectiveDate,
+            LocalDate trialStartedOn,
+            LocalDate trialEndsOn,
             Instant createdAt,
             Instant updatedAt
     ) {
@@ -81,9 +92,35 @@ public final class Subscription {
                 pricingSource,
                 planBundleId,
                 pricingEffectiveDate,
+                trialStartedOn,
+                trialEndsOn,
                 createdAt,
                 updatedAt
         );
+    }
+
+    public boolean startTrial(LocalDate startedOn) {
+        if (status != SubscriptionStatus.PENDING_ACTIVATION) {
+            return false;
+        }
+        if (startedOn == null) {
+            throw new IllegalArgumentException("A trial start date is required");
+        }
+        status = SubscriptionStatus.TRIAL;
+        trialStartedOn = startedOn;
+        trialEndsOn = startedOn.plusDays(30);
+        return true;
+    }
+
+    public boolean advanceTrial(LocalDate currentDate) {
+        if (currentDate == null) {
+            throw new IllegalArgumentException("A subscription transition date is required");
+        }
+        if (status != SubscriptionStatus.TRIAL || currentDate.isBefore(trialEndsOn)) {
+            return false;
+        }
+        status = SubscriptionStatus.AWAITING_PAYMENT;
+        return true;
     }
 
     private static UUID requireCompanyId(UUID companyId) {
@@ -133,5 +170,20 @@ public final class Subscription {
             throw new IllegalArgumentException("A subscription pricing effective date is required");
         }
         return pricingEffectiveDate;
+    }
+
+    private static void requireTrialDates(
+            SubscriptionStatus status,
+            LocalDate trialStartedOn,
+            LocalDate trialEndsOn
+    ) {
+        if (status == SubscriptionStatus.PENDING_ACTIVATION
+                && (trialStartedOn != null || trialEndsOn != null)) {
+            throw new IllegalArgumentException("A pending subscription cannot have trial dates");
+        }
+        if (status != SubscriptionStatus.PENDING_ACTIVATION
+                && (trialStartedOn == null || trialEndsOn == null || !trialEndsOn.equals(trialStartedOn.plusDays(30)))) {
+            throw new IllegalArgumentException("A trial subscription must retain its 30-day trial period");
+        }
     }
 }

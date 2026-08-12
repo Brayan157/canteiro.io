@@ -10,6 +10,8 @@ import com.renovar.canteiro.io.platform.company.domain.CompanyRepository;
 import com.renovar.canteiro.io.platform.subscription.application.SubscriptionSnapshotService;
 import com.renovar.canteiro.io.platform.subscription.domain.Subscription;
 import com.renovar.canteiro.io.platform.subscription.domain.SubscriptionItemRepository;
+import com.renovar.canteiro.io.platform.subscription.domain.SubscriptionRepository;
+import com.renovar.canteiro.io.platform.subscription.domain.SubscriptionStatus;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataAccessException;
@@ -36,6 +38,9 @@ class SubscriptionSnapshotPersistenceIntegrationTest extends AbstractPostgresInt
 
     @Autowired
     private SubscriptionItemRepository subscriptionItemRepository;
+
+    @Autowired
+    private SubscriptionRepository subscriptionRepository;
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
@@ -71,5 +76,29 @@ class SubscriptionSnapshotPersistenceIntegrationTest extends AbstractPostgresInt
         assertThrows(DataAccessException.class, () -> jdbcTemplate.update(
                 "DELETE FROM subscription_item WHERE id = ?", item.getId()
         ));
+    }
+
+    @Test
+    void persistsTheTrialLifecycleWithoutChangingThePriceSnapshot() {
+        Company company = companyRepository.save(Company.create(
+                "Construtora Trial", null, "DOC-" + UUID.randomUUID().toString().substring(0, 16),
+                "lifecycle-" + UUID.randomUUID() + "@example.com", null, null, null
+        ));
+        Subscription subscription = subscriptionRepository.save(Subscription.create(
+                company.getId(), new CatalogPriceQuote(
+                        Set.of(UUID.randomUUID()), new BigDecimal("219.90"), LocalDate.of(2026, 8, 12),
+                        CatalogPricingSource.INDIVIDUAL_PLANS, null
+                )
+        ));
+
+        subscription.startTrial(LocalDate.of(2026, 8, 12));
+        Subscription trialSubscription = subscriptionRepository.save(subscription);
+        trialSubscription.advanceTrial(LocalDate.of(2026, 9, 11));
+        Subscription awaitingPaymentSubscription = subscriptionRepository.save(trialSubscription);
+
+        assertEquals(SubscriptionStatus.AWAITING_PAYMENT, awaitingPaymentSubscription.getStatus());
+        assertEquals(LocalDate.of(2026, 8, 12), awaitingPaymentSubscription.getTrialStartedOn());
+        assertEquals(LocalDate.of(2026, 9, 11), awaitingPaymentSubscription.getTrialEndsOn());
+        assertEquals(new BigDecimal("219.90"), awaitingPaymentSubscription.getQuotedAmount());
     }
 }

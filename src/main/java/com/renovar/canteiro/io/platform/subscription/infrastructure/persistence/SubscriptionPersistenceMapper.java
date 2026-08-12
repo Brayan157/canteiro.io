@@ -13,8 +13,14 @@ public class SubscriptionPersistenceMapper {
                 subscription.getQuotedAmount(),
                 subscription.getPricingSource(),
                 subscription.getPlanBundleId(),
-                subscription.getPricingEffectiveDate()
+                subscription.getPricingEffectiveDate(),
+                subscription.getTrialStartedOn(),
+                subscription.getTrialEndsOn()
         );
+    }
+
+    public void updateJpaEntity(SubscriptionJpaEntity entity, Subscription subscription) {
+        entity.updateLifecycle(subscription.getStatus(), subscription.getTrialStartedOn(), subscription.getTrialEndsOn());
     }
 
     public Subscription toDomain(SubscriptionJpaEntity entity) {
@@ -26,6 +32,8 @@ public class SubscriptionPersistenceMapper {
                 entity.getPricingSource(),
                 entity.getPlanBundleId(),
                 entity.getPricingEffectiveDate(),
+                entity.getTrialStartedOn(),
+                entity.getTrialEndsOn(),
                 entity.getCreatedAt(),
                 entity.getUpdatedAt()
         );

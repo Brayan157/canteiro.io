@@ -7,14 +7,27 @@ import com.renovar.canteiro.io.identity.application.ActivationTokenHasher;
 import com.renovar.canteiro.io.identity.application.PasswordHasher;
 import com.renovar.canteiro.io.identity.domain.AccountActivationToken;
 import com.renovar.canteiro.io.identity.domain.AccountActivationTokenRepository;
+import com.renovar.canteiro.io.identity.domain.CompanyUser;
+import com.renovar.canteiro.io.identity.domain.CompanyUserRepository;
 import com.renovar.canteiro.io.identity.domain.User;
 import com.renovar.canteiro.io.identity.domain.UserRepository;
 import com.renovar.canteiro.io.identity.domain.UserStatus;
 import com.renovar.canteiro.io.identity.domain.UserType;
+import com.renovar.canteiro.io.platform.catalog.domain.CatalogPriceQuote;
+import com.renovar.canteiro.io.platform.catalog.domain.CatalogPricingSource;
+import com.renovar.canteiro.io.platform.company.domain.Company;
+import com.renovar.canteiro.io.platform.company.domain.CompanyRepository;
+import com.renovar.canteiro.io.platform.subscription.domain.Subscription;
+import com.renovar.canteiro.io.platform.subscription.domain.SubscriptionRepository;
+import com.renovar.canteiro.io.platform.subscription.domain.SubscriptionStatus;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import java.time.Instant;
+import java.time.LocalDate;
+import java.util.Set;
+import java.util.UUID;
+import java.math.BigDecimal;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -42,6 +55,15 @@ class AccountActivationIntegrationTest extends AbstractPostgresIntegrationTest {
 
     @Autowired
     private AccountActivationTokenRepository accountActivationTokenRepository;
+
+    @Autowired
+    private CompanyRepository companyRepository;
+
+    @Autowired
+    private CompanyUserRepository companyUserRepository;
+
+    @Autowired
+    private SubscriptionRepository subscriptionRepository;
 
     @Test
     void activatesAccountWithBcryptPasswordAndConsumesToken() {
@@ -90,5 +112,31 @@ class AccountActivationIntegrationTest extends AbstractPostgresIntegrationTest {
 
         assertEquals(UserStatus.PENDING_ACTIVATION, pendingUser.getStatus());
         assertNull(unusedToken.getConsumedAt());
+    }
+
+    @Test
+    void startsTheCompanyTrialWhenItsInitialOwnerActivatesTheAccount() {
+        Company company = companyRepository.save(Company.create(
+                "Construtora Trial", null, "DOC-" + UUID.randomUUID().toString().substring(0, 16),
+                "trial-" + UUID.randomUUID() + "@example.com", null, null, null
+        ));
+        User owner = userRepository.save(User.create("owner-trial-" + UUID.randomUUID() + "@example.com", UserType.COMPANY));
+        companyUserRepository.save(CompanyUser.create(owner.getId(), company.getId()));
+        Subscription pendingSubscription = subscriptionRepository.save(Subscription.create(
+                company.getId(), new CatalogPriceQuote(
+                        Set.of(UUID.randomUUID()), new BigDecimal("99.90"), LocalDate.now(),
+                        CatalogPricingSource.INDIVIDUAL_PLANS, null
+                )
+        ));
+        accountActivationTokenRepository.save(AccountActivationToken.create(
+                owner.getId(), activationTokenHasher.hash("company-trial-token"), Instant.now().plusSeconds(3600)
+        ));
+
+        activateAccountService.activate(new ActivateAccountCommand("company-trial-token", VALID_PASSWORD));
+
+        Subscription trialSubscription = subscriptionRepository.findById(pendingSubscription.getId()).orElseThrow();
+        assertEquals(SubscriptionStatus.TRIAL, trialSubscription.getStatus());
+        assertEquals(LocalDate.now(), trialSubscription.getTrialStartedOn());
+        assertEquals(LocalDate.now().plusDays(30), trialSubscription.getTrialEndsOn());
     }
 }

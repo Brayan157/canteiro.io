@@ -2,6 +2,7 @@ package com.renovar.canteiro.io.platform.subscription.infrastructure.persistence
 
 import com.renovar.canteiro.io.platform.subscription.domain.Subscription;
 import com.renovar.canteiro.io.platform.subscription.domain.SubscriptionRepository;
+import com.renovar.canteiro.io.platform.subscription.domain.SubscriptionStatus;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
@@ -18,12 +19,15 @@ public class JpaSubscriptionRepository implements SubscriptionRepository {
 
     @Override
     public Subscription save(Subscription subscription) {
-        if (subscription.getId() != null) {
-            throw new IllegalStateException("A subscription price snapshot cannot be replaced");
+        if (subscription.getId() == null) {
+            return subscriptionPersistenceMapper.toDomain(
+                    subscriptionJpaRepository.save(subscriptionPersistenceMapper.toJpaEntity(subscription))
+            );
         }
-        return subscriptionPersistenceMapper.toDomain(
-                subscriptionJpaRepository.save(subscriptionPersistenceMapper.toJpaEntity(subscription))
-        );
+        SubscriptionJpaEntity entity = subscriptionJpaRepository.findById(subscription.getId())
+                .orElseThrow(() -> new IllegalStateException("Subscription must exist before its lifecycle can change"));
+        subscriptionPersistenceMapper.updateJpaEntity(entity, subscription);
+        return subscriptionPersistenceMapper.toDomain(subscriptionJpaRepository.save(entity));
     }
 
     @Override
@@ -34,6 +38,13 @@ public class JpaSubscriptionRepository implements SubscriptionRepository {
     @Override
     public List<Subscription> findByCompanyId(UUID companyId) {
         return subscriptionJpaRepository.findByCompanyIdOrderByCreatedAtDesc(companyId).stream()
+                .map(subscriptionPersistenceMapper::toDomain)
+                .toList();
+    }
+
+    @Override
+    public List<Subscription> findByStatus(SubscriptionStatus status) {
+        return subscriptionJpaRepository.findByStatus(status).stream()
                 .map(subscriptionPersistenceMapper::toDomain)
                 .toList();
     }

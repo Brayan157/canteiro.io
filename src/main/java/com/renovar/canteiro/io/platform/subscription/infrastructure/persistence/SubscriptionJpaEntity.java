@@ -42,13 +42,21 @@ public class SubscriptionJpaEntity extends BaseJpaEntity {
     @Column(name = "pricing_effective_date", nullable = false, updatable = false)
     private LocalDate pricingEffectiveDate;
 
+    @Column(name = "trial_started_on")
+    private LocalDate trialStartedOn;
+
+    @Column(name = "trial_ends_on")
+    private LocalDate trialEndsOn;
+
     public SubscriptionJpaEntity(
             UUID companyId,
             SubscriptionStatus status,
             BigDecimal quotedAmount,
             CatalogPricingSource pricingSource,
             UUID planBundleId,
-            LocalDate pricingEffectiveDate
+            LocalDate pricingEffectiveDate,
+            LocalDate trialStartedOn,
+            LocalDate trialEndsOn
     ) {
         this.companyId = companyId;
         this.status = status;
@@ -56,5 +64,13 @@ public class SubscriptionJpaEntity extends BaseJpaEntity {
         this.pricingSource = pricingSource;
         this.planBundleId = planBundleId;
         this.pricingEffectiveDate = pricingEffectiveDate;
+        this.trialStartedOn = trialStartedOn;
+        this.trialEndsOn = trialEndsOn;
+    }
+
+    public void updateLifecycle(SubscriptionStatus status, LocalDate trialStartedOn, LocalDate trialEndsOn) {
+        this.status = status;
+        this.trialStartedOn = trialStartedOn;
+        this.trialEndsOn = trialEndsOn;
     }
 }

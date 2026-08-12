@@ -208,7 +208,7 @@ Nunca substitua Work por Contract, nem mova faturamento de Contract para Work.
 
 ## 11. Assinaturas, cobrança e acesso — INVARIANTE
 
-1. A Company precisa escolher ao menos um plano para criar/usar conta e possui teste de 30 dias. O onboarding cria o proprietário inicial pendente, seu papel administrativo inicial e o token de ativação; não há aprovação manual da Company pela plataforma.
+1. A Company precisa escolher ao menos um plano para criar/usar conta e possui teste de 30 dias. O onboarding cria o proprietário inicial pendente, seu papel administrativo inicial e o token de ativação; não há aprovação manual da Company pela plataforma. O trial começa na ativação desse proprietário e, terminado o prazo, a assinatura fica aguardando pagamento até a implementação da cobrança.
 2. Planos são cumulativos. Combinações promocionais são configuradas como pacotes; manter snapshot de preço, composição e vigência da contratação.
 3. Integração de pagamento usa porta/adaptador. Asaas é a recomendação inicial, mas o domínio não pode ficar acoplado ao SDK/provedor.
 4. Eventos de webhook são autenticados, idempotentes, persistidos e reconciliados; o gateway não é a única fonte de verdade.

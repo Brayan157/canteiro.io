@@ -50,7 +50,7 @@ class SubscriptionSnapshotServiceTest {
         );
         Subscription persistedSubscription = Subscription.rehydrate(
                 subscriptionId, companyId, SubscriptionStatus.PENDING_ACTIVATION, new BigDecimal("149.90"),
-                CatalogPricingSource.INDIVIDUAL_PLANS, null, priceDate, null, null
+                CatalogPricingSource.INDIVIDUAL_PLANS, null, priceDate, null, null, null, null
         );
         when(subscriptionRepository.save(any())).thenReturn(persistedSubscription);
         when(planRepository.findById(financialPlanId)).thenReturn(Optional.of(plan(financialPlanId, "FINANCIAL", "Financeiro")));

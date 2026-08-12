@@ -11,4 +11,6 @@ public interface SubscriptionRepository {
     Optional<Subscription> findById(UUID id);
 
     List<Subscription> findByCompanyId(UUID companyId);
+
+    List<Subscription> findByStatus(SubscriptionStatus status);
 }

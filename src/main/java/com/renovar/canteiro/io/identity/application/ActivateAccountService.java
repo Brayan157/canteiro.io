@@ -4,6 +4,7 @@ import com.renovar.canteiro.io.identity.domain.AccountActivationToken;
 import com.renovar.canteiro.io.identity.domain.AccountActivationTokenRepository;
 import com.renovar.canteiro.io.identity.domain.User;
 import com.renovar.canteiro.io.identity.domain.UserRepository;
+import com.renovar.canteiro.io.platform.subscription.application.SubscriptionTrialService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,6 +19,7 @@ public class ActivateAccountService {
     private final AccountActivationTokenRepository accountActivationTokenRepository;
     private final PasswordHasher passwordHasher;
     private final ActivationTokenHasher activationTokenHasher;
+    private final SubscriptionTrialService subscriptionTrialService;
     private final Clock clock;
 
     @Transactional
@@ -34,5 +36,6 @@ public class ActivateAccountService {
 
         userRepository.save(user);
         accountActivationTokenRepository.save(accountActivationToken);
+        subscriptionTrialService.startTrialForCompanyUser(user.getId());
     }
 }
