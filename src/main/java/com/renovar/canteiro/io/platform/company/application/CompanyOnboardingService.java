@@ -20,6 +20,7 @@ import com.renovar.canteiro.io.platform.company.domain.Company;
 import com.renovar.canteiro.io.platform.company.domain.CompanyOnboardingPlanSelection;
 import com.renovar.canteiro.io.platform.company.domain.CompanyOnboardingPlanSelectionRepository;
 import com.renovar.canteiro.io.platform.company.domain.CompanyRepository;
+import com.renovar.canteiro.io.platform.subscription.application.SubscriptionSnapshotService;
 import com.renovar.canteiro.io.shared.api.error.ApiException;
 import com.renovar.canteiro.io.shared.api.error.ErrorCode;
 import lombok.RequiredArgsConstructor;
@@ -48,6 +49,7 @@ public class CompanyOnboardingService {
     private final AccountActivationEmailSender accountActivationEmailSender;
     private final AccountActivationProperties accountActivationProperties;
     private final InitialCompanyOwnerAccessProvisioner initialCompanyOwnerAccessProvisioner;
+    private final SubscriptionSnapshotService subscriptionSnapshotService;
     private final AuditEventRecorder auditEventRecorder;
     private final Clock clock;
 
@@ -89,6 +91,7 @@ public class CompanyOnboardingService {
         selectedPlanIds.forEach(planId -> selectionRepository.save(
                 CompanyOnboardingPlanSelection.create(company.getId(), planId, selectedAt)
         ));
+        subscriptionSnapshotService.createInitialSubscription(company.getId(), priceQuote);
         createActivationAndSendEmail(owner);
         auditEventRecorder.recordInitialCompanyOnboarding(company.getId(), owner.getId(), Map.of(
                 "document", company.getDocument(),
