@@ -136,6 +136,7 @@ Nunca substitua Work por Contract, nem mova faturamento de Contract para Work.
 9. Toda rota protegida valida autenticação, tenant e permissão no backend. Segurança de UI não é suficiente.
 10. Todo caso de uso de suporte exige `SupportTargetContext` e chama `SupportAuthorizationService`; operações proibidas não podem receber bypass, inclusive para `PLATFORM_OWNER`.
 11. Cada módulo novo deve ter teste negativo provando isolamento entre duas empresas.
+12. No onboarding público, o proprietário inicial da Company é criado como usuário pendente, vinculado à nova Company e recebe automaticamente o papel `Company Administrator` com todas as permissões ativas do catálogo controlado naquele momento. Após ativar a própria conta pelo token de convite, ele possui alçada direta efetiva; isso não dispensa autorização nem auditoria nas ações futuras.
 
 ## 7. Papéis, alçadas, aprovação e auditoria — INVARIANTE
 
@@ -151,6 +152,7 @@ Nunca substitua Work por Contract, nem mova faturamento de Contract para Work.
 10. Toda inclusão, edição, cancelamento, exclusão lógica, aprovação, rejeição, login relevante e atuação do suporte é auditável.
 11. AuditEvent é imutável e retido tecnicamente por pelo menos cinco anos. A tela pode abrir nos últimos 30 dias, mas não pode eliminar o histórico.
 12. Evento de suporte registra operador, empresa-alvo, módulo, ação e, para relatório enviado, destinatário/artefato.
+13. O onboarding registra um AuditEvent imutável para a criação da Company, incluindo proprietário inicial, planos selecionados, preço cotado e o papel/permissões iniciais concedidos.
 
 ## 8. Obras, contratos, serviços e medições — INVARIANTE
 
@@ -206,7 +208,7 @@ Nunca substitua Work por Contract, nem mova faturamento de Contract para Work.
 
 ## 11. Assinaturas, cobrança e acesso — INVARIANTE
 
-1. A Company precisa escolher ao menos um plano para criar/usar conta e possui teste de 30 dias.
+1. A Company precisa escolher ao menos um plano para criar/usar conta e possui teste de 30 dias. O onboarding cria o proprietário inicial pendente, seu papel administrativo inicial e o token de ativação; não há aprovação manual da Company pela plataforma.
 2. Planos são cumulativos. Combinações promocionais são configuradas como pacotes; manter snapshot de preço, composição e vigência da contratação.
 3. Integração de pagamento usa porta/adaptador. Asaas é a recomendação inicial, mas o domínio não pode ficar acoplado ao SDK/provedor.
 4. Eventos de webhook são autenticados, idempotentes, persistidos e reconciliados; o gateway não é a única fonte de verdade.

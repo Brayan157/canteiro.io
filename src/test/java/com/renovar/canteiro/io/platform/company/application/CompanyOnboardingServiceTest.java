@@ -20,6 +20,7 @@ import com.renovar.canteiro.io.platform.company.domain.Company;
 import com.renovar.canteiro.io.platform.company.domain.CompanyOnboardingPlanSelection;
 import com.renovar.canteiro.io.platform.company.domain.CompanyOnboardingPlanSelectionRepository;
 import com.renovar.canteiro.io.platform.company.domain.CompanyRepository;
+import com.renovar.canteiro.io.platform.subscription.application.SubscriptionSnapshotService;
 import com.renovar.canteiro.io.shared.api.error.ApiException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -74,6 +75,8 @@ class CompanyOnboardingServiceTest {
     @Mock
     private InitialCompanyOwnerAccessProvisioner initialCompanyOwnerAccessProvisioner;
     @Mock
+    private SubscriptionSnapshotService subscriptionSnapshotService;
+    @Mock
     private AuditEventRecorder auditEventRecorder;
 
     private final AccountActivationProperties accountActivationProperties = new AccountActivationProperties(Duration.ofHours(24), null);
@@ -87,7 +90,7 @@ class CompanyOnboardingServiceTest {
                 companyRepository, userRepository, companyUserRepository, selectionRepository, catalogPricingService,
                 accountActivationTokenRepository, activationTokenGenerator, activationTokenHasher,
                 accountActivationEmailSender, accountActivationProperties, initialCompanyOwnerAccessProvisioner,
-                auditEventRecorder, clock
+                subscriptionSnapshotService, auditEventRecorder, clock
         );
     }
 
@@ -130,6 +133,7 @@ class CompanyOnboardingServiceTest {
         assertEquals(NOW, selection.getValue().getSelectedAt());
         verify(companyUserRepository).save(any());
         verify(initialCompanyOwnerAccessProvisioner).provision(companyId, ownerId);
+        verify(subscriptionSnapshotService).createInitialSubscription(companyId, result.priceQuote());
         verify(accountActivationEmailSender).send(eq("owner@example.com"), eq("activation-token"), any());
         verify(auditEventRecorder).recordInitialCompanyOnboarding(eq(companyId), eq(ownerId), any());
     }
@@ -149,6 +153,7 @@ class CompanyOnboardingServiceTest {
         verify(companyRepository, never()).save(any());
         verify(userRepository, never()).save(any());
         verify(selectionRepository, never()).save(any());
+        verify(subscriptionSnapshotService, never()).createInitialSubscription(any(), any());
     }
 
     private CompanyOnboardingCommand command(UUID planId) {

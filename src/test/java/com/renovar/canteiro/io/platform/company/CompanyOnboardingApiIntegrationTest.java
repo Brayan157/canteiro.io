@@ -21,6 +21,9 @@ import com.renovar.canteiro.io.platform.catalog.domain.PlanPrice;
 import com.renovar.canteiro.io.platform.catalog.domain.PlanPriceRepository;
 import com.renovar.canteiro.io.platform.catalog.domain.PlanRepository;
 import com.renovar.canteiro.io.platform.company.domain.CompanyOnboardingPlanSelectionRepository;
+import com.renovar.canteiro.io.platform.subscription.domain.SubscriptionItemRepository;
+import com.renovar.canteiro.io.platform.subscription.domain.SubscriptionRepository;
+import com.renovar.canteiro.io.platform.subscription.domain.SubscriptionStatus;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.TestConfiguration;
@@ -77,6 +80,12 @@ class CompanyOnboardingApiIntegrationTest extends AbstractPostgresIntegrationTes
     private AuditEventRepository auditEventRepository;
 
     @Autowired
+    private SubscriptionRepository subscriptionRepository;
+
+    @Autowired
+    private SubscriptionItemRepository subscriptionItemRepository;
+
+    @Autowired
     private RoleRepository roleRepository;
 
     @Autowired
@@ -113,6 +122,14 @@ class CompanyOnboardingApiIntegrationTest extends AbstractPostgresIntegrationTes
         assertTrue(companyUserRepository.findByUserIdAndCompanyId(ownerUserId, companyId).isPresent());
         assertEquals(1, selectionRepository.findByCompanyId(companyId).size());
         assertEquals(plan.getId(), selectionRepository.findByCompanyId(companyId).getFirst().getPlanId());
+        var initialSubscription = subscriptionRepository.findByCompanyId(companyId).getFirst();
+        assertEquals(SubscriptionStatus.PENDING_ACTIVATION, initialSubscription.getStatus());
+        assertEquals(new BigDecimal("149.90"), initialSubscription.getQuotedAmount());
+        assertEquals(LocalDate.now(), initialSubscription.getPricingEffectiveDate());
+        var subscriptionItem = subscriptionItemRepository.findBySubscriptionId(initialSubscription.getId()).getFirst();
+        assertEquals(plan.getId(), subscriptionItem.getPlanId());
+        assertEquals(plan.getCode(), subscriptionItem.getPlanCode());
+        assertEquals(plan.getName(), subscriptionItem.getPlanName());
         Role initialRole = roleRepository.findByCompanyId(companyId, Pageable.unpaged()).stream()
                 .filter(role -> InitialCompanyOwnerAccessProvisioner.ROLE_NAME.equals(role.getName()))
                 .findFirst()
