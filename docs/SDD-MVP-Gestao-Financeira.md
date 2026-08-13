@@ -315,11 +315,15 @@ Transições financeiras obrigatórias:
 5. O período de teste é de 30 dias, iniciado quando o proprietário inicial ativa a conta pelo token. Ao fim do trial, a assinatura passa para aguardando pagamento; a cobrança e a liberação por pagamento são tratadas pelo fluxo de gateway posterior.
 6. A integração é encapsulada pela porta `PaymentGateway`, com criação neutra de pagador, solicitação de cobrança contendo chave de idempotência e resultado normalizado. O adapter inicial usa HTTP contra o sandbox do Asaas, isolado na infraestrutura e habilitado somente por configuração; nenhum contrato do domínio depende de DTO ou SDK do provedor. O Asaas suporta cobranças por boleto, Pix e cartão de crédito, além de webhooks de cobrança. O cartão pode ser cobrado automaticamente; Pix e boleto têm geração recorrente de cobrança, mas o pagador realiza o pagamento. Veja a documentação oficial do Asaas: https://docs.asaas.com/docs/faq-assinaturas
 7. Webhooks chegam como payload bruto e cabeçalhos; o adapter deve verificar a autenticidade antes de traduzi-los para eventos neutros. Somente o evento neutro já autenticado é aceito para persistência em `PaymentGatewayEvent`, que registra origem, identificadores externos, tipo, ocorrência, recebimento, atributos e estado de processamento. A idempotência usa código neutro do provedor + identificador externo do evento, combinando bloqueio transacional e constraint única; a mesma chave com conteúdo diferente é rejeitada. A verificação/reprocessamento e a reconciliação periódica com o gateway pertencem ao fluxo posterior.
-8. A regra de inadimplência será:
-   - vencimento não pago: avisos por e-mail;
-   - após o vencimento: acesso somente para consulta;
-   - a partir de 5 dias: status de inadimplente e manutenção de consulta;
-   - aproximadamente a partir de 10 dias: bloqueio total;
+8. A regra de inadimplência é:
+   - no vencimento não pago (D0): registra uma intenção idempotente de aviso para a cobrança, sem reduzir o acesso naquele dia;
+   - após o vencimento (D+1): acesso somente para consulta;
+   - a partir de 5 dias (D+5): status de inadimplente e manutenção de consulta;
+   - a partir de 10 dias (D+10): bloqueio total;
+   - a decisão considera a cobrança aberta mais antiga (`PENDING` ou `OVERDUE`), registra `CompanySubscriptionAccess` e `PlatformChargeNotice` únicos por cobrança/tipo e ignora cobranças confirmadas ou canceladas;
+   - o job diário processa cada Company em transação própria, bloqueia suas cobranças abertas antes de calcular o estado e grava a auditoria automática com ator `SYSTEM`;
+   - a restrição é aplicada no backend às rotas da Company: `GET`, `HEAD` e `OPTIONS` são permitidos em consulta; mutações são negadas; no bloqueio total todas as rotas da Company são negadas. Rotas de autenticação, onboarding, plataforma e suporte não recebem essa restrição;
+   - a F02-11 persiste as intenções de aviso; a entrega efetiva por e-mail via `NotificationPort` é responsabilidade da F02-13;
    - pagamento confirmado: restaura o acesso conforme a assinatura ativa;
    - desbloqueio de confiança: até dois por cobrança vencida, gravando autor, motivo, início e expiração configurável.
 9. A plataforma mantém sua própria tabela de cobranças e eventos; o gateway não será a única fonte de verdade. `PlatformCharge` registra a Company derivada da assinatura, assinatura, código neutro do provedor, chave idempotente, identificadores externos, meio, valor, vencimento e estado normalizado. Código do provedor + chave idempotente também usa bloqueio transacional e constraint única, evitando nova chamada externa em repetição concorrente. A foreign key composta entre cobrança, assinatura e Company impede associação cruzada entre tenants.
@@ -431,7 +435,7 @@ erDiagram
 
 | Contexto | Entidades principais |
 |---|---|
-| Plataforma | Company, Plan, PlanBundle, PlanBundleItem, Subscription, SubscriptionItem, PlatformCharge, PaymentGatewayEvent, TrustUnlock. |
+| Plataforma | Company, Plan, PlanBundle, PlanBundleItem, Subscription, SubscriptionItem, PlatformCharge, PlatformChargeNotice, CompanySubscriptionAccess, PaymentGatewayEvent, TrustUnlock. |
 | Identidade | User, CompanyUser, PlatformUser, RefreshToken, PasswordResetToken, Role, Permission, RolePermission, UserRole. |
 | Governança | ChangeRequest, ChangeRequestDecision, AuditEvent, AuditPayload, AccessLog. |
 | Comercial | FinalCustomer (tabela final_customer), Work (tabela obra), WorkAddress, Contract, ServiceTemplate, ContractService, Discount, ContractRevision. |

@@ -109,6 +109,18 @@ public final class PlatformCharge {
                 && dueDate.equals(requestedDueDate);
     }
 
+    public boolean isUnpaidOn(LocalDate currentDate) {
+        if (currentDate == null) {
+            throw new IllegalArgumentException("Platform charge assessment date is required");
+        }
+        return (status == PlatformChargeStatus.PENDING || status == PlatformChargeStatus.OVERDUE)
+                && !currentDate.isBefore(dueDate);
+    }
+
+    public boolean isOverdueOn(LocalDate currentDate) {
+        return isUnpaidOn(currentDate) && currentDate.isAfter(dueDate);
+    }
+
     private static BigDecimal requireAmount(BigDecimal amount) {
         if (amount == null || amount.signum() < 0) {
             throw new IllegalArgumentException("Platform charge amount must be greater than or equal to zero");

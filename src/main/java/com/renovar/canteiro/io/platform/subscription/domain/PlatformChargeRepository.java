@@ -1,5 +1,6 @@
 package com.renovar.canteiro.io.platform.subscription.domain;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -20,4 +21,12 @@ public interface PlatformChargeRepository {
             PaymentGatewayProviderCode provider,
             String externalChargeId
     );
+
+    List<PlatformCharge> findOutstandingByCompanyId(UUID companyId);
+
+    List<PlatformCharge> findOutstandingByCompanyIdForDunning(UUID companyId);
+
+    List<PlatformCharge> findAllOutstanding();
+
+    List<UUID> findCompanyIdsWithOutstandingCharges();
 }

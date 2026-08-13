@@ -15,6 +15,6 @@ class FlywayMigrationIntegrationTest extends AbstractPostgresIntegrationTest {
     @Test
     void appliesAllMigrationsToThePostgreSqlContainer() {
         assertNotNull(flyway.info().current());
-        assertEquals("18", flyway.info().current().getVersion().getVersion());
+        assertEquals("19", flyway.info().current().getVersion().getVersion());
     }
 }

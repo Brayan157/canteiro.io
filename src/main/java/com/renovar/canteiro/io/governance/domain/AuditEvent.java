@@ -39,8 +39,8 @@ public final class AuditEvent {
     ) {
         this.id = id;
         this.companyId = companyId;
-        this.actorUserId = require(actorUserId, "Actor user id");
         this.actorType = require(actorType, "Actor type");
+        this.actorUserId = requireActorUserId(actorUserId, actorType);
         this.module = require(module, "Module");
         this.action = require(action, "Action");
         this.entityType = requireEntityType(entityType);
@@ -119,6 +119,16 @@ public final class AuditEvent {
             throw new IllegalArgumentException("Entity type must have between 1 and 100 characters");
         }
         return value;
+    }
+
+    private static UUID requireActorUserId(UUID actorUserId, AuditActorType actorType) {
+        if (actorType == AuditActorType.SYSTEM) {
+            if (actorUserId != null) {
+                throw new IllegalArgumentException("System audit actor cannot identify a user");
+            }
+            return null;
+        }
+        return require(actorUserId, "Actor user id");
     }
 
     private static <T> T require(T value, String name) {

@@ -6,6 +6,7 @@ import com.renovar.canteiro.io.identity.application.AccountActivationProperties;
 import com.renovar.canteiro.io.identity.application.PasswordResetProperties;
 import com.renovar.canteiro.io.platform.support.infrastructure.PlatformOperatorAuthenticationFilter;
 import com.renovar.canteiro.io.platform.support.infrastructure.SupportTargetContextFilter;
+import com.renovar.canteiro.io.platform.subscription.infrastructure.SubscriptionAccessFilter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -36,6 +37,7 @@ public class JwtSecurityConfiguration {
 
     private final AuthenticationProperties authenticationProperties;
     private final TenantContextAuthenticationFilter tenantContextAuthenticationFilter;
+    private final SubscriptionAccessFilter subscriptionAccessFilter;
     private final PlatformOperatorAuthenticationFilter platformOperatorAuthenticationFilter;
     private final SupportTargetContextFilter supportTargetContextFilter;
 
@@ -50,6 +52,7 @@ public class JwtSecurityConfiguration {
                 )
                 .oauth2ResourceServer(resourceServer -> resourceServer.jwt(Customizer.withDefaults()))
                 .addFilterAfter(tenantContextAuthenticationFilter, BearerTokenAuthenticationFilter.class)
+                .addFilterAfter(subscriptionAccessFilter, TenantContextAuthenticationFilter.class)
                 .addFilterAfter(platformOperatorAuthenticationFilter, TenantContextAuthenticationFilter.class)
                 .addFilterAfter(supportTargetContextFilter, PlatformOperatorAuthenticationFilter.class)
                 .build();

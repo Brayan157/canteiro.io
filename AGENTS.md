@@ -153,6 +153,7 @@ Nunca substitua Work por Contract, nem mova faturamento de Contract para Work.
 11. AuditEvent é imutável e retido tecnicamente por pelo menos cinco anos. A tela pode abrir nos últimos 30 dias, mas não pode eliminar o histórico.
 12. Evento de suporte registra operador, empresa-alvo, módulo, ação e, para relatório enviado, destinatário/artefato.
 13. O onboarding registra um AuditEvent imutável para a criação da Company, incluindo proprietário inicial, planos selecionados, preço cotado e o papel/permissões iniciais concedidos.
+14. Ações automáticas internas que alteram estado devem gerar AuditEvent com ator `SYSTEM`, sem forjar um usuário humano e com a origem identificável nos metadados.
 
 ## 8. Obras, contratos, serviços e medições — INVARIANTE
 
@@ -213,7 +214,7 @@ Nunca substitua Work por Contract, nem mova faturamento de Contract para Work.
 3. Integração de pagamento usa a porta `PaymentGateway` e adapter. O adapter inicial usa HTTP contra o sandbox do Asaas e permanece isolado em `infrastructure/asaas`; domínio e aplicação não podem depender de DTO, SDK, status ou nome do provedor. A porta recebe solicitações de cobrança com chave de idempotência e traduz o resultado externo para contrato neutro.
 4. Webhook chega como payload bruto e cabeçalhos; apenas o adapter do gateway pode autenticá-lo e traduzi-lo em evento neutro. Somente eventos já autenticados podem ser persistidos em `PaymentGatewayEvent`. A idempotência usa código neutro do provedor + identificador externo do evento, com bloqueio transacional e constraint única; repetição conflitante deve falhar. `PlatformCharge` usa código neutro do provedor + chave de idempotência com a mesma proteção e mantém `company_id` coerente com a assinatura por foreign key composta. Eventos persistidos ainda precisam ser reconciliados; o gateway não é a única fonte de verdade.
 5. Cartão pode ser cobrado automaticamente; Pix/boleto geram cobranças recorrentes para pagamento do cliente.
-6. Regra de inadimplência: cobrança vencida envia e-mail; acesso vira consulta; a partir de 5 dias fica inadimplente em consulta; aproximadamente a partir de 10 dias ocorre bloqueio total.
+6. Regra de inadimplência: no vencimento não pago é criada uma intenção idempotente de aviso; no dia seguinte o acesso da Company vira consulta; em D+5 fica inadimplente em consulta; em D+10 ocorre bloqueio total. A decisão usa a cobrança aberta mais antiga (`PENDING` ou `OVERDUE`), persiste `CompanySubscriptionAccess` e `PlatformChargeNotice` por cobrança/tipo, e é aplicada globalmente apenas nas rotas `/api/v1/company` (GET/HEAD/OPTIONS são consulta). O job diário bloqueia as cobranças da Company antes de recalcular; o envio de e-mail das intenções pertence ao `NotificationPort` da F02-13, sem acoplar SMTP ao domínio de assinaturas.
 7. Há no máximo dois desbloqueios de confiança por cobrança vencida. Cada um registra autor, motivo, início e expiração.
 
 ## 12. Documentos, relatórios e integrações

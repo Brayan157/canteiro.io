@@ -3,11 +3,14 @@ package com.renovar.canteiro.io.platform.subscription.infrastructure.persistence
 import com.renovar.canteiro.io.platform.subscription.domain.PaymentGatewayProviderCode;
 import com.renovar.canteiro.io.platform.subscription.domain.PlatformCharge;
 import com.renovar.canteiro.io.platform.subscription.domain.PlatformChargeRepository;
+import com.renovar.canteiro.io.platform.subscription.domain.PlatformChargeStatus;
 import lombok.RequiredArgsConstructor;
 import jakarta.persistence.EntityManager;
 import org.springframework.stereotype.Repository;
 
 import java.util.Optional;
+import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @Repository
@@ -52,11 +55,42 @@ public class JpaPlatformChargeRepository implements PlatformChargeRepository {
         return repository.findByProviderAndExternalChargeId(provider.value(), externalChargeId).map(mapper::toDomain);
     }
 
+    @Override
+    public List<PlatformCharge> findOutstandingByCompanyId(UUID companyId) {
+        return repository.findByCompanyIdAndStatusInOrderByDueDateAsc(companyId, outstandingStatuses()).stream()
+                .map(mapper::toDomain)
+                .toList();
+    }
+
+    @Override
+    public List<PlatformCharge> findOutstandingByCompanyIdForDunning(UUID companyId) {
+        return repository.findForDunningByCompanyIdAndStatusIn(companyId, outstandingStatuses()).stream()
+                .map(mapper::toDomain)
+                .toList();
+    }
+
+    @Override
+    public List<PlatformCharge> findAllOutstanding() {
+        return repository.findByStatusInOrderByDueDateAsc(outstandingStatuses()).stream().map(mapper::toDomain).toList();
+    }
+
+    @Override
+    public List<UUID> findCompanyIdsWithOutstandingCharges() {
+        return repository.findDistinctCompanyIdsByStatusIn(outstandingStatuses());
+    }
+
     private void acquireTransactionLock(String lockKey) {
         entityManager.createNativeQuery(
                         "SELECT pg_advisory_xact_lock(hashtextextended(CAST(:lockKey AS text), 0))"
                 )
                 .setParameter("lockKey", lockKey)
                 .getSingleResult();
+    }
+
+    private Set<PlatformChargeStatus> outstandingStatuses() {
+        return Set.of(
+                PlatformChargeStatus.PENDING,
+                PlatformChargeStatus.OVERDUE
+        );
     }
 }

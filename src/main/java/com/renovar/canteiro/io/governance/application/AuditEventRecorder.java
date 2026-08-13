@@ -83,6 +83,32 @@ public class AuditEventRecorder {
         ));
     }
 
+    @Transactional(propagation = Propagation.MANDATORY)
+    public AuditEvent recordSystemAction(
+            UUID companyId,
+            AuditModule module,
+            AuditAction action,
+            String entityType,
+            UUID entityId,
+            Map<String, Object> beforeData,
+            Map<String, Object> afterData,
+            Map<String, Object> metadata
+    ) {
+        return auditEventRepository.append(AuditEvent.create(
+                companyId,
+                null,
+                AuditActorType.SYSTEM,
+                module,
+                action,
+                entityType,
+                entityId,
+                toPayload(beforeData),
+                toPayload(afterData),
+                toMetadataPayload(metadata),
+                clock.instant()
+        ));
+    }
+
     private AuditActor resolveActor() {
         return tenantContextHolder.currentTenant()
                 .map(tenant -> new AuditActor(tenant.userId(), tenant.companyId(), AuditActorType.COMPANY_USER))
