@@ -4,13 +4,13 @@ import com.renovar.canteiro.io.platform.subscription.domain.PlatformCharge;
 import com.renovar.canteiro.io.platform.subscription.domain.PlatformChargeRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
-@ConditionalOnBean(PaymentGateway.class)
+@ConditionalOnProperty(prefix = "integrations.asaas", name = "enabled", havingValue = "true")
 public class PaymentReconciliationService {
 
     private final PaymentGateway paymentGateway;

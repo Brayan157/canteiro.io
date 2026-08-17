@@ -4,7 +4,7 @@ import com.renovar.canteiro.io.platform.subscription.application.PaymentGatewayW
 import com.renovar.canteiro.io.platform.subscription.application.PaymentWebhookApplicationService;
 import io.swagger.v3.oas.annotations.Operation;
 import lombok.RequiredArgsConstructor;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -18,7 +18,7 @@ import java.util.Map;
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/v1/webhooks/payments")
-@ConditionalOnBean(PaymentWebhookApplicationService.class)
+@ConditionalOnProperty(prefix = "integrations.asaas", name = "enabled", havingValue = "true")
 public class PaymentWebhookController {
 
     private final PaymentWebhookApplicationService applicationService;
