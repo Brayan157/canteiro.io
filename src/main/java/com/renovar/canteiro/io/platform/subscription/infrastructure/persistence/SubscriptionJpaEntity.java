@@ -8,6 +8,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -47,6 +48,10 @@ public class SubscriptionJpaEntity extends BaseJpaEntity {
 
     @Column(name = "trial_ends_on")
     private LocalDate trialEndsOn;
+
+    @Version
+    @Column(name = "version", nullable = false)
+    private long version;
 
     public SubscriptionJpaEntity(
             UUID companyId,

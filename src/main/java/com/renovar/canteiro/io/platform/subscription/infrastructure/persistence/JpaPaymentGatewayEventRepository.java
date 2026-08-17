@@ -8,6 +8,11 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
 import java.util.Optional;
+import java.time.Instant;
+import java.util.List;
+import java.util.UUID;
+import org.springframework.data.domain.PageRequest;
+import com.renovar.canteiro.io.platform.subscription.domain.PaymentGatewayEventStatus;
 
 @Repository
 @RequiredArgsConstructor
@@ -24,10 +29,13 @@ public class JpaPaymentGatewayEventRepository implements PaymentGatewayEventRepo
 
     @Override
     public PaymentGatewayEvent save(PaymentGatewayEvent event) {
-        if (event.getId() != null) {
-            throw new IllegalStateException("Payment gateway event processing updates are not implemented yet");
+        if (event.getId() == null) {
+            return mapper.toDomain(repository.saveAndFlush(mapper.toJpaEntity(event)));
         }
-        return mapper.toDomain(repository.saveAndFlush(mapper.toJpaEntity(event)));
+        PaymentGatewayEventJpaEntity entity = repository.findById(event.getId())
+                .orElseThrow(() -> new IllegalArgumentException("Payment gateway event does not exist"));
+        entity.updateProcessing(event.getStatus(), event.getProcessedAt(), event.getFailureReason());
+        return mapper.toDomain(repository.saveAndFlush(entity));
     }
 
     @Override
@@ -36,6 +44,19 @@ public class JpaPaymentGatewayEventRepository implements PaymentGatewayEventRepo
             String externalEventId
     ) {
         return repository.findByProviderAndExternalEventId(provider.value(), externalEventId).map(mapper::toDomain);
+    }
+
+    @Override
+    public Optional<PaymentGatewayEvent> findByIdForUpdate(UUID id) {
+        return repository.findByIdForUpdate(id).map(mapper::toDomain);
+    }
+
+    @Override
+    public List<PaymentGatewayEvent> findRetryable(Instant retryBefore, int limit) {
+        return repository.findRetryable(
+                PaymentGatewayEventStatus.RECEIVED, PaymentGatewayEventStatus.FAILED,
+                retryBefore, PageRequest.of(0, limit)
+        ).stream().map(mapper::toDomain).toList();
     }
 
     private void acquireTransactionLock(String lockKey) {

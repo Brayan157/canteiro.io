@@ -91,6 +91,21 @@ public final class AsaasSandboxPaymentGateway implements PaymentGateway {
     }
 
     @Override
+    public PaymentGatewayChargeStatus findChargeStatus(String externalChargeId) {
+        if (externalChargeId == null || externalChargeId.isBlank()) {
+            throw new IllegalArgumentException("External charge id is required");
+        }
+        AsaasChargeResponse response = execute(() -> restClient.get()
+                .uri("/payments/{id}", externalChargeId.trim())
+                .retrieve()
+                .body(AsaasChargeResponse.class));
+        if (response == null || response.id() == null || response.id().isBlank()) {
+            throw new PaymentGatewayException("Asaas sandbox returned a charge without an id");
+        }
+        return toGatewayChargeStatus(response.status());
+    }
+
+    @Override
     public PaymentGatewayWebhook verifyAndParseWebhook(PaymentGatewayWebhookRequest request) {
         authenticateWebhook(request.headers().get("asaas-access-token"));
         try {

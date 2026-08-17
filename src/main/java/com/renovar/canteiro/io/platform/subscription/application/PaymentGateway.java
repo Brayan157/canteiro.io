@@ -14,5 +14,7 @@ public interface PaymentGateway {
 
     PaymentGatewayChargeResult createCharge(PaymentGatewayChargeRequest request);
 
+    PaymentGatewayChargeStatus findChargeStatus(String externalChargeId);
+
     PaymentGatewayWebhook verifyAndParseWebhook(PaymentGatewayWebhookRequest request);
 }

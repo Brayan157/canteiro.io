@@ -124,6 +124,22 @@ class AsaasSandboxPaymentGatewayTest {
     }
 
     @Test
+    void reconcilesAChargeUsingTheProviderCurrentStatus() {
+        server.expect(once(), requestTo(BASE_URL + "/payments/pay_sandbox_123"))
+                .andExpect(method(HttpMethod.GET))
+                .andRespond(withSuccess(
+                        "{\"id\":\"pay_sandbox_123\",\"status\":\"RECEIVED\"}",
+                        MediaType.APPLICATION_JSON
+                ));
+
+        assertEquals(
+                PaymentGatewayChargeStatus.CONFIRMED,
+                gateway.findChargeStatus("pay_sandbox_123")
+        );
+        server.verify();
+    }
+
+    @Test
     void authenticatesAndTranslatesAConfirmedPaymentWebhook() {
         String payload = """
                 {

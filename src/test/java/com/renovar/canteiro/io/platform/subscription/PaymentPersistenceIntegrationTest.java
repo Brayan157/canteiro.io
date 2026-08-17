@@ -31,6 +31,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PaymentPersistenceIntegrationTest extends AbstractPostgresIntegrationTest {
 
@@ -89,6 +90,36 @@ class PaymentPersistenceIntegrationTest extends AbstractPostgresIntegrationTest 
         assertThrows(DataIntegrityViolationException.class, () -> platformChargeRepository.save(charge(
                 otherCompany.getId(), subscription.getId(), "cross-company-key", "pay_cross_company"
         )));
+    }
+
+    @Test
+    void updatesChargeAndEventLifecycleAndFindsFailedEventForRetry() {
+        Company company = company();
+        Subscription subscription = subscription(company.getId());
+        PlatformCharge charge = platformChargeRepository.save(charge(
+                company.getId(), subscription.getId(), "lifecycle-key", "pay_lifecycle"
+        ));
+        PaymentGatewayEvent event = paymentGatewayEventRepository.save(PaymentGatewayEvent.receive(
+                PROVIDER, webhook("evt_lifecycle", "pay_lifecycle"),
+                Instant.parse("2026-08-12T20:00:00Z")
+        ));
+
+        transactionTemplate.executeWithoutResult(ignored -> {
+            PlatformCharge lockedCharge = platformChargeRepository.findByIdForUpdate(charge.getId()).orElseThrow();
+            lockedCharge.applyGatewayStatus(
+                    PlatformChargeStatus.CONFIRMED, Instant.parse("2026-08-12T20:05:00Z")
+            );
+            platformChargeRepository.save(lockedCharge);
+            PaymentGatewayEvent lockedEvent = paymentGatewayEventRepository.findByIdForUpdate(event.getId())
+                    .orElseThrow();
+            lockedEvent.markFailed(Instant.parse("2026-08-12T20:06:00Z"), "temporary failure");
+            paymentGatewayEventRepository.save(lockedEvent);
+        });
+
+        assertEquals(PlatformChargeStatus.CONFIRMED, platformChargeRepository.findById(charge.getId()).orElseThrow().getStatus());
+        assertTrue(paymentGatewayEventRepository.findRetryable(
+                Instant.parse("2026-08-12T20:07:00Z"), 10
+        ).stream().anyMatch(candidate -> candidate.getId().equals(event.getId())));
     }
 
     private Company company() {

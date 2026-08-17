@@ -8,6 +8,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -46,6 +47,9 @@ public class PaymentGatewayEventJpaEntity extends BaseJpaEntity {
     private Instant processedAt;
     @Column(name = "failure_reason", length = 1000)
     private String failureReason;
+    @Version
+    @Column(name = "version", nullable = false)
+    private long version;
 
     public PaymentGatewayEventJpaEntity(
             String provider,
@@ -69,5 +73,11 @@ public class PaymentGatewayEventJpaEntity extends BaseJpaEntity {
         this.status = status;
         this.processedAt = processedAt;
         this.failureReason = failureReason;
+    }
+
+    void updateProcessing(PaymentGatewayEventStatus newStatus, Instant newProcessedAt, String newFailureReason) {
+        this.status = newStatus;
+        this.processedAt = newProcessedAt;
+        this.failureReason = newFailureReason;
     }
 }

@@ -72,7 +72,7 @@ Regras para escolher o perfil:
 
 ## Fase 2 — Plataforma, planos, trial e cobrança SaaS
 
-**Progresso atual:** F02-01 a F02-09 e F02-11 a F02-14 concluídas. F02-10 permanece pendente.
+**Progresso atual:** F02-01 a F02-14 concluídas.
 
 | ID | Status | Tarefa pequena e verificável | Depende de | Perfil |
 |---|---|---|---|---|
@@ -85,11 +85,11 @@ Regras para escolher o perfil:
 | F02-07 | Concluído | Definir PaymentGateway como porta de aplicação e contratos de webhook. | F02-05 | Terra xhigh |
 | F02-08 | Concluído | Implementar adapter Asaas em sandbox, sem vazar SDK para domínio. | F02-07 | Sol xhigh |
 | F02-09 | Concluído | Persistir PlatformCharge e PaymentGatewayEvent com idempotência por provedor/chave, proteção concorrente, vínculo seguro ao tenant e testes de persistência. | F02-08 | Sol xhigh |
-| F02-10 | Pendente | Verificar assinatura, reprocessamento e reconciliação periódica de webhooks. | F02-09 | Sol xhigh |
+| F02-10 | Concluído | Autenticar e persistir webhook idempotente, reprocessar eventos recebidos/falhos e reconciliar periodicamente cobranças abertas com o gateway. A atualização usa lock, versão otimista, ordenação temporal e auditoria `SYSTEM`. | F02-09 | Sol xhigh |
 | F02-11 | Concluído | Implementar dunning diário com avisos idempotentes persistidos, consulta em D+1/D+5, bloqueio em D+10, auditoria `SYSTEM`, bloqueio de concorrência e filtro global das rotas da Company. | F02-09 | Terra ultra |
 | F02-12 | Concluído | Implementar `TrustUnlock` de proprietário da plataforma: máximo histórico de dois por cobrança vencida, expiração imediata no filtro, recálculo do acesso, auditoria com autor e endpoint OpenAPI. | F02-11 | Terra xhigh |
 | F02-13 | Concluído | Implementar e-mails de cobrança/aviso com `NotificationPort`, adaptador SMTP, fila persistida com tentativa/retry/cancelamento e auditoria automática. | F02-11 | Terra alto |
-| F02-14 | Concluído | Revisar precificação cumulativa, contratos/autenticação/idempotência de webhooks, dunning, notificações e acesso bloqueado. A revisão reforçou combinação exata de pacote, isolamento de rota, retry respeitando intervalo e auditoria `SYSTEM` desde o claim. Reconciliação e reprocessamento continuam na F02-10. | F02-01 a F02-13 | Sol ultra |
+| F02-14 | Concluído | Revisar precificação cumulativa, contratos/autenticação/idempotência de webhooks, dunning, notificações e acesso bloqueado. A revisão reforçou combinação exata de pacote, isolamento de rota, retry respeitando intervalo e auditoria `SYSTEM` desde o claim. | F02-01 a F02-13 | Sol ultra |
 
 **Gate da fase:** uma empresa inicia trial, possui snapshot correto de planos, recebe eventos idempotentes e tem acesso limitado/bloqueado conforme cobrança.
 

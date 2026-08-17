@@ -21,7 +21,7 @@ public class PlatformChargePersistenceMapper {
                 new PaymentGatewayProviderCode(entity.getProvider()),
                 entity.getIdempotencyKey(), entity.getExternalCustomerId(), entity.getExternalChargeId(),
                 entity.getBillingMethod(), entity.getAmount(), entity.getDueDate(), entity.getStatus(),
-                entity.getCreatedAt(), entity.getUpdatedAt()
+                entity.getCreatedAt(), entity.getUpdatedAt(), entity.getLastGatewayEventAt()
         );
     }
 }

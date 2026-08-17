@@ -12,6 +12,7 @@ import java.util.Optional;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import org.springframework.data.domain.PageRequest;
 
 @Repository
 @RequiredArgsConstructor
@@ -28,10 +29,13 @@ public class JpaPlatformChargeRepository implements PlatformChargeRepository {
 
     @Override
     public PlatformCharge save(PlatformCharge charge) {
-        if (charge.getId() != null) {
-            throw new IllegalStateException("Platform charge lifecycle updates are not implemented yet");
+        if (charge.getId() == null) {
+            return mapper.toDomain(repository.saveAndFlush(mapper.toJpaEntity(charge)));
         }
-        return mapper.toDomain(repository.saveAndFlush(mapper.toJpaEntity(charge)));
+        PlatformChargeJpaEntity entity = repository.findById(charge.getId())
+                .orElseThrow(() -> new IllegalArgumentException("Platform charge does not exist"));
+        entity.updateLifecycle(charge.getStatus(), charge.getLastGatewayEventAt());
+        return mapper.toDomain(repository.saveAndFlush(entity));
     }
 
     @Override
@@ -58,6 +62,20 @@ public class JpaPlatformChargeRepository implements PlatformChargeRepository {
             String externalChargeId
     ) {
         return repository.findByProviderAndExternalChargeId(provider.value(), externalChargeId).map(mapper::toDomain);
+    }
+
+    @Override
+    public Optional<PlatformCharge> findByProviderAndExternalChargeIdForUpdate(
+            PaymentGatewayProviderCode provider, String externalChargeId
+    ) {
+        return repository.findByProviderAndExternalChargeIdForUpdate(provider.value(), externalChargeId)
+                .map(mapper::toDomain);
+    }
+
+    @Override
+    public List<PlatformCharge> findReconciliationCandidates(int limit) {
+        return repository.findByStatusInOrderByUpdatedAtAsc(outstandingStatuses(), PageRequest.of(0, limit)).stream()
+                .map(mapper::toDomain).toList();
     }
 
     @Override

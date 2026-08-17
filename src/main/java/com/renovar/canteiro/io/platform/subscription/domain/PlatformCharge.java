@@ -22,7 +22,8 @@ public final class PlatformCharge {
     private final PaymentGatewayBillingMethod billingMethod;
     private final BigDecimal amount;
     private final LocalDate dueDate;
-    private final PlatformChargeStatus status;
+    private PlatformChargeStatus status;
+    private Instant lastGatewayEventAt;
     private final Instant createdAt;
     private final Instant updatedAt;
 
@@ -39,7 +40,8 @@ public final class PlatformCharge {
             LocalDate dueDate,
             PlatformChargeStatus status,
             Instant createdAt,
-            Instant updatedAt
+            Instant updatedAt,
+            Instant lastGatewayEventAt
     ) {
         this.id = id;
         this.companyId = requireId(companyId, "Platform charge company is required");
@@ -54,6 +56,7 @@ public final class PlatformCharge {
         this.status = require(status, "Platform charge status is required");
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
+        this.lastGatewayEventAt = lastGatewayEventAt;
     }
 
     public static PlatformCharge create(
@@ -70,7 +73,29 @@ public final class PlatformCharge {
     ) {
         return new PlatformCharge(
                 null, companyId, subscriptionId, provider, idempotencyKey, externalCustomerId,
-                externalChargeId, billingMethod, amount, dueDate, status, null, null
+                externalChargeId, billingMethod, amount, dueDate, status, null, null, null
+        );
+    }
+
+    public static PlatformCharge rehydrate(
+            UUID id,
+            UUID companyId,
+            UUID subscriptionId,
+            PaymentGatewayProviderCode provider,
+            String idempotencyKey,
+            String externalCustomerId,
+            String externalChargeId,
+            PaymentGatewayBillingMethod billingMethod,
+            BigDecimal amount,
+            LocalDate dueDate,
+            PlatformChargeStatus status,
+            Instant createdAt,
+            Instant updatedAt,
+            Instant lastGatewayEventAt
+    ) {
+        return new PlatformCharge(
+                id, companyId, subscriptionId, provider, idempotencyKey, externalCustomerId,
+                externalChargeId, billingMethod, amount, dueDate, status, createdAt, updatedAt, lastGatewayEventAt
         );
     }
 
@@ -89,10 +114,22 @@ public final class PlatformCharge {
             Instant createdAt,
             Instant updatedAt
     ) {
-        return new PlatformCharge(
+        return rehydrate(
                 id, companyId, subscriptionId, provider, idempotencyKey, externalCustomerId,
-                externalChargeId, billingMethod, amount, dueDate, status, createdAt, updatedAt
+                externalChargeId, billingMethod, amount, dueDate, status, createdAt, updatedAt, null
         );
+    }
+
+    public boolean applyGatewayStatus(PlatformChargeStatus newStatus, Instant observedAt) {
+        require(newStatus, "Platform charge status is required");
+        require(observedAt, "Gateway observation time is required");
+        if (lastGatewayEventAt != null && !observedAt.isAfter(lastGatewayEventAt)) {
+            return false;
+        }
+        boolean changed = status != newStatus;
+        status = newStatus;
+        lastGatewayEventAt = observedAt;
+        return changed;
     }
 
     public boolean matches(

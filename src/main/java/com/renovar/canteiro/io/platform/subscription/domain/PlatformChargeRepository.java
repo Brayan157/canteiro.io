@@ -24,6 +24,12 @@ public interface PlatformChargeRepository {
             String externalChargeId
     );
 
+    Optional<PlatformCharge> findByProviderAndExternalChargeIdForUpdate(
+            PaymentGatewayProviderCode provider, String externalChargeId
+    );
+
+    List<PlatformCharge> findReconciliationCandidates(int limit);
+
     List<PlatformCharge> findOutstandingByCompanyId(UUID companyId);
 
     List<PlatformCharge> findOutstandingByCompanyIdForDunning(UUID companyId);

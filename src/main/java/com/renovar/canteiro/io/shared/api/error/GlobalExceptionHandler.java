@@ -13,6 +13,7 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import com.renovar.canteiro.io.platform.subscription.application.PaymentGatewayWebhookAuthenticationException;
 
 import java.net.URI;
 import java.util.List;
@@ -64,6 +65,13 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(AccessDeniedException.class)
     ProblemDetail handleAccessDenied(AccessDeniedException exception, HttpServletRequest request) {
         return problem(HttpStatus.FORBIDDEN, ErrorCode.ACCESS_DENIED, "Access is denied.", request);
+    }
+
+    @ExceptionHandler(PaymentGatewayWebhookAuthenticationException.class)
+    ProblemDetail handleWebhookAuthentication(
+            PaymentGatewayWebhookAuthenticationException exception, HttpServletRequest request
+    ) {
+        return problem(HttpStatus.UNAUTHORIZED, ErrorCode.UNAUTHENTICATED, "Webhook authentication failed.", request);
     }
 
     @ExceptionHandler(Exception.class)

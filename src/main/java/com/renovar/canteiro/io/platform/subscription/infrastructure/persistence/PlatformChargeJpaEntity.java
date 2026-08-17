@@ -8,12 +8,14 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.Instant;
 import java.util.UUID;
 
 @Getter
@@ -44,6 +46,11 @@ public class PlatformChargeJpaEntity extends BaseJpaEntity {
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 30)
     private PlatformChargeStatus status;
+    @Column(name = "last_gateway_event_at")
+    private Instant lastGatewayEventAt;
+    @Version
+    @Column(name = "version", nullable = false)
+    private long version;
 
     public PlatformChargeJpaEntity(
             UUID companyId,
@@ -67,5 +74,10 @@ public class PlatformChargeJpaEntity extends BaseJpaEntity {
         this.amount = amount;
         this.dueDate = dueDate;
         this.status = status;
+    }
+
+    void updateLifecycle(PlatformChargeStatus newStatus, Instant gatewayEventAt) {
+        this.status = newStatus;
+        this.lastGatewayEventAt = gatewayEventAt;
     }
 }

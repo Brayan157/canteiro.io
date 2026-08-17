@@ -20,9 +20,9 @@ public final class PaymentGatewayEvent {
     private final Instant occurredAt;
     private final Instant receivedAt;
     private final Map<String, String> attributes;
-    private final PaymentGatewayEventStatus status;
-    private final Instant processedAt;
-    private final String failureReason;
+    private PaymentGatewayEventStatus status;
+    private Instant processedAt;
+    private String failureReason;
     private final Instant createdAt;
     private final Instant updatedAt;
 
@@ -97,6 +97,18 @@ public final class PaymentGatewayEvent {
                 && eventType == webhook.eventType()
                 && occurredAt.equals(webhook.occurredAt())
                 && attributes.equals(webhook.attributes());
+    }
+
+    public void markProcessed(Instant instant) {
+        status = PaymentGatewayEventStatus.PROCESSED;
+        processedAt = require(instant, "Payment gateway event processing time is required");
+        failureReason = null;
+    }
+
+    public void markFailed(Instant instant, String reason) {
+        status = PaymentGatewayEventStatus.FAILED;
+        processedAt = require(instant, "Payment gateway event failure time is required");
+        failureReason = requireText(reason, "Payment gateway event failure reason is required");
     }
 
     private static String requireText(String value, String message) {
