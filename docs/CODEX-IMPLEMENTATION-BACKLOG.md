@@ -72,7 +72,7 @@ Regras para escolher o perfil:
 
 ## Fase 2 — Plataforma, planos, trial e cobrança SaaS
 
-**Progresso atual:** F02-01 a F02-09 e F02-11 a F02-13 concluídas. F02-10 e F02-14 permanecem pendentes.
+**Progresso atual:** F02-01 a F02-09 e F02-11 a F02-14 concluídas. F02-10 permanece pendente.
 
 | ID | Status | Tarefa pequena e verificável | Depende de | Perfil |
 |---|---|---|---|---|
@@ -89,7 +89,7 @@ Regras para escolher o perfil:
 | F02-11 | Concluído | Implementar dunning diário com avisos idempotentes persistidos, consulta em D+1/D+5, bloqueio em D+10, auditoria `SYSTEM`, bloqueio de concorrência e filtro global das rotas da Company. | F02-09 | Terra ultra |
 | F02-12 | Concluído | Implementar `TrustUnlock` de proprietário da plataforma: máximo histórico de dois por cobrança vencida, expiração imediata no filtro, recálculo do acesso, auditoria com autor e endpoint OpenAPI. | F02-11 | Terra xhigh |
 | F02-13 | Concluído | Implementar e-mails de cobrança/aviso com `NotificationPort`, adaptador SMTP, fila persistida com tentativa/retry/cancelamento e auditoria automática. | F02-11 | Terra alto |
-| F02-14 | Pendente | Revisar precificação cumulativa, webhooks, dunning e acesso bloqueado. | F02-01 a F02-13 | Sol ultra |
+| F02-14 | Concluído | Revisar precificação cumulativa, contratos/autenticação/idempotência de webhooks, dunning, notificações e acesso bloqueado. A revisão reforçou combinação exata de pacote, isolamento de rota, retry respeitando intervalo e auditoria `SYSTEM` desde o claim. Reconciliação e reprocessamento continuam na F02-10. | F02-01 a F02-13 | Sol ultra |
 
 **Gate da fase:** uma empresa inicia trial, possui snapshot correto de planos, recebe eventos idempotentes e tem acesso limitado/bloqueado conforme cobrança.
 

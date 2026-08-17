@@ -49,6 +49,10 @@ class PlatformChargeNoticeDeliveryLifecycleServiceTest {
 
         assertEquals(List.of(notice), result);
         verify(platformChargeNoticeRepository).claimPendingDeliveries(NOW, NOW.minus(Duration.ofMinutes(15)), 25);
+        verify(auditEventRecorder).recordSystemAction(
+                eq(notice.getCompanyId()), eq(AuditModule.PLATFORM), eq(AuditAction.UPDATE),
+                eq("PlatformChargeNotice"), eq(notice.getId()), eq(null), any(), any()
+        );
     }
 
     @Test

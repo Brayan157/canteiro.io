@@ -70,6 +70,34 @@ class PlatformChargeNoticeDeliveryPersistenceIntegrationTest extends AbstractPos
         assertEquals(attemptedAt.plusSeconds(5), persisted.getDeliveredAt());
     }
 
+    @Test
+    @Transactional
+    void retriesAFailedDeliveryOnlyAfterTheConfiguredWindow() {
+        PlatformCharge charge = charge();
+        PlatformChargeNotice notice = PlatformChargeNotice.create(
+                charge.getCompanyId(), charge.getId(), PlatformChargeNoticeType.DUE_DATE,
+                "retry-" + UUID.randomUUID() + "@example.com", LocalDate.of(2026, 8, 22)
+        );
+        assertTrue(platformChargeNoticeRepository.saveIfAbsent(notice));
+        Instant firstAttemptAt = Instant.parse("2026-08-22T12:00:00Z");
+        PlatformChargeNotice firstAttempt = platformChargeNoticeRepository.claimPendingDeliveries(
+                firstAttemptAt, firstAttemptAt.minusSeconds(900), 10
+        ).getFirst();
+        firstAttempt.markDeliveryFailed("SmtpException");
+        platformChargeNoticeRepository.save(firstAttempt);
+
+        List<PlatformChargeNotice> prematureRetry = platformChargeNoticeRepository.claimPendingDeliveries(
+                firstAttemptAt.plusSeconds(300), firstAttemptAt.minusSeconds(600), 10
+        );
+        List<PlatformChargeNotice> eligibleRetry = platformChargeNoticeRepository.claimPendingDeliveries(
+                firstAttemptAt.plusSeconds(960), firstAttemptAt.plusSeconds(60), 10
+        );
+
+        assertTrue(prematureRetry.isEmpty());
+        assertEquals(1, eligibleRetry.size());
+        assertEquals(2, eligibleRetry.getFirst().getDeliveryAttempts());
+    }
+
     private PlatformCharge charge() {
         Company company = companyRepository.save(Company.create(
                 "Construtora Notificacao Ltda.", null, "DOC-" + UUID.randomUUID().toString().substring(0, 16),

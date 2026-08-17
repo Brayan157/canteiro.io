@@ -32,9 +32,11 @@ public class PlatformChargeNoticeDeliveryLifecycleService {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public List<PlatformChargeNotice> claimPendingDeliveries() {
         Instant now = clock.instant();
-        return platformChargeNoticeRepository.claimPendingDeliveries(
+        List<PlatformChargeNotice> claimed = platformChargeNoticeRepository.claimPendingDeliveries(
                 now, now.minus(notificationDeliveryProperties.retryAfter()), notificationDeliveryProperties.batchSize()
         );
+        claimed.forEach(this::auditDeliveryClaim);
+        return claimed;
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -67,6 +69,19 @@ public class PlatformChargeNoticeDeliveryLifecycleService {
                 beforeData,
                 auditData(saved),
                 Map.of("origin", ORIGIN)
+        );
+    }
+
+    private void auditDeliveryClaim(PlatformChargeNotice notice) {
+        auditEventRecorder.recordSystemAction(
+                notice.getCompanyId(),
+                AuditModule.PLATFORM,
+                AuditAction.UPDATE,
+                "PlatformChargeNotice",
+                notice.getId(),
+                null,
+                auditData(notice),
+                Map.of("origin", ORIGIN, "stage", "claim")
         );
     }
 

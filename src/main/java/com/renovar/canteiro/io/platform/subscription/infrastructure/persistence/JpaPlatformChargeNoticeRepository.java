@@ -51,8 +51,8 @@ public class JpaPlatformChargeNoticeRepository implements PlatformChargeNoticeRe
             throw new IllegalArgumentException("Platform charge notice delivery claim is invalid");
         }
         List<PlatformChargeNoticeJpaEntity> notices = repository.findClaimableForUpdate(
-                List.of(PlatformChargeNoticeStatus.PENDING_DELIVERY, PlatformChargeNoticeStatus.DELIVERY_FAILED),
-                PlatformChargeNoticeStatus.DELIVERING,
+                PlatformChargeNoticeStatus.PENDING_DELIVERY,
+                List.of(PlatformChargeNoticeStatus.DELIVERY_FAILED, PlatformChargeNoticeStatus.DELIVERING),
                 staleBefore,
                 PageRequest.of(0, limit)
         );

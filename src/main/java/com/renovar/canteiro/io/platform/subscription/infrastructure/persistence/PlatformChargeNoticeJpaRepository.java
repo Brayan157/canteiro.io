@@ -20,13 +20,13 @@ interface PlatformChargeNoticeJpaRepository extends JpaRepository<PlatformCharge
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""
             SELECT notice FROM PlatformChargeNoticeJpaEntity notice
-            WHERE notice.status IN :retryableStatuses
-               OR (notice.status = :deliveringStatus AND notice.lastAttemptAt < :staleBefore)
+            WHERE notice.status = :pendingStatus
+               OR (notice.status IN :retryableStatuses AND notice.lastAttemptAt < :staleBefore)
             ORDER BY notice.createdAt ASC
             """)
     List<PlatformChargeNoticeJpaEntity> findClaimableForUpdate(
+            @Param("pendingStatus") PlatformChargeNoticeStatus pendingStatus,
             @Param("retryableStatuses") List<PlatformChargeNoticeStatus> retryableStatuses,
-            @Param("deliveringStatus") PlatformChargeNoticeStatus deliveringStatus,
             @Param("staleBefore") Instant staleBefore,
             Pageable pageable
     );
