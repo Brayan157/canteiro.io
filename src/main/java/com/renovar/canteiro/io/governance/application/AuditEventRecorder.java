@@ -109,6 +109,34 @@ public class AuditEventRecorder {
         ));
     }
 
+    @Transactional(propagation = Propagation.MANDATORY)
+    public AuditEvent recordPlatformAction(
+            UUID companyId,
+            AuditModule module,
+            AuditAction action,
+            String entityType,
+            UUID entityId,
+            Map<String, Object> beforeData,
+            Map<String, Object> afterData,
+            Map<String, Object> metadata
+    ) {
+        var operator = platformOperatorContextHolder.currentOperator()
+                .orElseThrow(() -> new IllegalStateException("A trusted platform actor context is required"));
+        return auditEventRepository.append(AuditEvent.create(
+                companyId,
+                operator.userId(),
+                AuditActorType.PLATFORM_USER,
+                module,
+                action,
+                entityType,
+                entityId,
+                toPayload(beforeData),
+                toPayload(afterData),
+                toMetadataPayload(metadata),
+                clock.instant()
+        ));
+    }
+
     private AuditActor resolveActor() {
         return tenantContextHolder.currentTenant()
                 .map(tenant -> new AuditActor(tenant.userId(), tenant.companyId(), AuditActorType.COMPANY_USER))

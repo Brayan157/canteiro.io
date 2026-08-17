@@ -12,6 +12,8 @@ public interface PlatformChargeRepository {
 
     Optional<PlatformCharge> findById(UUID id);
 
+    Optional<PlatformCharge> findByIdForUpdate(UUID id);
+
     Optional<PlatformCharge> findByProviderAndIdempotencyKey(
             PaymentGatewayProviderCode provider,
             String idempotencyKey

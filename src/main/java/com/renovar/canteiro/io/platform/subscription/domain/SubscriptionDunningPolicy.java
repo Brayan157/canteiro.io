@@ -8,6 +8,7 @@ import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 
 @Component
 public class SubscriptionDunningPolicy {
@@ -16,14 +17,26 @@ public class SubscriptionDunningPolicy {
     private static final long BLOCKED_AFTER_DAYS = 10;
 
     public SubscriptionDunningAssessment assess(List<PlatformCharge> charges, LocalDate currentDate) {
+        return assess(charges, currentDate, Set.of());
+    }
+
+    public SubscriptionDunningAssessment assess(
+            List<PlatformCharge> charges,
+            LocalDate currentDate,
+            Set<UUID> trustedChargeIds
+    ) {
         if (currentDate == null) {
             throw new IllegalArgumentException("Subscription dunning assessment date is required");
         }
         if (charges == null) {
             throw new IllegalArgumentException("Subscription dunning charges are required");
         }
+        if (trustedChargeIds == null) {
+            throw new IllegalArgumentException("Trusted platform charges are required");
+        }
         return charges.stream()
                 .filter(charge -> charge.isOverdueOn(currentDate))
+                .filter(charge -> !trustedChargeIds.contains(charge.getId()))
                 .min(Comparator.comparing(PlatformCharge::getDueDate))
                 .map(charge -> new SubscriptionDunningAssessment(accessLevelFor(charge, currentDate), charge.getId()))
                 .orElseGet(SubscriptionDunningAssessment::fullAccess);

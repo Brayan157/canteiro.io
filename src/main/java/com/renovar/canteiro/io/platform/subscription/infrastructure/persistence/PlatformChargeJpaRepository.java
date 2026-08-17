@@ -24,6 +24,10 @@ interface PlatformChargeJpaRepository extends JpaRepository<PlatformChargeJpaEnt
             String externalChargeId
     );
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT charge FROM PlatformChargeJpaEntity charge WHERE charge.id = :id")
+    Optional<PlatformChargeJpaEntity> findByIdForUpdate(@Param("id") UUID id);
+
     List<PlatformChargeJpaEntity> findByCompanyIdAndStatusInOrderByDueDateAsc(
             UUID companyId,
             Collection<PlatformChargeStatus> statuses

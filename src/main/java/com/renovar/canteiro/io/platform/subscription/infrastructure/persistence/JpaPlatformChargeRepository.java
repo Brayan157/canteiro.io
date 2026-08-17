@@ -40,6 +40,11 @@ public class JpaPlatformChargeRepository implements PlatformChargeRepository {
     }
 
     @Override
+    public Optional<PlatformCharge> findByIdForUpdate(UUID id) {
+        return repository.findByIdForUpdate(id).map(mapper::toDomain);
+    }
+
+    @Override
     public Optional<PlatformCharge> findByProviderAndIdempotencyKey(
             PaymentGatewayProviderCode provider,
             String idempotencyKey

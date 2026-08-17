@@ -72,7 +72,7 @@ Regras para escolher o perfil:
 
 ## Fase 2 — Plataforma, planos, trial e cobrança SaaS
 
-**Progresso atual:** F02-01 a F02-09 e F02-11 concluídas. F02-10 e F02-12 a F02-14 permanecem pendentes.
+**Progresso atual:** F02-01 a F02-09, F02-11 e F02-12 concluídas. F02-10 e F02-13 a F02-14 permanecem pendentes.
 
 | ID | Status | Tarefa pequena e verificável | Depende de | Perfil |
 |---|---|---|---|---|
@@ -87,7 +87,7 @@ Regras para escolher o perfil:
 | F02-09 | Concluído | Persistir PlatformCharge e PaymentGatewayEvent com idempotência por provedor/chave, proteção concorrente, vínculo seguro ao tenant e testes de persistência. | F02-08 | Sol xhigh |
 | F02-10 | Pendente | Verificar assinatura, reprocessamento e reconciliação periódica de webhooks. | F02-09 | Sol xhigh |
 | F02-11 | Concluído | Implementar dunning diário com avisos idempotentes persistidos, consulta em D+1/D+5, bloqueio em D+10, auditoria `SYSTEM`, bloqueio de concorrência e filtro global das rotas da Company. O envio efetivo de e-mail permanece na F02-13. | F02-09 | Terra ultra |
-| F02-12 | Pendente | Implementar TrustUnlock: máximo de dois por cobrança vencida, com expiração e auditoria. | F02-11 | Terra xhigh |
+| F02-12 | Concluído | Implementar `TrustUnlock` de proprietário da plataforma: máximo histórico de dois por cobrança vencida, expiração imediata no filtro, recálculo do acesso, auditoria com autor e endpoint OpenAPI. | F02-11 | Terra xhigh |
 | F02-13 | Pendente | Implementar e-mails de cobrança/aviso com NotificationPort. | F02-11 | Terra alto |
 | F02-14 | Pendente | Revisar precificação cumulativa, webhooks, dunning e acesso bloqueado. | F02-01 a F02-13 | Sol ultra |
 

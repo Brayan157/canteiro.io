@@ -14,6 +14,7 @@ import com.renovar.canteiro.io.platform.subscription.domain.PlatformChargeReposi
 import com.renovar.canteiro.io.platform.subscription.domain.PlatformChargeStatus;
 import com.renovar.canteiro.io.platform.subscription.domain.SubscriptionAccessLevel;
 import com.renovar.canteiro.io.platform.subscription.domain.SubscriptionDunningPolicy;
+import com.renovar.canteiro.io.platform.subscription.domain.TrustUnlockRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -27,6 +28,7 @@ import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -53,12 +55,16 @@ class SubscriptionDunningServiceTest {
     @Mock
     private CompanyRepository companyRepository;
     @Mock
+    private TrustUnlockRepository trustUnlockRepository;
+    @Mock
     private AuditEventRecorder auditEventRecorder;
 
     @Test
     void blocksTheCompanyAndCreatesEachReachedNoticeExactlyOnce() {
         PlatformCharge charge = overdueCharge();
         when(platformChargeRepository.findOutstandingByCompanyIdForDunning(COMPANY_ID)).thenReturn(List.of(charge));
+        when(trustUnlockRepository.findActiveChargeIdsByCompanyId(COMPANY_ID, Instant.parse("2026-08-22T12:00:00Z")))
+                .thenReturn(Set.of());
         when(companySubscriptionAccessRepository.findByCompanyId(COMPANY_ID)).thenReturn(Optional.empty());
         when(companyRepository.findById(COMPANY_ID)).thenReturn(Optional.of(company()));
         when(companySubscriptionAccessRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
@@ -94,6 +100,8 @@ class SubscriptionDunningServiceTest {
                 COMPANY_ID, SubscriptionAccessLevel.BLOCKED, CHARGE_ID, CURRENT_DATE
         );
         when(platformChargeRepository.findOutstandingByCompanyIdForDunning(COMPANY_ID)).thenReturn(List.of(charge));
+        when(trustUnlockRepository.findActiveChargeIdsByCompanyId(COMPANY_ID, Instant.parse("2026-08-22T12:00:00Z")))
+                .thenReturn(Set.of());
         when(companySubscriptionAccessRepository.findByCompanyId(COMPANY_ID)).thenReturn(Optional.of(existingAccess));
         when(companyRepository.findById(COMPANY_ID)).thenReturn(Optional.of(company()));
         when(platformChargeNoticeRepository.saveIfAbsent(any())).thenReturn(false);
@@ -114,6 +122,8 @@ class SubscriptionDunningServiceTest {
                 COMPANY_ID, SubscriptionAccessLevel.BLOCKED, CHARGE_ID, CURRENT_DATE.minusDays(1)
         );
         when(platformChargeRepository.findOutstandingByCompanyIdForDunning(COMPANY_ID)).thenReturn(List.of());
+        when(trustUnlockRepository.findActiveChargeIdsByCompanyId(COMPANY_ID, Instant.parse("2026-08-22T12:00:00Z")))
+                .thenReturn(Set.of());
         when(companySubscriptionAccessRepository.findByCompanyId(COMPANY_ID)).thenReturn(Optional.of(existingAccess));
         when(companySubscriptionAccessRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -134,6 +144,7 @@ class SubscriptionDunningServiceTest {
                 platformChargeNoticeRepository,
                 companyRepository,
                 new SubscriptionDunningPolicy(),
+                trustUnlockRepository,
                 auditEventRecorder,
                 Clock.fixed(Instant.parse("2026-08-22T12:00:00Z"), ZoneOffset.UTC)
         );

@@ -15,6 +15,7 @@ import com.renovar.canteiro.io.platform.subscription.domain.PlatformChargeReposi
 import com.renovar.canteiro.io.platform.subscription.domain.SubscriptionAccessLevel;
 import com.renovar.canteiro.io.platform.subscription.domain.SubscriptionDunningAssessment;
 import com.renovar.canteiro.io.platform.subscription.domain.SubscriptionDunningPolicy;
+import com.renovar.canteiro.io.platform.subscription.domain.TrustUnlockRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -25,6 +26,7 @@ import java.time.LocalDate;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -38,18 +40,29 @@ class SubscriptionDunningCompanyService {
     private final PlatformChargeNoticeRepository platformChargeNoticeRepository;
     private final CompanyRepository companyRepository;
     private final SubscriptionDunningPolicy subscriptionDunningPolicy;
+    private final TrustUnlockRepository trustUnlockRepository;
     private final AuditEventRecorder auditEventRecorder;
     private final Clock clock;
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public SubscriptionDunningRunResult evaluateCompany(UUID companyId) {
+        return evaluateCompanyInCurrentTransaction(companyId);
+    }
+
+    @Transactional(propagation = Propagation.MANDATORY)
+    public SubscriptionDunningRunResult reevaluateCompany(UUID companyId) {
+        return evaluateCompanyInCurrentTransaction(companyId);
+    }
+
+    private SubscriptionDunningRunResult evaluateCompanyInCurrentTransaction(UUID companyId) {
         if (companyId == null) {
             throw new IllegalArgumentException("Subscription dunning requires a company");
         }
         companySubscriptionAccessRepository.lockCompanyId(companyId);
         LocalDate currentDate = LocalDate.now(clock);
         List<PlatformCharge> charges = platformChargeRepository.findOutstandingByCompanyIdForDunning(companyId);
-        SubscriptionDunningAssessment assessment = subscriptionDunningPolicy.assess(charges, currentDate);
+        Set<UUID> trustedChargeIds = trustUnlockRepository.findActiveChargeIdsByCompanyId(companyId, clock.instant());
+        SubscriptionDunningAssessment assessment = subscriptionDunningPolicy.assess(charges, currentDate, trustedChargeIds);
         int accessChanges = updateAccess(companyId, assessment, currentDate) ? 1 : 0;
         int noticesCreated = createNotices(companyId, charges, currentDate);
         return new SubscriptionDunningRunResult(1, accessChanges, noticesCreated);

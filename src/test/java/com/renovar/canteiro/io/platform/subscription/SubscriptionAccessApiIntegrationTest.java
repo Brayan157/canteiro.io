@@ -175,10 +175,20 @@ class SubscriptionAccessApiIntegrationTest extends AbstractPostgresIntegrationTe
         PlatformCharge charge = platformChargeRepository.save(PlatformCharge.create(
                 company.getId(), subscription.getId(), PROVIDER, "access-key-" + UUID.randomUUID(),
                 "cus_123", "pay_" + UUID.randomUUID(), PaymentGatewayBillingMethod.PIX,
-                new BigDecimal("99.90"), LocalDate.now(ZoneOffset.UTC).minusDays(1), PlatformChargeStatus.PENDING
+                new BigDecimal("99.90"), dueDateFor(accessLevel), PlatformChargeStatus.PENDING
         ));
         companySubscriptionAccessRepository.save(CompanySubscriptionAccess.create(
                 company.getId(), accessLevel, charge.getId(), LocalDate.now(ZoneOffset.UTC)
         ));
+    }
+
+    private LocalDate dueDateFor(SubscriptionAccessLevel accessLevel) {
+        if (accessLevel == SubscriptionAccessLevel.BLOCKED) {
+            return LocalDate.now(ZoneOffset.UTC).minusDays(12);
+        }
+        if (accessLevel == SubscriptionAccessLevel.DELINQUENT_READ_ONLY) {
+            return LocalDate.now(ZoneOffset.UTC).minusDays(6);
+        }
+        return LocalDate.now(ZoneOffset.UTC).minusDays(1);
     }
 }

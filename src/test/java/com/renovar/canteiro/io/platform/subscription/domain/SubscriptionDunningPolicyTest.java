@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -65,6 +66,19 @@ class SubscriptionDunningPolicyTest {
         assertFalse(policy.noticesFor(confirmedCharge, LocalDate.of(2026, 8, 22)).contains(
                 PlatformChargeNoticeType.DUE_DATE
         ));
+    }
+
+    @Test
+    void skipsTrustedChargesButKeepsTheNextOverdueChargeRestrictingAccess() {
+        PlatformCharge trustedCharge = charge(PlatformChargeStatus.PENDING, LocalDate.of(2026, 8, 12));
+        PlatformCharge nextCharge = charge(PlatformChargeStatus.PENDING, LocalDate.of(2026, 8, 21));
+
+        SubscriptionDunningAssessment assessment = policy.assess(
+                List.of(trustedCharge, nextCharge), LocalDate.of(2026, 8, 22), Set.of(trustedCharge.getId())
+        );
+
+        assertEquals(SubscriptionAccessLevel.READ_ONLY, assessment.accessLevel());
+        assertEquals(nextCharge.getId(), assessment.restrictionChargeId());
     }
 
     private PlatformCharge charge(PlatformChargeStatus status, LocalDate dueDate) {

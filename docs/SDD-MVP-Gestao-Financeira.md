@@ -325,7 +325,7 @@ Transições financeiras obrigatórias:
    - a restrição é aplicada no backend às rotas da Company: `GET`, `HEAD` e `OPTIONS` são permitidos em consulta; mutações são negadas; no bloqueio total todas as rotas da Company são negadas. Rotas de autenticação, onboarding, plataforma e suporte não recebem essa restrição;
    - a F02-11 persiste as intenções de aviso; a entrega efetiva por e-mail via `NotificationPort` é responsabilidade da F02-13;
    - pagamento confirmado: restaura o acesso conforme a assinatura ativa;
-   - desbloqueio de confiança: até dois por cobrança vencida, gravando autor, motivo, início e expiração configurável.
+   - desbloqueio de confiança: até dois por cobrança vencida ao longo do histórico, concedidos exclusivamente pelo proprietário da plataforma. Cada `TrustUnlock` registra autor, motivo, início imediato e expiração futura; enquanto ativo, desconsidera somente a cobrança vinculada. Outra cobrança vencida não desbloqueada continua restringindo a Company, e o filtro reavalia os desbloqueios ativos em cada requisição para aplicar a expiração sem aguardar o job diário.
 9. A plataforma mantém sua própria tabela de cobranças e eventos; o gateway não será a única fonte de verdade. `PlatformCharge` registra a Company derivada da assinatura, assinatura, código neutro do provedor, chave idempotente, identificadores externos, meio, valor, vencimento e estado normalizado. Código do provedor + chave idempotente também usa bloqueio transacional e constraint única, evitando nova chamada externa em repetição concorrente. A foreign key composta entre cobrança, assinatura e Company impede associação cruzada entre tenants.
 
 ## 6. Arquitetura proposta
