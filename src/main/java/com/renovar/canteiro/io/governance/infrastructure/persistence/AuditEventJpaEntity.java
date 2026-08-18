@@ -37,7 +37,7 @@ public class AuditEventJpaEntity {
     @Column(name = "company_id")
     private UUID companyId;
 
-    @Column(name = "actor_user_id", nullable = false)
+    @Column(name = "actor_user_id")
     private UUID actorUserId;
 
     @Enumerated(EnumType.STRING)

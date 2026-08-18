@@ -136,6 +136,7 @@ Nunca substitua Work por Contract, nem mova faturamento de Contract para Work.
 9. Toda rota protegida valida autenticação, tenant e permissão no backend. Segurança de UI não é suficiente.
 10. Todo caso de uso de suporte exige `SupportTargetContext` e chama `SupportAuthorizationService`; operações proibidas não podem receber bypass, inclusive para `PLATFORM_OWNER`.
 11. Cada módulo novo deve ter teste negativo provando isolamento entre duas empresas.
+12. No onboarding público, o proprietário inicial da Company é criado como usuário pendente, vinculado à nova Company e recebe automaticamente o papel `Company Administrator` com todas as permissões ativas do catálogo controlado naquele momento. Após ativar a própria conta pelo token de convite, ele possui alçada direta efetiva; isso não dispensa autorização nem auditoria nas ações futuras.
 
 ## 7. Papéis, alçadas, aprovação e auditoria — INVARIANTE
 
@@ -151,6 +152,8 @@ Nunca substitua Work por Contract, nem mova faturamento de Contract para Work.
 10. Toda inclusão, edição, cancelamento, exclusão lógica, aprovação, rejeição, login relevante e atuação do suporte é auditável.
 11. AuditEvent é imutável e retido tecnicamente por pelo menos cinco anos. A tela pode abrir nos últimos 30 dias, mas não pode eliminar o histórico.
 12. Evento de suporte registra operador, empresa-alvo, módulo, ação e, para relatório enviado, destinatário/artefato.
+13. O onboarding registra um AuditEvent imutável para a criação da Company, incluindo proprietário inicial, planos selecionados, preço cotado e o papel/permissões iniciais concedidos.
+14. Ações automáticas internas que alteram estado devem gerar AuditEvent com ator `SYSTEM`, sem forjar um usuário humano e com a origem identificável nos metadados.
 
 ## 8. Obras, contratos, serviços e medições — INVARIANTE
 
@@ -206,13 +209,13 @@ Nunca substitua Work por Contract, nem mova faturamento de Contract para Work.
 
 ## 11. Assinaturas, cobrança e acesso — INVARIANTE
 
-1. A Company precisa escolher ao menos um plano para criar/usar conta e possui teste de 30 dias.
+1. A Company precisa escolher ao menos um plano para criar/usar conta e possui teste de 30 dias. O onboarding cria o proprietário inicial pendente, seu papel administrativo inicial e o token de ativação; não há aprovação manual da Company pela plataforma. O trial começa na ativação desse proprietário e, terminado o prazo, a assinatura fica aguardando pagamento até a implementação da cobrança.
 2. Planos são cumulativos. Combinações promocionais são configuradas como pacotes; manter snapshot de preço, composição e vigência da contratação.
-3. Integração de pagamento usa porta/adaptador. Asaas é a recomendação inicial, mas o domínio não pode ficar acoplado ao SDK/provedor.
-4. Eventos de webhook são autenticados, idempotentes, persistidos e reconciliados; o gateway não é a única fonte de verdade.
+3. Integração de pagamento usa a porta `PaymentGateway` e adapter. O adapter inicial usa HTTP contra o sandbox do Asaas e permanece isolado em `infrastructure/asaas`; domínio e aplicação não podem depender de DTO, SDK, status ou nome do provedor. A porta recebe solicitações de cobrança com chave de idempotência e traduz o resultado externo para contrato neutro.
+4. Webhook chega como payload bruto e cabeçalhos; apenas o adapter do gateway pode autenticá-lo e traduzi-lo em evento neutro. Somente eventos já autenticados podem ser persistidos em `PaymentGatewayEvent`. A idempotência usa código neutro do provedor + identificador externo do evento, com bloqueio transacional e constraint única; repetição conflitante deve falhar. `PlatformCharge` usa código neutro do provedor + chave de idempotência com a mesma proteção e mantém `company_id` coerente com a assinatura por foreign key composta. Eventos persistidos são reprocessáveis, cobranças abertas são reconciliadas periodicamente, e a ordenação temporal impede regressão por evento antigo; o gateway não é a única fonte de verdade.
 5. Cartão pode ser cobrado automaticamente; Pix/boleto geram cobranças recorrentes para pagamento do cliente.
-6. Regra de inadimplência: cobrança vencida envia e-mail; acesso vira consulta; a partir de 5 dias fica inadimplente em consulta; aproximadamente a partir de 10 dias ocorre bloqueio total.
-7. Há no máximo dois desbloqueios de confiança por cobrança vencida. Cada um registra autor, motivo, início e expiração.
+6. Regra de inadimplência: no vencimento não pago é criada uma intenção idempotente de aviso; no dia seguinte o acesso da Company vira consulta; em D+5 fica inadimplente em consulta; em D+10 ocorre bloqueio total. A decisão usa a cobrança aberta mais antiga (`PENDING` ou `OVERDUE`), persiste `CompanySubscriptionAccess` e `PlatformChargeNotice` por cobrança/tipo, e é aplicada globalmente apenas nas rotas `/api/v1/company` (GET/HEAD/OPTIONS são consulta). O job diário bloqueia as cobranças da Company antes de recalcular. A entrega usa `NotificationPort`, sem acoplar SMTP ao domínio de assinaturas, e registra `PENDING_DELIVERY`, `DELIVERING`, `DELIVERED`, `DELIVERY_FAILED` ou `CANCELLED`, tentativas e auditoria `SYSTEM` desde o claim; avisos de cobrança já paga são cancelados e falhas só podem ser tentadas novamente após o intervalo configurado, sem vazar mensagem do provedor.
+7. Há no máximo dois `TrustUnlock` por cobrança vencida ao longo do histórico. Somente o proprietário da plataforma pode concedê-lo, sempre para uma cobrança `PENDING` ou `OVERDUE` após o vencimento, registrando autor, motivo, início imediato e expiração futura. Enquanto ativo, ele ignora apenas aquela cobrança no cálculo de acesso; outra cobrança vencida sem desbloqueio continua restringindo a Company. A expiração deve ser avaliada em cada requisição protegida, sem aguardar o scheduler diário.
 
 ## 12. Documentos, relatórios e integrações
 

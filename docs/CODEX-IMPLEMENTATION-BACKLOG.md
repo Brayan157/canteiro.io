@@ -72,22 +72,24 @@ Regras para escolher o perfil:
 
 ## Fase 2 — Plataforma, planos, trial e cobrança SaaS
 
-| ID | Tarefa pequena e verificável | Depende de | Perfil |
-|---|---|---|---|
-| F02-01 | Modelar Plan, módulo/feature, preço e vigência. | F01-10 | Terra alto |
-| F02-02 | Modelar PlanBundle e regras de preço para combinações cumulativas. | F02-01 | Terra xhigh |
-| F02-03 | Criar administração de planos e pacotes apenas para proprietário da plataforma. | F02-01 | Terra alto |
-| F02-04 | Criar onboarding da Company com seleção obrigatória de plano. | F01-03, F02-01 | Terra xhigh |
-| F02-05 | Criar Subscription, SubscriptionItem e snapshot imutável de preço/composição. | F02-02, F02-04 | Terra xhigh |
-| F02-06 | Implementar trial de 30 dias e transições locais de assinatura. | F02-05 | Terra alto |
-| F02-07 | Definir PaymentGateway como porta de aplicação e contratos de webhook. | F02-05 | Terra xhigh |
-| F02-08 | Implementar adapter Asaas em sandbox, sem vazar SDK para domínio. | F02-07 | Sol xhigh |
-| F02-09 | Persistir PlatformCharge e PaymentGatewayEvent com idempotência. | F02-08 | Sol xhigh |
-| F02-10 | Verificar assinatura, reprocessamento e reconciliação periódica de webhooks. | F02-09 | Sol xhigh |
-| F02-11 | Implementar avisos de vencimento, acesso de consulta, inadimplência em D+5 e bloqueio em D+10. | F02-09 | Terra ultra |
-| F02-12 | Implementar TrustUnlock: máximo de dois por cobrança vencida, com expiração e auditoria. | F02-11 | Terra xhigh |
-| F02-13 | Implementar e-mails de cobrança/aviso com NotificationPort. | F02-11 | Terra alto |
-| F02-14 | Revisar precificação cumulativa, webhooks, dunning e acesso bloqueado. | F02-01 a F02-13 | Sol ultra |
+**Progresso atual:** F02-01 a F02-14 concluídas.
+
+| ID | Status | Tarefa pequena e verificável | Depende de | Perfil |
+|---|---|---|---|---|
+| F02-01 | Concluído | Modelar Plan, módulo/feature, preço e vigência. | F01-10 | Terra alto |
+| F02-02 | Concluído | Modelar PlanBundle e regras de preço para combinações cumulativas. | F02-01 | Terra xhigh |
+| F02-03 | Concluído | Criar administração de planos e pacotes apenas para proprietário da plataforma. | F02-01 | Terra alto |
+| F02-04 | Concluído | Criar onboarding público da Company com seleção obrigatória de plano, proprietário pendente, papel `Company Administrator`, permissões ativas, ativação por token e auditoria imutável. | F01-03, F01-07, F01-14, F02-01 | Terra xhigh |
+| F02-05 | Concluído | Criar Subscription, SubscriptionItem e snapshot imutável de preço/composição. | F02-02, F02-04 | Terra xhigh |
+| F02-06 | Concluído | Implementar trial de 30 dias e transições locais de assinatura. | F02-05 | Terra alto |
+| F02-07 | Concluído | Definir PaymentGateway como porta de aplicação e contratos de webhook. | F02-05 | Terra xhigh |
+| F02-08 | Concluído | Implementar adapter Asaas em sandbox, sem vazar SDK para domínio. | F02-07 | Sol xhigh |
+| F02-09 | Concluído | Persistir PlatformCharge e PaymentGatewayEvent com idempotência por provedor/chave, proteção concorrente, vínculo seguro ao tenant e testes de persistência. | F02-08 | Sol xhigh |
+| F02-10 | Concluído | Autenticar e persistir webhook idempotente, reprocessar eventos recebidos/falhos e reconciliar periodicamente cobranças abertas com o gateway. A atualização usa lock, versão otimista, ordenação temporal e auditoria `SYSTEM`. | F02-09 | Sol xhigh |
+| F02-11 | Concluído | Implementar dunning diário com avisos idempotentes persistidos, consulta em D+1/D+5, bloqueio em D+10, auditoria `SYSTEM`, bloqueio de concorrência e filtro global das rotas da Company. | F02-09 | Terra ultra |
+| F02-12 | Concluído | Implementar `TrustUnlock` de proprietário da plataforma: máximo histórico de dois por cobrança vencida, expiração imediata no filtro, recálculo do acesso, auditoria com autor e endpoint OpenAPI. | F02-11 | Terra xhigh |
+| F02-13 | Concluído | Implementar e-mails de cobrança/aviso com `NotificationPort`, adaptador SMTP, fila persistida com tentativa/retry/cancelamento e auditoria automática. | F02-11 | Terra alto |
+| F02-14 | Concluído | Revisar precificação cumulativa, contratos/autenticação/idempotência de webhooks, dunning, notificações e acesso bloqueado. A revisão reforçou combinação exata de pacote, isolamento de rota, retry respeitando intervalo e auditoria `SYSTEM` desde o claim. | F02-01 a F02-13 | Sol ultra |
 
 **Gate da fase:** uma empresa inicia trial, possui snapshot correto de planos, recebe eventos idempotentes e tem acesso limitado/bloqueado conforme cobrança.
 

@@ -2,8 +2,8 @@
 
 **Nome comercial:** a definir  
 **Repositório atual:** Canteiro.io  
-**Versão do documento:** 0.1  
-**Data:** 10 de agosto de 2026  
+**Versão do documento:** 0.2<br>
+**Data:** 12 de agosto de 2026<br>
 **Status:** requisitos de negócio consolidados; recomendações técnicas identificadas como tal  
 
 ## 1. Objetivo
@@ -116,10 +116,12 @@ O frontend será um projeto separado no futuro e consumirá a API REST Spring. E
 | D-11 | Uma NF pertence a um único contrato e pode distribuir seu valor entre vários serviços desse contrato. Um serviço pode ser faturado em várias NFs. |
 | D-12 | O sistema não permite que o faturamento acumulado aprovado ultrapasse o valor líquido do contrato. |
 | D-13 | Uma redução de valor/desconto do contrato que deixaria o valor líquido abaixo do faturamento líquido já aprovado é bloqueada até haver estorno, crédito ou renegociação correspondente. |
-| D-14 | Desconto de contrato é uma linha de ajuste contratual de faturamento, separada dos valores dos serviços; ele não regrava nem rateia os preços dos serviços. |
-| D-15 | Controle de faturamento, parcelas, saldo faturável, NFs e contas a receber pertencem ao contrato. A obra somente consolida esses valores entre seus contratos. |
-| D-16 | Receita, custos, gastos vinculados e lucro são apurados no nível da obra, somando os resultados dos seus contratos e os gastos diretamente atribuídos à obra. |
-| D-17 | Todo gasto possui escopo Obra ou Empresa. Gasto de Empresa não possui obra/contrato, integra caixa e relatórios gerais da empresa, mas não altera lucro de qualquer obra. |
+| D-14 | O onboarding público de uma empresa exige ao menos um plano. Ele cria a Company, o proprietário inicial pendente, o vínculo com a Company, as seleções de plano e o token de ativação; não depende de aprovação manual da plataforma. |
+| D-15 | O proprietário inicial recebe automaticamente o papel `Company Administrator` com todas as permissões ativas do catálogo controlado no momento do onboarding. Após ativar a conta, possui alçada direta efetiva, sem deixar de gerar auditoria nas ações futuras. |
+| D-16 | Desconto de contrato é uma linha de ajuste contratual de faturamento, separada dos valores dos serviços; ele não regrava nem rateia os preços dos serviços. |
+| D-17 | Controle de faturamento, parcelas, saldo faturável, NFs e contas a receber pertencem ao contrato. A obra somente consolida esses valores entre seus contratos. |
+| D-18 | Receita, custos, gastos vinculados e lucro são apurados no nível da obra, somando os resultados dos seus contratos e os gastos diretamente atribuídos à obra. |
+| D-19 | Todo gasto possui escopo Obra ou Empresa. Gasto de Empresa não possui obra/contrato, integra caixa e relatórios gerais da empresa, mas não altera lucro de qualquer obra. |
 
 ## 4. Atores e acesso
 
@@ -167,6 +169,8 @@ Perfis iniciais sugeridos:
 | Auditor financeiro | Aprova somente faturamento, NFs, recebimentos, pagamentos, custos e despesas. |
 | Operador de cadastro | Cria ou altera dados, enviando-os para aprovação quando não tiver alçada direta. |
 | Relatórios | Consulta e exporta dados autorizados, sem alterar registros. |
+
+No onboarding, o perfil `Empresa master` é materializado como o papel `Company Administrator` e atribuído ao proprietário inicial. Ele recebe todas as permissões ativas do catálogo controlado disponível naquele momento. Esse perfil permite que uma empresa com um único usuário trabalhe sem pendências inviáveis de aprovar; empresas maiores podem posteriormente criar e atribuir papéis mais restritos.
 
 ### 4.3 Fluxo de aprovação
 
@@ -305,19 +309,24 @@ Transições financeiras obrigatórias:
 ### 5.6 Assinaturas e inadimplência da plataforma
 
 1. A empresa escolhe pelo menos um plano para criar e utilizar a conta.
-2. Planos são cumulativos. A precificação usa pacotes de combinação configurados pelo proprietário, para que combinações como Plano 1 + Plano 2 tenham preço promocional sem alterar preços individuais.
-3. Cada contratação mantém foto do preço, desconto, composição e vigência para preservar histórico.
-4. O período de teste é de 30 dias.
-5. A integração será encapsulada por uma interface de gateway. A implementação inicial recomendada é Asaas, pois sua documentação oficial suporta cobranças recorrentes por boleto, Pix e cartão de crédito, além de webhooks de cobrança. O cartão pode ser cobrado automaticamente; Pix e boleto têm geração recorrente de cobrança, mas o pagador realiza o pagamento. Veja a documentação oficial do Asaas: https://docs.asaas.com/docs/faq-assinaturas
-6. Eventos de webhook devem ser idempotentes, assinados/verificados e reconciliados com consulta periódica ao gateway.
-7. A regra de inadimplência será:
-   - vencimento não pago: avisos por e-mail;
-   - após o vencimento: acesso somente para consulta;
-   - a partir de 5 dias: status de inadimplente e manutenção de consulta;
-   - aproximadamente a partir de 10 dias: bloqueio total;
+2. O onboarding é público e não exige aceite manual da plataforma: cria o proprietário pendente, o papel administrativo inicial, as seleções de plano e um token de ativação enviado por e-mail. A ativação define a senha do proprietário e libera seu login; não é aprovação da Company.
+3. Planos são cumulativos. A precificação usa pacotes de combinação configurados pelo proprietário, para que combinações como Plano 1 + Plano 2 tenham preço promocional sem alterar preços individuais.
+4. Cada contratação mantém foto do preço, desconto, composição e vigência para preservar histórico.
+5. O período de teste é de 30 dias, iniciado quando o proprietário inicial ativa a conta pelo token. Ao fim do trial, a assinatura passa para aguardando pagamento; a cobrança e a liberação por pagamento são tratadas pelo fluxo de gateway posterior.
+6. A integração é encapsulada pela porta `PaymentGateway`, com criação neutra de pagador, solicitação de cobrança contendo chave de idempotência e resultado normalizado. O adapter inicial usa HTTP contra o sandbox do Asaas, isolado na infraestrutura e habilitado somente por configuração; nenhum contrato do domínio depende de DTO ou SDK do provedor. O Asaas suporta cobranças por boleto, Pix e cartão de crédito, além de webhooks de cobrança. O cartão pode ser cobrado automaticamente; Pix e boleto têm geração recorrente de cobrança, mas o pagador realiza o pagamento. Veja a documentação oficial do Asaas: https://docs.asaas.com/docs/faq-assinaturas
+7. Webhooks chegam como payload bruto e cabeçalhos; o adapter verifica a autenticidade antes de traduzi-los para eventos neutros. Somente o evento neutro já autenticado é persistido em `PaymentGatewayEvent`, que registra origem, identificadores externos, tipo, ocorrência, recebimento, atributos e estado de processamento. A idempotência usa código neutro do provedor + identificador externo do evento, combinando bloqueio transacional e constraint única; a mesma chave com conteúdo diferente é rejeitada. O endpoint responde rapidamente após a persistência. Eventos `RECEIVED` e `FAILED` são reprocessados em lote respeitando intervalo de retry; cobranças abertas são reconciliadas periodicamente por consulta pontual ao gateway. Atualizações concorrentes usam lock e versão otimista, eventos antigos não regridem estado mais recente, e transições automáticas geram auditoria com ator `SYSTEM`.
+8. A regra de inadimplência é:
+   - no vencimento não pago (D0): registra uma intenção idempotente de aviso para a cobrança, sem reduzir o acesso naquele dia;
+   - após o vencimento (D+1): acesso somente para consulta;
+   - a partir de 5 dias (D+5): status de inadimplente e manutenção de consulta;
+   - a partir de 10 dias (D+10): bloqueio total;
+   - a decisão considera a cobrança aberta mais antiga (`PENDING` ou `OVERDUE`), registra `CompanySubscriptionAccess` e `PlatformChargeNotice` únicos por cobrança/tipo e ignora cobranças confirmadas ou canceladas;
+   - o job diário processa cada Company em transação própria, bloqueia suas cobranças abertas antes de calcular o estado e grava a auditoria automática com ator `SYSTEM`;
+   - a restrição é aplicada no backend às rotas da Company: `GET`, `HEAD` e `OPTIONS` são permitidos em consulta; mutações são negadas; no bloqueio total todas as rotas da Company são negadas. Rotas de autenticação, onboarding, plataforma e suporte não recebem essa restrição;
+   - as intenções de aviso são entregues por e-mail via `NotificationPort`, com adaptador SMTP isolado da assinatura. A entrega persiste estado, tentativas e auditoria `SYSTEM` desde o claim; falhas só são elegíveis após o intervalo de retry configurado, e aviso cuja cobrança já foi confirmada ou cancelada é cancelado sem envio;
    - pagamento confirmado: restaura o acesso conforme a assinatura ativa;
-   - desbloqueio de confiança: até dois por cobrança vencida, gravando autor, motivo, início e expiração configurável.
-8. A plataforma mantém sua própria tabela de cobranças e eventos; o gateway não será a única fonte de verdade.
+   - desbloqueio de confiança: até dois por cobrança vencida ao longo do histórico, concedidos exclusivamente pelo proprietário da plataforma. Cada `TrustUnlock` registra autor, motivo, início imediato e expiração futura; enquanto ativo, desconsidera somente a cobrança vinculada. Outra cobrança vencida não desbloqueada continua restringindo a Company, e o filtro reavalia os desbloqueios ativos em cada requisição para aplicar a expiração sem aguardar o job diário.
+9. A plataforma mantém sua própria tabela de cobranças e eventos; o gateway não será a única fonte de verdade. `PlatformCharge` registra a Company derivada da assinatura, assinatura, código neutro do provedor, chave idempotente, identificadores externos, meio, valor, vencimento e estado normalizado. Código do provedor + chave idempotente também usa bloqueio transacional e constraint única, evitando nova chamada externa em repetição concorrente. A foreign key composta entre cobrança, assinatura e Company impede associação cruzada entre tenants.
 
 ## 6. Arquitetura proposta
 
@@ -426,7 +435,7 @@ erDiagram
 
 | Contexto | Entidades principais |
 |---|---|
-| Plataforma | Company, Plan, PlanBundle, PlanBundleItem, Subscription, SubscriptionItem, PlatformCharge, PaymentGatewayEvent, TrustUnlock. |
+| Plataforma | Company, Plan, PlanBundle, PlanBundleItem, Subscription, SubscriptionItem, PlatformCharge, PlatformChargeNotice, CompanySubscriptionAccess, PaymentGatewayEvent, TrustUnlock. |
 | Identidade | User, CompanyUser, PlatformUser, RefreshToken, PasswordResetToken, Role, Permission, RolePermission, UserRole. |
 | Governança | ChangeRequest, ChangeRequestDecision, AuditEvent, AuditPayload, AccessLog. |
 | Comercial | FinalCustomer (tabela final_customer), Work (tabela obra), WorkAddress, Contract, ServiceTemplate, ContractService, Discount, ContractRevision. |

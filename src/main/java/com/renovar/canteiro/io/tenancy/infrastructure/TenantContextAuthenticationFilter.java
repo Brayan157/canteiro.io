@@ -75,7 +75,8 @@ public class TenantContextAuthenticationFilter extends OncePerRequestFilter {
     }
 
     private boolean requiresCompanyTenant(HttpServletRequest request) {
-        return request.getRequestURI().startsWith("/api/v1/company/");
+        String requestUri = request.getRequestURI();
+        return "/api/v1/company".equals(requestUri) || requestUri.startsWith("/api/v1/company/");
     }
 
     private void writeAccessDeniedProblem(HttpServletResponse response, HttpServletRequest request) throws IOException {
