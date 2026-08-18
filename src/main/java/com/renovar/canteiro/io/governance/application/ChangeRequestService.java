@@ -74,6 +74,7 @@ public class ChangeRequestService {
         return switch (module) {
             case COMPANY -> AccessModule.COMPANY;
             case USERS -> AccessModule.USERS;
+            case EMPLOYEES -> AccessModule.EMPLOYEES;
             case ROLES -> AccessModule.ROLES;
             case CUSTOMERS -> AccessModule.CUSTOMERS;
             case WORKS -> AccessModule.WORKS;

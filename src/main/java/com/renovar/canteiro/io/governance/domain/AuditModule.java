@@ -4,6 +4,7 @@ public enum AuditModule {
     PLATFORM,
     COMPANY,
     USERS,
+    EMPLOYEES,
     ROLES,
     CUSTOMERS,
     WORKS,

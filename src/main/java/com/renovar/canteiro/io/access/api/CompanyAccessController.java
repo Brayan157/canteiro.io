@@ -54,17 +54,17 @@ public class CompanyAccessController {
     private final AccessAuthorizationService accessAuthorizationService;
     private final CompanyAccessApiMapper companyAccessApiMapper;
 
-    @PostMapping("/employees")
+    @PostMapping({"/users", "/employees"})
     @ResponseStatus(HttpStatus.CREATED)
-    @Operation(summary = "Registers a company employee and sends an activation email")
+    @Operation(summary = "Creates a company system user and sends an activation email")
     public EmployeeResponse createEmployee(@Valid @RequestBody CreateCompanyEmployeeRequest request) {
         return companyAccessApiMapper.toResponse(
                 companyAccessManagementService.createEmployee(new CreateCompanyEmployeeCommand(request.email()))
         );
     }
 
-    @GetMapping("/employees")
-    @Operation(summary = "Lists employees from the authenticated company")
+    @GetMapping({"/users", "/employees"})
+    @Operation(summary = "Lists company system users from the authenticated company")
     public PageResponse<EmployeeResponse> findEmployees(
             @RequestParam(required = false) Integer page,
             @RequestParam(required = false) Integer size,
@@ -76,14 +76,14 @@ public class CompanyAccessController {
         );
     }
 
-    @PatchMapping("/employees/{userId}/deactivate")
+    @PatchMapping({"/users/{userId}/deactivate", "/employees/{userId}/deactivate"})
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @Operation(summary = "Deactivates an employee without removing its history")
     public void deactivateEmployee(@PathVariable UUID userId) {
         companyAccessManagementService.deactivateEmployee(userId);
     }
 
-    @PutMapping("/employees/{userId}/roles")
+    @PutMapping({"/users/{userId}/roles", "/employees/{userId}/roles"})
     @Operation(summary = "Replaces the active roles assigned to an employee")
     public EmployeeResponse replaceEmployeeRoles(
             @PathVariable UUID userId,
