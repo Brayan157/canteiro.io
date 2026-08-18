@@ -19,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -31,6 +32,7 @@ public class ChangeRequestDecisionService {
     private final ChangeRequestRepository changeRequestRepository;
     private final AuditEventRecorder auditEventRecorder;
     private final Clock clock;
+    private final List<ChangeRequestApprovalHandler> changeRequestApprovalHandlers;
 
     @Transactional
     public ChangeRequest approve(ApproveChangeRequestCommand command) {
@@ -40,6 +42,7 @@ public class ChangeRequestDecisionService {
         preventSelfApproval(changeRequest, tenant.userId());
         Map<String, Object> beforeData = decisionAuditData(changeRequest);
         changeRequest.approve(tenant.userId(), clock.instant(), command.decisionReason());
+        applyApprovedChange(changeRequest);
         ChangeRequest decidedChangeRequest = changeRequestRepository.save(changeRequest);
         recordDecision(AuditAction.APPROVE, decidedChangeRequest, beforeData);
         return decidedChangeRequest;
@@ -81,6 +84,7 @@ public class ChangeRequestDecisionService {
         return switch (module) {
             case COMPANY -> AccessModule.COMPANY;
             case USERS -> AccessModule.USERS;
+            case EMPLOYEES -> AccessModule.EMPLOYEES;
             case ROLES -> AccessModule.ROLES;
             case CUSTOMERS -> AccessModule.CUSTOMERS;
             case WORKS -> AccessModule.WORKS;
@@ -125,6 +129,13 @@ public class ChangeRequestDecisionService {
                 decisionAuditData(changeRequest),
                 Map.of("changeRequestModule", changeRequest.getModule().name())
         );
+    }
+
+    private void applyApprovedChange(ChangeRequest changeRequest) {
+        changeRequestApprovalHandlers.stream()
+                .filter(handler -> handler.supports(changeRequest))
+                .findFirst()
+                .ifPresent(handler -> handler.apply(changeRequest));
     }
 
     private Map<String, Object> decisionAuditData(ChangeRequest changeRequest) {
