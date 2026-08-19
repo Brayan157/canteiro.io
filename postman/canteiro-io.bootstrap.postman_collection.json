@@ -1,0 +1,1671 @@
+{
+  "info": {
+    "name": "Canteiro.io — Cenário completo de medição",
+    "description": "Execute as pastas na ordem. A auditoria é conferida diretamente na tabela audit_event; não existe endpoint de leitura de auditoria.\n\nConsulta SQL: SELECT occurred_at, actor_user_id, module, action, entity_type, entity_id, before_data, after_data, metadata FROM audit_event WHERE module IN ('MEASUREMENTS', 'SERVICES', 'CUSTOMERS') ORDER BY occurred_at DESC;",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{accessToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "1. Plataforma: catálogo",
+      "item": [
+        {
+          "name": "1. Login da plataforma",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ],
+              "query": []
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{platformOwnerEmail}}\",\n  \"password\": \"{{platformOwnerPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Gera identificadores únicos para que o cenário possa ser executado mais de uma vez.",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('runId') || pm.environment.get('resetRunId') === 'true') {",
+                  "  const runId = Date.now().toString();",
+                  "  pm.environment.set('runId', runId);",
+                  "  pm.environment.set('resetRunId', 'false');",
+                  "  pm.environment.set('companyOwnerEmail', `owner-${runId}@empresa.local`);",
+                  "  pm.environment.set('employeeEmail', `funcionario-${runId}@empresa.local`);",
+                  "  pm.environment.set('companyDocument', runId.padStart(14, '0').slice(-14));",
+                  "  pm.environment.set('customerDocument', (String(Number(runId) + 1)).padStart(14, '0').slice(-14));",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.environment.set('platformAccessToken', body.accessToken);",
+                  "pm.environment.set('accessToken', body.accessToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2. Criar feature de medições",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/platform/catalog/features",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "platform",
+                "catalog",
+                "features"
+              ],
+              "query": []
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"MEDICOES_{{runId}}\",\n  \"type\": \"MODULE\",\n  \"name\": \"Medições\",\n  \"description\": \"Módulo para cenário automatizado\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": ""
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.environment.set('featureId', body.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3. Criar plano",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/platform/catalog/plans",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "platform",
+                "catalog",
+                "plans"
+              ],
+              "query": []
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"PLANO_MEDICOES_{{runId}}\",\n  \"name\": \"Plano Medições {{runId}}\",\n  \"description\": \"Plano de teste ponta a ponta\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": ""
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.environment.set('planId', body.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4. Vincular feature ao plano",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/platform/catalog/plans/{{planId}}/features",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "platform",
+                "catalog",
+                "plans",
+                "{{planId}}",
+                "features"
+              ],
+              "query": []
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"featureId\": \"{{featureId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": ""
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "5. Criar preço do plano",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/platform/catalog/plans/{{planId}}/prices",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "platform",
+                "catalog",
+                "plans",
+                "{{planId}}",
+                "prices"
+              ],
+              "query": []
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 99.9,\n  \"validFrom\": \"2026-01-01\",\n  \"validUntil\": null\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": ""
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2. Empresa: onboarding e proprietário",
+      "item": [
+        {
+          "name": "6. Cadastrar empresa",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/onboarding/companies",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "onboarding",
+                "companies"
+              ],
+              "query": []
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"corporateName\": \"Empresa Medições {{runId}} Ltda.\",\n  \"tradeName\": \"Empresa Medições {{runId}}\",\n  \"document\": \"{{companyDocument}}\",\n  \"email\": \"empresa-{{runId}}@canteiro.local\",\n  \"phone\": \"11999990000\",\n  \"address\": \"Rua da Medição, 100\",\n  \"ownerEmail\": \"{{companyOwnerEmail}}\",\n  \"planIds\": [\n    \"{{planId}}\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "O proprietário recebe o token de ativação por e-mail; a API nunca o devolve por segurança.",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.environment.set('companyId', body.companyId);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "7. Ativar proprietário da empresa (preencher token do e-mail)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/activate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "activate"
+              ],
+              "query": []
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"activationToken\": \"{{companyOwnerActivationToken}}\",\n  \"password\": \"{{companyOwnerPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Abra o Mailpit em {{mailpitUrl}}, copie o token de ativação da mensagem e preencha companyOwnerActivationToken no environment.",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "8. Login do proprietário da empresa",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ],
+              "query": []
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{companyOwnerEmail}}\",\n  \"password\": \"{{companyOwnerPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.environment.set('companyOwnerAccessToken', body.accessToken);",
+                  "pm.environment.set('accessToken', body.accessToken);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "3. Funcionário: solicitação e aceite de cliente",
+      "item": [
+        {
+          "name": "9. Criar funcionário",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/company/access/employees",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "company",
+                "access",
+                "employees"
+              ],
+              "query": []
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{employeeEmail}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Executar com o token do proprietário da empresa."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set('accessToken', pm.environment.get('companyOwnerAccessToken')); "
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.environment.set('employeeUserId', body.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "10. Criar papel: solicitante de clientes",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/company/access/roles",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "company",
+                "access",
+                "roles"
+              ],
+              "query": []
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Solicitante de clientes {{runId}}\",\n  \"description\": \"Pode apenas solicitar cadastro de cliente\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Executar com o token do proprietário da empresa."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set('accessToken', pm.environment.get('companyOwnerAccessToken')); "
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.environment.set('requesterRoleId', body.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "11. Localizar permissão CUSTOMERS / REQUEST_CREATE",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/company/access/permissions?page=0&size=100",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "company",
+                "access",
+                "permissions"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "size",
+                  "value": "100"
+                }
+              ]
+            },
+            "description": "Executar com o token do proprietário da empresa."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set('accessToken', pm.environment.get('companyOwnerAccessToken')); "
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const permission = pm.response.json().items.find(item => item.module === 'CUSTOMERS' && item.action === 'REQUEST_CREATE');",
+                  "pm.test('Permissão CUSTOMERS/REQUEST_CREATE existe', () => pm.expect(permission).to.exist);",
+                  "pm.environment.set('customerRequestCreatePermissionId', permission.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "12. Dar somente permissão de solicitar cliente",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/company/access/roles/{{requesterRoleId}}/permissions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "company",
+                "access",
+                "roles",
+                "{{requesterRoleId}}",
+                "permissions"
+              ],
+              "query": []
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"permissionIds\": [\n    \"{{customerRequestCreatePermissionId}}\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Executar com o token do proprietário da empresa."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set('accessToken', pm.environment.get('companyOwnerAccessToken')); "
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "13. Vincular papel ao funcionário",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/company/access/employees/{{employeeUserId}}/roles",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "company",
+                "access",
+                "employees",
+                "{{employeeUserId}}",
+                "roles"
+              ],
+              "query": []
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"roleIds\": [\n    \"{{requesterRoleId}}\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Executar com o token do proprietário da empresa."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set('accessToken', pm.environment.get('companyOwnerAccessToken')); "
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "14. Ativar funcionário (preencher token do e-mail)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/activate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "activate"
+              ],
+              "query": []
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"activationToken\": \"{{employeeActivationToken}}\",\n  \"password\": \"{{employeePassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Abra o Mailpit, copie o token enviado ao funcionário e preencha employeeActivationToken no environment.",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "15. Login do funcionário",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ],
+              "query": []
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{employeeEmail}}\",\n  \"password\": \"{{employeePassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.environment.set('employeeAccessToken', body.accessToken);",
+                  "pm.environment.set('accessToken', body.accessToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "16. Funcionário solicita cliente",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/company/customers",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "company",
+                "customers"
+              ],
+              "query": []
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerType\": \"LEGAL\",\n  \"name\": \"Cliente Aceite {{runId}} Ltda.\",\n  \"document\": \"{{customerDocument}}\",\n  \"contacts\": [\n    {\n      \"name\": \"Contato do Cliente\",\n      \"email\": \"contato-{{runId}}@cliente.local\",\n      \"phone\": \"11988880000\",\n      \"primaryContact\": true\n    }\n  ],\n  \"addresses\": [\n    {\n      \"label\": \"Obra\",\n      \"postalCode\": \"01001000\",\n      \"street\": \"Praça da Sé\",\n      \"number\": \"1\",\n      \"city\": \"São Paulo\",\n      \"state\": \"SP\",\n      \"country\": \"BR\",\n      \"primaryAddress\": true\n    }\n  ],\n  \"justification\": \"Cadastro solicitado pelo funcionário\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": ""
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 202', () => pm.response.to.have.status(202));",
+                  "const body = pm.response.json();",
+                  "pm.environment.set('changeRequestId', body.changeRequestId);",
+                  "pm.test('Solicitação pendente criada', () => pm.expect(body.changeRequestId).to.exist);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "17. Proprietário aprova cliente",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/company/change-requests/{{changeRequestId}}/approve",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "company",
+                "change-requests",
+                "{{changeRequestId}}",
+                "approve"
+              ],
+              "query": []
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"decisionReason\": \"Cliente conferido e aprovado\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Executar com o token do proprietário da empresa."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set('accessToken', pm.environment.get('companyOwnerAccessToken')); "
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "18. Localizar cliente aprovado",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/company/customers?page=0&size=100",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "company",
+                "customers"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "size",
+                  "value": "100"
+                }
+              ]
+            },
+            "description": "Executar com o token do proprietário da empresa."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set('accessToken', pm.environment.get('companyOwnerAccessToken')); "
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const customer = pm.response.json().items.find(item => item.document === pm.environment.get('customerDocument'));",
+                  "pm.test('Cliente aprovado encontrado', () => pm.expect(customer).to.exist);",
+                  "pm.environment.set('customerId', customer.id);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "4. Medição: aceite, conversão e saldo",
+      "item": [
+        {
+          "name": "19. Criar obra",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/company/works",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "company",
+                "works"
+              ],
+              "query": []
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"finalCustomerId\": \"{{customerId}}\",\n  \"name\": \"Obra Cobertura {{runId}}\",\n  \"reference\": \"OBRA-{{runId}}\",\n  \"executionLocationType\": \"FINAL_CUSTOMER_LOCATION\",\n  \"executionAddress\": null,\n  \"status\": \"ACTIVE\",\n  \"startedOn\": \"2026-08-19\",\n  \"expectedCompletionOn\": null,\n  \"completedOn\": null\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Executar com o token do proprietário da empresa."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set('accessToken', pm.environment.get('companyOwnerAccessToken')); "
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.environment.set('workId', body.work.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "20. Criar contrato",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/company/contracts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "company",
+                "contracts"
+              ],
+              "query": []
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"workId\": \"{{workId}}\",\n  \"reference\": \"CONTRATO-{{runId}}\",\n  \"name\": \"Contrato de cobertura\",\n  \"status\": \"OPEN\",\n  \"startedOn\": \"2026-08-19\",\n  \"expectedCompletionOn\": null,\n  \"completedOn\": null\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Executar com o token do proprietário da empresa."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set('accessToken', pm.environment.get('companyOwnerAccessToken')); "
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.environment.set('contractId', body.contract.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "21. Criar medição",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/company/measurements",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "company",
+                "measurements"
+              ],
+              "query": []
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"workId\": \"{{workId}}\",\n  \"contractId\": \"{{contractId}}\",\n  \"reference\": \"MED-{{runId}}\",\n  \"description\": \"Medição da cobertura metálica\",\n  \"measuredOn\": \"2026-08-19\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Executar com o token do proprietário da empresa."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set('accessToken', pm.environment.get('companyOwnerAccessToken')); "
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.environment.set('measurementId', body.measurement.id);",
+                  "pm.environment.set('versionId', body.version.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "22. Adicionar item em m²",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/company/measurements/{{measurementId}}/versions/{{versionId}}/items",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "company",
+                "measurements",
+                "{{measurementId}}",
+                "versions",
+                "{{versionId}}",
+                "items"
+              ],
+              "query": []
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"itemNumber\": 1,\n  \"activity\": \"Telhado\",\n  \"description\": \"Instalação de telha metálica galvanizada\",\n  \"chargeType\": \"SQUARE_METER\",\n  \"areaSquareMeters\": 120,\n  \"unitPrice\": 85\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Valor esperado: 120 × 85 = 10.200,00."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set('accessToken', pm.environment.get('companyOwnerAccessToken')); "
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.environment.set('itemId', body.item.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "23. Aplicar desconto de cabeçalho",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/company/measurements/{{measurementId}}/versions/{{versionId}}/discount",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "company",
+                "measurements",
+                "{{measurementId}}",
+                "versions",
+                "{{versionId}}",
+                "discount"
+              ],
+              "query": []
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"discountType\": \"PERCENTAGE\",\n  \"discountValue\": 5,\n  \"justification\": \"Desconto comercial\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Executar com o token do proprietário da empresa."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set('accessToken', pm.environment.get('companyOwnerAccessToken')); "
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "24. Enviar medição",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/company/measurements/{{measurementId}}/versions/{{versionId}}/workflow",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "company",
+                "measurements",
+                "{{measurementId}}",
+                "versions",
+                "{{versionId}}",
+                "workflow"
+              ],
+              "query": []
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"SEND\",\n  \"externallyAccepted\": null,\n  \"externalAcceptanceOn\": null,\n  \"externalAcceptanceNotes\": null\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Executar com o token do proprietário da empresa."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set('accessToken', pm.environment.get('companyOwnerAccessToken')); "
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "25. Aguardar aceite externo",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/company/measurements/{{measurementId}}/versions/{{versionId}}/workflow",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "company",
+                "measurements",
+                "{{measurementId}}",
+                "versions",
+                "{{versionId}}",
+                "workflow"
+              ],
+              "query": []
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"AWAIT_EXTERNAL_ACCEPTANCE\",\n  \"externallyAccepted\": null,\n  \"externalAcceptanceOn\": null,\n  \"externalAcceptanceNotes\": null\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Antes do próximo passo, use o request de upload de documento da coleção completa para anexar a evidência do aceite."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set('accessToken', pm.environment.get('companyOwnerAccessToken')); "
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "26. Registrar aceite externo",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/company/measurements/{{measurementId}}/versions/{{versionId}}/workflow",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "company",
+                "measurements",
+                "{{measurementId}}",
+                "versions",
+                "{{versionId}}",
+                "workflow"
+              ],
+              "query": []
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"RECORD_EXTERNAL_ACCEPTANCE\",\n  \"externallyAccepted\": true,\n  \"externalAcceptanceOn\": \"2026-08-19\",\n  \"externalAcceptanceNotes\": \"Aceite recebido externamente e evidência anexada\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Executar com o token do proprietário da empresa."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set('accessToken', pm.environment.get('companyOwnerAccessToken')); "
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "27. Converter item aceito em serviço",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/company/measurements/{{measurementId}}/versions/{{versionId}}/items/{{itemId}}/contract-service",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "company",
+                "measurements",
+                "{{measurementId}}",
+                "versions",
+                "{{versionId}}",
+                "items",
+                "{{itemId}}",
+                "contract-service"
+              ],
+              "query": []
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Executar com o token do proprietário da empresa."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set('accessToken', pm.environment.get('companyOwnerAccessToken')); "
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Primeira conversão não é repetida', () => pm.expect(body.alreadyConverted).to.eql(false));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "28. Repetir conversão: testar idempotência",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/company/measurements/{{measurementId}}/versions/{{versionId}}/items/{{itemId}}/contract-service",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "company",
+                "measurements",
+                "{{measurementId}}",
+                "versions",
+                "{{versionId}}",
+                "items",
+                "{{itemId}}",
+                "contract-service"
+              ],
+              "query": []
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Executar com o token do proprietário da empresa."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set('accessToken', pm.environment.get('companyOwnerAccessToken')); "
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Conversão idempotente', () => pm.expect(body.alreadyConverted).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "29. Consultar saldo da medição",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/company/measurements/{{measurementId}}/versions/{{versionId}}/financial-status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "company",
+                "measurements",
+                "{{measurementId}}",
+                "versions",
+                "{{versionId}}",
+                "financial-status"
+              ],
+              "query": []
+            },
+            "description": "Executar com o token do proprietário da empresa."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set('accessToken', pm.environment.get('companyOwnerAccessToken')); "
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

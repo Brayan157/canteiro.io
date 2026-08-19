@@ -1,5 +1,6 @@
 package com.renovar.canteiro.io.works.infrastructure.persistence;
-import com.renovar.canteiro.io.works.domain.*;
+import com.renovar.canteiro.io.works.domain.Work;
+import com.renovar.canteiro.io.works.domain.WorkRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 import java.util.Optional;

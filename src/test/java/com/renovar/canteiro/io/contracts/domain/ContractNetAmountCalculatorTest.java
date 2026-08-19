@@ -45,4 +45,21 @@ class ContractNetAmountCalculatorTest {
 
         assertThrows(IllegalArgumentException.class, () -> ContractNetAmountCalculator.calculate(List.of(service), discount));
     }
+
+    @Test
+    void includesASeparateMeasurementHeaderAdjustmentWithoutChangingServicePrices() {
+        ContractService service = ContractService.create(
+                UUID.randomUUID(), UUID.randomUUID(), "Roofing", null, ContractServiceStatus.ACTIVE,
+                BigDecimal.ONE, new BigDecimal("100.00")
+        );
+
+        ContractNetAmount amount = ContractNetAmountCalculator.calculate(
+                List.of(service), null, new BigDecimal("10.00")
+        );
+
+        assertEquals(new BigDecimal("100.00"), amount.serviceSubtotal());
+        assertEquals(new BigDecimal("10.00"), amount.contractDiscountAmount());
+        assertEquals(new BigDecimal("90.00"), amount.netAmount());
+        assertEquals(new BigDecimal("100.00"), service.getNetAmount());
+    }
 }

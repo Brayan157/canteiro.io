@@ -2,8 +2,14 @@ package com.renovar.canteiro.io.works.infrastructure.persistence;
 import com.renovar.canteiro.io.shared.infrastructure.persistence.jpa.BaseJpaEntity;
 import com.renovar.canteiro.io.works.domain.WorkStatus;
 import com.renovar.canteiro.io.works.domain.WorkExecutionLocationType;
-import jakarta.persistence.*;
-import lombok.*;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.Table;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 import java.time.LocalDate;
 import java.util.UUID;
 @Getter @Entity @Table(name = "obra") @NoArgsConstructor(access = AccessLevel.PROTECTED)

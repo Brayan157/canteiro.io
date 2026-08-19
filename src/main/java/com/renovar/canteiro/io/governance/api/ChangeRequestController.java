@@ -5,7 +5,11 @@ import com.renovar.canteiro.io.governance.application.ApproveChangeRequestComman
 import com.renovar.canteiro.io.governance.application.ChangeRequestDecisionService;
 import com.renovar.canteiro.io.governance.application.RejectChangeRequestCommand;
 import lombok.RequiredArgsConstructor;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 import java.util.UUID;
 @RestController @RequestMapping("/api/v1/company/change-requests") @RequiredArgsConstructor
 public class ChangeRequestController {

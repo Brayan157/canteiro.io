@@ -1,33 +1,22 @@
-# Postman — Fase 2
+# Imports do Postman — Canteiro.io
 
-Importe os dois arquivos no Postman:
+Importe estes arquivos no Postman:
 
-- `canteiro-phase-2.postman_collection.json`;
-- `canteiro-local.postman_environment.json`.
+1. `canteiro-io.bootstrap.postman_collection.json` — cenário guiado completo: catálogo, onboarding, funcionário solicitante, aceite do cliente e medição.
+2. `canteiro-io.local.postman_environment.json` — environment local com URL, credenciais de teste, tokens e IDs encadeados.
+3. `canteiro-io.postman_collection.json` — coleção completa, organizada por controller/tag.
 
-Selecione o ambiente local e preencha `platformOwnerEmail` e `password` com um usuário já ativado que tenha o papel global `PLATFORM_OWNER`.
+O arquivo `canteiro-io.openapi.json` também pode ser importado diretamente caso seja necessário recriar a coleção a partir do contrato OpenAPI.
 
-Fluxo seguro recomendado:
+Selecione o environment **Canteiro.io Local** antes de executar as requisições. Na coleção guiada, execute as pastas na ordem: os scripts salvam automaticamente os IDs e trocam o token entre plataforma, proprietário e funcionário.
 
-1. Faça login como proprietário da plataforma.
-2. Em **Catálogo da plataforma**, execute `Criar plano de demonstração` e `Adicionar preço vigente ao plano`.
-3. Em **Onboarding de Company**, execute `Criar Company com plano obrigatório`.
-4. Ative a conta pelo token recebido no e-mail e faça login como proprietário da empresa.
+Os dois endpoints de ativação exigem o token recebido por e-mail. Copie o token da caixa configurada (no Docker local, Mailpit em `http://localhost:8025`) para `companyOwnerActivationToken` e `employeeActivationToken` antes de executar as respectivas requisições. Esses tokens nunca são retornados pela API.
 
-5. Em **Acesso da Company**, execute os testes de permissões, papéis e colaboradores.
+Para repetir o cenário com novos documentos/e-mails, mantenha `resetRunId` como `true` e execute a primeira requisição. Ela gera uma nova identificação de execução; depois o próprio script muda essa variável para `false`.
 
-## F02-10 — webhook de pagamento
+Para regenerar a coleção depois de exportar um OpenAPI atualizado:
 
-Para habilitar as duas chamadas de webhook, configure no `.env` uma credencial real de sandbox e reinicie a API:
-
-```properties
-ASAAS_ENABLED=true
-ASAAS_API_KEY=$aact_hmlg_...
-ASAAS_WEBHOOK_TOKEN=um-token-seguro
+```powershell
+node scripts/generate-postman.mjs
+node scripts/generate-postman-bootstrap-scenario.mjs
 ```
-
-Copie esse mesmo token para a variável `asaasWebhookToken` do ambiente Postman. O teste autenticado retorna `200`; o teste com token inválido retorna `401`. Para confirmar o efeito financeiro do webhook é necessário informar um `externalChargeId` que já esteja em `platform_charge`, pois ainda não existe endpoint administrativo para gerar cobranças manualmente.
-
-As respostas de criação guardam IDs necessários em variáveis da collection. As requisições de desativação ficam em subpastas separadas e devem ser usadas somente nos registros `DEMO` criados pela própria collection.
-
-O onboarding cria o proprietário pendente e atribui a ele o papel inicial `Company Administrator`, com todas as permissões ativas do catálogo. Após ativar a conta, esse proprietário pode administrar usuários, papéis e alçadas da própria Company.

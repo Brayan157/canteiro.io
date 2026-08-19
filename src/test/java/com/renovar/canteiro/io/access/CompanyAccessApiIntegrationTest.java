@@ -151,7 +151,7 @@ class CompanyAccessApiIntegrationTest extends AbstractPostgresIntegrationTest {
         mockMvc.perform(get("/api/v1/company/access/permissions")
                         .with(jwt().jwt(token -> token.subject(administrator.getId().toString()))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.totalItems").value(143));
+                .andExpect(jsonPath("$.totalItems").value(152));
     }
 
     @Test

@@ -4,6 +4,7 @@ import com.renovar.canteiro.io.platform.company.application.CompanyOnboardingCom
 import com.renovar.canteiro.io.platform.company.application.CompanyOnboardingResult;
 import com.renovar.canteiro.io.platform.company.application.CompanyOnboardingService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -16,6 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/v1/onboarding/companies")
+@SecurityRequirements
 @RequiredArgsConstructor
 @Tag(name = "Company onboarding")
 public class CompanyOnboardingController {
