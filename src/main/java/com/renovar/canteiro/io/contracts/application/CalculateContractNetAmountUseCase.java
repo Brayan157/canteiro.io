@@ -19,6 +19,7 @@ public class CalculateContractNetAmountUseCase {
     private final ContractRepository contractRepository;
     private final ContractServiceRepository contractServiceRepository;
     private final ContractDiscountRepository contractDiscountRepository;
+    private final ContractMeasurementAdjustmentAmountProvider measurementAdjustmentAmountProvider;
 
     @Transactional(readOnly = true)
     public ContractNetAmount calculate(UUID companyId, UUID contractId) {
@@ -26,7 +27,8 @@ public class CalculateContractNetAmountUseCase {
                 .orElseThrow(() -> new TenantResourceNotFoundException("Contract"));
         return ContractNetAmountCalculator.calculate(
                 contractServiceRepository.findByContractIdAndCompanyId(contractId, companyId),
-                contractDiscountRepository.findByContractIdAndCompanyId(contractId, companyId).orElse(null)
+                contractDiscountRepository.findByContractIdAndCompanyId(contractId, companyId).orElse(null),
+                measurementAdjustmentAmountProvider.approvedAmount(companyId, contractId)
         );
     }
 }

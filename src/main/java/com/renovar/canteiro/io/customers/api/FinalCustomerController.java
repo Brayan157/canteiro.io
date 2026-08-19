@@ -5,6 +5,8 @@ import com.renovar.canteiro.io.customers.api.response.FinalCustomerChangeRespons
 import com.renovar.canteiro.io.customers.api.response.FinalCustomerResponse;
 import com.renovar.canteiro.io.customers.application.CreateFinalCustomerCommand;
 import com.renovar.canteiro.io.customers.application.FinalCustomerManagementService;
+import com.renovar.canteiro.io.shared.api.pagination.PageQuery;
+import com.renovar.canteiro.io.shared.api.pagination.PageResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -14,7 +16,11 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @RestController @RequestMapping("/api/v1/company/customers") @RequiredArgsConstructor
@@ -29,5 +35,14 @@ public class FinalCustomerController {
         return ResponseEntity.status(result.customer() == null ? HttpStatus.ACCEPTED : HttpStatus.CREATED).body(new FinalCustomerChangeResponse(customer, result.changeRequest() == null ? null : result.changeRequest().getId(), result.mode()));
     }
     @GetMapping("/{customerId}") public FinalCustomerResponse find(@PathVariable UUID customerId) { return response(service.find(customerId)); }
+    @GetMapping
+    public PageResponse<FinalCustomerResponse> findAll(
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer size,
+            @RequestParam(required = false) List<String> sort
+    ) {
+        return PageResponse.from(service.findAll(new PageQuery(page, size, sort).toPageable(Set.of("name", "createdAt"))),
+                this::response);
+    }
     private FinalCustomerResponse response(com.renovar.canteiro.io.customers.domain.FinalCustomer c) { return new FinalCustomerResponse(c.getId(), c.getCustomerType(), c.getName(), c.getDocument(), c.isActive()); }
 }

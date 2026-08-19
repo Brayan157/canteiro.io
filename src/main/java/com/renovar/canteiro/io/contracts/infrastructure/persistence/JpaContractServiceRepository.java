@@ -6,6 +6,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Repository
@@ -41,5 +42,15 @@ public class JpaContractServiceRepository implements ContractServiceRepository {
                         entity.getDiscountAmount(), entity.getNetAmount(), entity.getCreatedAt(), entity.getUpdatedAt()
                 ))
                 .toList();
+    }
+
+    @Override
+    public Optional<ContractService> findByIdAndCompanyId(UUID id, UUID companyId) {
+        return contractServiceJpaRepository.findByIdAndCompanyId(id, companyId).map(entity -> ContractService.rehydrate(
+                entity.getId(), entity.getCompanyId(), entity.getContractId(), entity.getServiceTemplateId(), entity.getName(),
+                entity.getDescription(), entity.getStatus(), entity.getQuantity(), entity.getUnitPrice(),
+                entity.getGrossAmount(), entity.getDiscountType(), entity.getDiscountValue(), entity.getDiscountAmount(),
+                entity.getNetAmount(), entity.getCreatedAt(), entity.getUpdatedAt()
+        ));
     }
 }

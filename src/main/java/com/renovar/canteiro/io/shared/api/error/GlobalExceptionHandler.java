@@ -67,6 +67,16 @@ public class GlobalExceptionHandler {
         return problem(HttpStatus.FORBIDDEN, ErrorCode.ACCESS_DENIED, "Access is denied.", request);
     }
 
+    @ExceptionHandler(IllegalArgumentException.class)
+    ProblemDetail handleIllegalArgument(IllegalArgumentException exception, HttpServletRequest request) {
+        return problem(HttpStatus.BAD_REQUEST, ErrorCode.VALIDATION_FAILED, exception.getMessage(), request);
+    }
+
+    @ExceptionHandler(IllegalStateException.class)
+    ProblemDetail handleIllegalState(IllegalStateException exception, HttpServletRequest request) {
+        return problem(HttpStatus.CONFLICT, ErrorCode.BUSINESS_RULE_VIOLATION, exception.getMessage(), request);
+    }
+
     @ExceptionHandler(PaymentGatewayWebhookAuthenticationException.class)
     ProblemDetail handleWebhookAuthentication(
             PaymentGatewayWebhookAuthenticationException exception, HttpServletRequest request

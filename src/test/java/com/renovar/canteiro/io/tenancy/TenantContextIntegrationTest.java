@@ -159,7 +159,7 @@ class TenantContextIntegrationTest extends AbstractPostgresIntegrationTest {
                 suffix + " Company Ltda.",
                 suffix + " Company",
                 Long.toUnsignedString(UUID.randomUUID().getLeastSignificantBits()),
-                suffix.toLowerCase() + "@example.com",
+                suffix.toLowerCase() + "-" + UUID.randomUUID() + "@example.com",
                 null,
                 null,
                 null

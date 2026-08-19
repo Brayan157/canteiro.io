@@ -1,0 +1,2421 @@
+{
+  "info": {
+    "name": "Canteiro.io API",
+    "description": "Coleção gerada do contrato OpenAPI. Inclui todos os controllers e salva tokens do login automaticamente.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{accessToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "accessToken",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "Rotates a refresh token and returns a new session",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/refresh",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "refresh"
+              ],
+              "query": []
+            },
+            "description": "Rotates a refresh token and returns a new session",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"refreshToken\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "event": []
+        },
+        {
+          "name": "Requests a password reset email without disclosing account existence",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/password-reset/request",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "password-reset",
+                "request"
+              ],
+              "query": []
+            },
+            "description": "Requests a password reset email without disclosing account existence",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"usuario@example.com\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "event": []
+        },
+        {
+          "name": "Resets a password with a one-time token and revokes active sessions",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/password-reset/confirm",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "password-reset",
+                "confirm"
+              ],
+              "query": []
+            },
+            "description": "Resets a password with a one-time token and revokes active sessions",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"passwordResetToken\": \"passwordResetToken\",\n  \"newPassword\": \"newPassword\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "event": []
+        },
+        {
+          "name": "Revokes a refresh token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/logout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "logout"
+              ],
+              "query": []
+            },
+            "description": "Revokes a refresh token",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"refreshToken\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "event": []
+        },
+        {
+          "name": "Authenticates an active user and creates an access session",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ],
+              "query": []
+            },
+            "description": "Authenticates an active user and creates an access session",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"usuario@example.com\",\n  \"password\": \"password\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "if (body.accessToken) pm.environment.set('accessToken', body.accessToken);",
+                  "if (body.refreshToken) pm.environment.set('refreshToken', body.refreshToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Activates a pending account with a one-time token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/activate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "activate"
+              ],
+              "query": []
+            },
+            "description": "Activates a pending account with a one-time token",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"activationToken\": \"activationToken\",\n  \"password\": \"password\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "event": []
+        }
+      ]
+    },
+    {
+      "name": "change-request-controller",
+      "item": [
+        {
+          "name": "POST /api/v1/company/change-requests/{id}/reject",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/company/change-requests/{{id}}/reject",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "company",
+                "change-requests",
+                "{{id}}",
+                "reject"
+              ],
+              "query": []
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"decisionReason\": \"decisionReason\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": []
+        },
+        {
+          "name": "POST /api/v1/company/change-requests/{id}/approve",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/company/change-requests/{{id}}/approve",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "company",
+                "change-requests",
+                "{{id}}",
+                "approve"
+              ],
+              "query": []
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"decisionReason\": \"decisionReason\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": []
+        }
+      ]
+    },
+    {
+      "name": "Company access management",
+      "item": [
+        {
+          "name": "Updates a company role",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/company/access/roles/{{roleId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "company",
+                "access",
+                "roles",
+                "{{roleId}}"
+              ],
+              "query": []
+            },
+            "description": "Updates a company role",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"name\",\n  \"description\": \"description\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": []
+        },
+        {
+          "name": "Replaces the controlled catalog permissions assigned to a role",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/company/access/roles/{{roleId}}/permissions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "company",
+                "access",
+                "roles",
+                "{{roleId}}",
+                "permissions"
+              ],
+              "query": []
+            },
+            "description": "Replaces the controlled catalog permissions assigned to a role",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"permissionIds\": [\n    \"{{permissionIds}}\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": []
+        },
+        {
+          "name": "Replaces the active roles assigned to an employee",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/company/access/employees/{{userId}}/roles",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "company",
+                "access",
+                "employees",
+                "{{userId}}",
+                "roles"
+              ],
+              "query": []
+            },
+            "description": "Replaces the active roles assigned to an employee",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"roleIds\": [\n    \"{{roleIds}}\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": []
+        },
+        {
+          "name": "Replaces the active roles assigned to an employee",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/company/access/users/{{userId}}/roles",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "company",
+                "access",
+                "users",
+                "{{userId}}",
+                "roles"
+              ],
+              "query": []
+            },
+            "description": "Replaces the active roles assigned to an employee",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"roleIds\": [\n    \"{{roleIds}}\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": []
+        },
+        {
+          "name": "Lists roles from the authenticated company",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/company/access/roles",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "company",
+                "access",
+                "roles"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "{{page}}",
+                  "disabled": true
+                },
+                {
+                  "key": "size",
+                  "value": "{{size}}",
+                  "disabled": true
+                },
+                {
+                  "key": "sort",
+                  "value": "{{sort}}",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Lists roles from the authenticated company"
+          },
+          "response": [],
+          "event": []
+        },
+        {
+          "name": "Creates a role for the authenticated company",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/company/access/roles",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "company",
+                "access",
+                "roles"
+              ],
+              "query": []
+            },
+            "description": "Creates a role for the authenticated company",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"name\",\n  \"description\": \"description\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": []
+        },
+        {
+          "name": "Lists company system users from the authenticated company",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/company/access/employees",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "company",
+                "access",
+                "employees"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "{{page}}",
+                  "disabled": true
+                },
+                {
+                  "key": "size",
+                  "value": "{{size}}",
+                  "disabled": true
+                },
+                {
+                  "key": "sort",
+                  "value": "{{sort}}",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Lists company system users from the authenticated company"
+          },
+          "response": [],
+          "event": []
+        },
+        {
+          "name": "Creates a company system user and sends an activation email",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/company/access/employees",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "company",
+                "access",
+                "employees"
+              ],
+              "query": []
+            },
+            "description": "Creates a company system user and sends an activation email",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"usuario@example.com\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": []
+        },
+        {
+          "name": "Lists company system users from the authenticated company",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/company/access/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "company",
+                "access",
+                "users"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "{{page}}",
+                  "disabled": true
+                },
+                {
+                  "key": "size",
+                  "value": "{{size}}",
+                  "disabled": true
+                },
+                {
+                  "key": "sort",
+                  "value": "{{sort}}",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Lists company system users from the authenticated company"
+          },
+          "response": [],
+          "event": []
+        },
+        {
+          "name": "Creates a company system user and sends an activation email",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/company/access/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "company",
+                "access",
+                "users"
+              ],
+              "query": []
+            },
+            "description": "Creates a company system user and sends an activation email",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"usuario@example.com\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": []
+        },
+        {
+          "name": "Deactivates a role without removing its history",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/company/access/roles/{{roleId}}/deactivate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "company",
+                "access",
+                "roles",
+                "{{roleId}}",
+                "deactivate"
+              ],
+              "query": []
+            },
+            "description": "Deactivates a role without removing its history"
+          },
+          "response": [],
+          "event": []
+        },
+        {
+          "name": "Deactivates an employee without removing its history",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/company/access/employees/{{userId}}/deactivate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "company",
+                "access",
+                "employees",
+                "{{userId}}",
+                "deactivate"
+              ],
+              "query": []
+            },
+            "description": "Deactivates an employee without removing its history"
+          },
+          "response": [],
+          "event": []
+        },
+        {
+          "name": "Deactivates an employee without removing its history",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/company/access/users/{{userId}}/deactivate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "company",
+                "access",
+                "users",
+                "{{userId}}",
+                "deactivate"
+              ],
+              "query": []
+            },
+            "description": "Deactivates an employee without removing its history"
+          },
+          "response": [],
+          "event": []
+        },
+        {
+          "name": "Lists the controlled platform permission catalog",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/company/access/permissions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "company",
+                "access",
+                "permissions"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "{{page}}",
+                  "disabled": true
+                },
+                {
+                  "key": "size",
+                  "value": "{{size}}",
+                  "disabled": true
+                },
+                {
+                  "key": "sort",
+                  "value": "{{sort}}",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Lists the controlled platform permission catalog"
+          },
+          "response": [],
+          "event": []
+        },
+        {
+          "name": "Resolves the authenticated user's effective change authorization",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/company/access/change-authorizations/{{module}}/{{operation}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "company",
+                "access",
+                "change-authorizations",
+                "{{module}}",
+                "{{operation}}"
+              ],
+              "query": []
+            },
+            "description": "Resolves the authenticated user's effective change authorization"
+          },
+          "response": [],
+          "event": []
+        }
+      ]
+    },
+    {
+      "name": "Company onboarding",
+      "item": [
+        {
+          "name": "Creates a company after an obligatory plan selection",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/onboarding/companies",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "onboarding",
+                "companies"
+              ],
+              "query": []
+            },
+            "description": "Creates a company after an obligatory plan selection",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"corporateName\": \"corporateName\",\n  \"tradeName\": \"tradeName\",\n  \"document\": \"document\",\n  \"email\": \"usuario@example.com\",\n  \"phone\": \"phone\",\n  \"address\": \"address\",\n  \"logo\": \"logo\",\n  \"ownerEmail\": \"usuario@example.com\",\n  \"planIds\": [\n    \"{{planIds}}\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "event": []
+        }
+      ]
+    },
+    {
+      "name": "Contracts",
+      "item": [
+        {
+          "name": "Creates a contract without requiring services",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/company/contracts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "company",
+                "contracts"
+              ],
+              "query": []
+            },
+            "description": "Creates a contract without requiring services",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"workId\": \"{{workId}}\",\n  \"reference\": \"reference\",\n  \"name\": \"name\",\n  \"status\": \"DRAFT\",\n  \"startedOn\": \"2026-08-19\",\n  \"expectedCompletionOn\": \"2026-08-19\",\n  \"completedOn\": \"2026-08-19\",\n  \"justification\": \"justification\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": []
+        },
+        {
+          "name": "Finds a contract in the authenticated company",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/company/contracts/{{contractId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "company",
+                "contracts",
+                "{{contractId}}"
+              ],
+              "query": []
+            },
+            "description": "Finds a contract in the authenticated company"
+          },
+          "response": [],
+          "event": []
+        }
+      ]
+    },
+    {
+      "name": "Employees",
+      "item": [
+        {
+          "name": "Lists employees in the authenticated company",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/company/employees",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "company",
+                "employees"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "{{page}}",
+                  "disabled": true
+                },
+                {
+                  "key": "size",
+                  "value": "{{size}}",
+                  "disabled": true
+                },
+                {
+                  "key": "sort",
+                  "value": "{{sort}}",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Lists employees in the authenticated company"
+          },
+          "response": [],
+          "event": []
+        },
+        {
+          "name": "Registers an operational employee without creating system access",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/company/employees",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "company",
+                "employees"
+              ],
+              "query": []
+            },
+            "description": "Registers an operational employee without creating system access",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"fullName\",\n  \"jobTitle\": \"jobTitle\",\n  \"phone\": \"phone\",\n  \"justification\": \"justification\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": []
+        },
+        {
+          "name": "Creates system access for an employee and sends an activation email",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/company/employees/{{employeeId}}/access-invitations",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "company",
+                "employees",
+                "{{employeeId}}",
+                "access-invitations"
+              ],
+              "query": []
+            },
+            "description": "Creates system access for an employee and sends an activation email",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"usuario@example.com\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": []
+        },
+        {
+          "name": "Finds an employee in the authenticated company",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/company/employees/{{employeeId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "company",
+                "employees",
+                "{{employeeId}}"
+              ],
+              "query": []
+            },
+            "description": "Finds an employee in the authenticated company"
+          },
+          "response": [],
+          "event": []
+        }
+      ]
+    },
+    {
+      "name": "final-customer-controller",
+      "item": [
+        {
+          "name": "GET /api/v1/company/customers",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/company/customers",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "company",
+                "customers"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "{{page}}",
+                  "disabled": true
+                },
+                {
+                  "key": "size",
+                  "value": "{{size}}",
+                  "disabled": true
+                },
+                {
+                  "key": "sort",
+                  "value": "{{sort}}",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": ""
+          },
+          "response": [],
+          "event": []
+        },
+        {
+          "name": "POST /api/v1/company/customers",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/company/customers",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "company",
+                "customers"
+              ],
+              "query": []
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerType\": \"INDIVIDUAL\",\n  \"name\": \"name\",\n  \"document\": \"document\",\n  \"contacts\": [\n    {\n      \"name\": \"name\",\n      \"email\": \"usuario@example.com\",\n      \"phone\": \"phone\",\n      \"primaryContact\": true\n    }\n  ],\n  \"addresses\": [\n    {\n      \"label\": \"label\",\n      \"postalCode\": \"postalCode\",\n      \"street\": \"street\",\n      \"number\": \"number\",\n      \"complement\": \"complement\",\n      \"district\": \"district\",\n      \"city\": \"city\",\n      \"state\": \"state\",\n      \"country\": \"country\",\n      \"primaryAddress\": true\n    }\n  ],\n  \"justification\": \"justification\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": []
+        },
+        {
+          "name": "GET /api/v1/company/customers/{customerId}",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/company/customers/{{customerId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "company",
+                "customers",
+                "{{customerId}}"
+              ],
+              "query": []
+            },
+            "description": ""
+          },
+          "response": [],
+          "event": []
+        }
+      ]
+    },
+    {
+      "name": "Measurements",
+      "item": [
+        {
+          "name": "Creates a measurement and its initial draft version",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/company/measurements",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "company",
+                "measurements"
+              ],
+              "query": []
+            },
+            "description": "Creates a measurement and its initial draft version",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"workId\": \"{{workId}}\",\n  \"contractId\": \"{{contractId}}\",\n  \"reference\": \"reference\",\n  \"description\": \"description\",\n  \"measuredOn\": \"2026-08-19\",\n  \"justification\": \"justification\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "if (body.measurement?.id) pm.environment.set('measurementId', body.measurement.id);",
+                  "if (body.version?.id) pm.environment.set('versionId', body.version.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Advances the measurement through sending, external acceptance and finalization",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/company/measurements/{{measurementId}}/versions/{{versionId}}/workflow",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "company",
+                "measurements",
+                "{{measurementId}}",
+                "versions",
+                "{{versionId}}",
+                "workflow"
+              ],
+              "query": []
+            },
+            "description": "Advances the measurement through sending, external acceptance and finalization",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"SEND\",\n  \"externallyAccepted\": true,\n  \"externalAcceptanceOn\": \"2026-08-19\",\n  \"externalAcceptanceNotes\": \"externalAcceptanceNotes\",\n  \"justification\": \"justification\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": []
+        },
+        {
+          "name": "Adds a calculated item to a draft measurement version",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/company/measurements/{{measurementId}}/versions/{{versionId}}/items",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "company",
+                "measurements",
+                "{{measurementId}}",
+                "versions",
+                "{{versionId}}",
+                "items"
+              ],
+              "query": []
+            },
+            "description": "Adds a calculated item to a draft measurement version",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"itemNumber\": 1,\n  \"activity\": \"activity\",\n  \"description\": \"description\",\n  \"chargeType\": \"SQUARE_METER\",\n  \"areaSquareMeters\": 10,\n  \"linearMeters\": 10,\n  \"kilogramsPerSquareMeter\": 10,\n  \"kilogramsPerLinearMeter\": 10,\n  \"unitPrice\": 100,\n  \"justification\": \"justification\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": []
+        },
+        {
+          "name": "Converts an accepted measurement item into a contract service exactly once",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/company/measurements/{{measurementId}}/versions/{{versionId}}/items/{{itemId}}/contract-service",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "company",
+                "measurements",
+                "{{measurementId}}",
+                "versions",
+                "{{versionId}}",
+                "items",
+                "{{itemId}}",
+                "contract-service"
+              ],
+              "query": [
+                {
+                  "key": "justification",
+                  "value": "{{justification}}",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Converts an accepted measurement item into a contract service exactly once"
+          },
+          "response": [],
+          "event": []
+        },
+        {
+          "name": "Uploads evidence or a spreadsheet for a measurement version",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/company/measurements/{{measurementId}}/versions/{{versionId}}/documents",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "company",
+                "measurements",
+                "{{measurementId}}",
+                "versions",
+                "{{versionId}}",
+                "documents"
+              ],
+              "query": [
+                {
+                  "key": "documentType",
+                  "value": "{{documentType}}",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "Uploads evidence or a spreadsheet for a measurement version",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": ""
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": []
+        },
+        {
+          "name": "Creates the separately audited header discount for a draft measurement version",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/company/measurements/{{measurementId}}/versions/{{versionId}}/discount",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "company",
+                "measurements",
+                "{{measurementId}}",
+                "versions",
+                "{{versionId}}",
+                "discount"
+              ],
+              "query": []
+            },
+            "description": "Creates the separately audited header discount for a draft measurement version",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"discountType\": \"FIXED\",\n  \"discountValue\": 10,\n  \"justification\": \"justification\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": []
+        },
+        {
+          "name": "Creates a new draft revision after an accepted measurement version",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/company/measurements/{{measurementId}}/revisions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "company",
+                "measurements",
+                "{{measurementId}}",
+                "revisions"
+              ],
+              "query": []
+            },
+            "description": "Creates a new draft revision after an accepted measurement version",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"justification\": \"justification\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": []
+        },
+        {
+          "name": "Returns a measurement with its latest version, items, discount and totals",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/company/measurements/{{measurementId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "company",
+                "measurements",
+                "{{measurementId}}"
+              ],
+              "query": []
+            },
+            "description": "Returns a measurement with its latest version, items, discount and totals"
+          },
+          "response": [],
+          "event": []
+        },
+        {
+          "name": "Generates an XLSX spreadsheet for a measurement version",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/company/measurements/{{measurementId}}/versions/{{versionId}}/spreadsheet",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "company",
+                "measurements",
+                "{{measurementId}}",
+                "versions",
+                "{{versionId}}",
+                "spreadsheet"
+              ],
+              "query": []
+            },
+            "description": "Generates an XLSX spreadsheet for a measurement version"
+          },
+          "response": [],
+          "event": []
+        },
+        {
+          "name": "Generates a PDF for a measurement version",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/company/measurements/{{measurementId}}/versions/{{versionId}}/pdf",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "company",
+                "measurements",
+                "{{measurementId}}",
+                "versions",
+                "{{versionId}}",
+                "pdf"
+              ],
+              "query": []
+            },
+            "description": "Generates a PDF for a measurement version"
+          },
+          "response": [],
+          "event": []
+        },
+        {
+          "name": "Shows billed amount and balance only from services originated by the measurement version",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/company/measurements/{{measurementId}}/versions/{{versionId}}/financial-status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "company",
+                "measurements",
+                "{{measurementId}}",
+                "versions",
+                "{{versionId}}",
+                "financial-status"
+              ],
+              "query": []
+            },
+            "description": "Shows billed amount and balance only from services originated by the measurement version"
+          },
+          "response": [],
+          "event": []
+        }
+      ]
+    },
+    {
+      "name": "payment-webhook-controller",
+      "item": [
+        {
+          "name": "Receive an authenticated payment gateway webhook",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "asaas-access-token",
+                "value": "{{asaas_access_token}}",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/webhooks/payments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "webhooks",
+                "payments"
+              ],
+              "query": []
+            },
+            "description": "Receive an authenticated payment gateway webhook",
+            "body": {
+              "mode": "raw",
+              "raw": "\"value\"",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "event": []
+        }
+      ]
+    },
+    {
+      "name": "Platform catalog",
+      "item": [
+        {
+          "name": "Lists plans for the platform owner",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/platform/catalog/plans",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "platform",
+                "catalog",
+                "plans"
+              ],
+              "query": []
+            },
+            "description": "Lists plans for the platform owner"
+          },
+          "response": [],
+          "event": []
+        },
+        {
+          "name": "Creates a plan as the platform owner",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/platform/catalog/plans",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "platform",
+                "catalog",
+                "plans"
+              ],
+              "query": []
+            },
+            "description": "Creates a plan as the platform owner",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"code\",\n  \"name\": \"name\",\n  \"description\": \"description\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": []
+        },
+        {
+          "name": "Adds a price period to a plan as the platform owner",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/platform/catalog/plans/{{planId}}/prices",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "platform",
+                "catalog",
+                "plans",
+                "{{planId}}",
+                "prices"
+              ],
+              "query": []
+            },
+            "description": "Adds a price period to a plan as the platform owner",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 10,\n  \"validFrom\": \"2026-08-19\",\n  \"validUntil\": \"2026-08-19\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": []
+        },
+        {
+          "name": "Adds a feature to a plan as the platform owner",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/platform/catalog/plans/{{planId}}/features",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "platform",
+                "catalog",
+                "plans",
+                "{{planId}}",
+                "features"
+              ],
+              "query": []
+            },
+            "description": "Adds a feature to a plan as the platform owner",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"featureId\": \"{{featureId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": []
+        },
+        {
+          "name": "Lists plan features for the platform owner",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/platform/catalog/features",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "platform",
+                "catalog",
+                "features"
+              ],
+              "query": []
+            },
+            "description": "Lists plan features for the platform owner"
+          },
+          "response": [],
+          "event": []
+        },
+        {
+          "name": "Creates a module or feature as the platform owner",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/platform/catalog/features",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "platform",
+                "catalog",
+                "features"
+              ],
+              "query": []
+            },
+            "description": "Creates a module or feature as the platform owner",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"code\",\n  \"type\": \"MODULE\",\n  \"name\": \"name\",\n  \"description\": \"description\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": []
+        },
+        {
+          "name": "Lists plan bundles for the platform owner",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/platform/catalog/bundles",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "platform",
+                "catalog",
+                "bundles"
+              ],
+              "query": []
+            },
+            "description": "Lists plan bundles for the platform owner"
+          },
+          "response": [],
+          "event": []
+        },
+        {
+          "name": "Creates a plan bundle as the platform owner",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/platform/catalog/bundles",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "platform",
+                "catalog",
+                "bundles"
+              ],
+              "query": []
+            },
+            "description": "Creates a plan bundle as the platform owner",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"code\",\n  \"name\": \"name\",\n  \"description\": \"description\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": []
+        },
+        {
+          "name": "Adds a price period to a bundle as the platform owner",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/platform/catalog/bundles/{{bundleId}}/prices",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "platform",
+                "catalog",
+                "bundles",
+                "{{bundleId}}",
+                "prices"
+              ],
+              "query": []
+            },
+            "description": "Adds a price period to a bundle as the platform owner",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 10,\n  \"validFrom\": \"2026-08-19\",\n  \"validUntil\": \"2026-08-19\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": []
+        },
+        {
+          "name": "Adds a plan to a bundle as the platform owner",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/platform/catalog/bundles/{{bundleId}}/plans",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "platform",
+                "catalog",
+                "bundles",
+                "{{bundleId}}",
+                "plans"
+              ],
+              "query": []
+            },
+            "description": "Adds a plan to a bundle as the platform owner",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"planId\": \"{{planId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": []
+        },
+        {
+          "name": "Updates a plan as the platform owner",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/platform/catalog/plans/{{planId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "platform",
+                "catalog",
+                "plans",
+                "{{planId}}"
+              ],
+              "query": []
+            },
+            "description": "Updates a plan as the platform owner",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"name\",\n  \"description\": \"description\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": []
+        },
+        {
+          "name": "Deactivates a plan as the platform owner",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/platform/catalog/plans/{{planId}}/deactivate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "platform",
+                "catalog",
+                "plans",
+                "{{planId}}",
+                "deactivate"
+              ],
+              "query": []
+            },
+            "description": "Deactivates a plan as the platform owner"
+          },
+          "response": [],
+          "event": []
+        },
+        {
+          "name": "Updates a plan feature as the platform owner",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/platform/catalog/features/{{featureId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "platform",
+                "catalog",
+                "features",
+                "{{featureId}}"
+              ],
+              "query": []
+            },
+            "description": "Updates a plan feature as the platform owner",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"name\",\n  \"description\": \"description\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": []
+        },
+        {
+          "name": "Deactivates a plan feature as the platform owner",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/platform/catalog/features/{{featureId}}/deactivate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "platform",
+                "catalog",
+                "features",
+                "{{featureId}}",
+                "deactivate"
+              ],
+              "query": []
+            },
+            "description": "Deactivates a plan feature as the platform owner"
+          },
+          "response": [],
+          "event": []
+        },
+        {
+          "name": "Updates a plan bundle as the platform owner",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/platform/catalog/bundles/{{bundleId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "platform",
+                "catalog",
+                "bundles",
+                "{{bundleId}}"
+              ],
+              "query": []
+            },
+            "description": "Updates a plan bundle as the platform owner",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"name\",\n  \"description\": \"description\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": []
+        },
+        {
+          "name": "Deactivates a plan bundle as the platform owner",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/platform/catalog/bundles/{{bundleId}}/deactivate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "platform",
+                "catalog",
+                "bundles",
+                "{{bundleId}}",
+                "deactivate"
+              ],
+              "query": []
+            },
+            "description": "Deactivates a plan bundle as the platform owner"
+          },
+          "response": [],
+          "event": []
+        }
+      ]
+    },
+    {
+      "name": "Platform subscriptions",
+      "item": [
+        {
+          "name": "Grants a temporary trust unlock for an overdue platform charge",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/platform/subscriptions/charges/{{chargeId}}/trust-unlocks",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "platform",
+                "subscriptions",
+                "charges",
+                "{{chargeId}}",
+                "trust-unlocks"
+              ],
+              "query": []
+            },
+            "description": "Grants a temporary trust unlock for an overdue platform charge",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"reason\",\n  \"expiresAt\": \"2026-08-19T12:00:00Z\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": []
+        }
+      ]
+    },
+    {
+      "name": "Platform support users",
+      "item": [
+        {
+          "name": "Creates a platform support user",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/platform/support-users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "platform",
+                "support-users"
+              ],
+              "query": []
+            },
+            "description": "Creates a platform support user",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"usuario@example.com\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": []
+        }
+      ]
+    },
+    {
+      "name": "Works",
+      "item": [
+        {
+          "name": "Creates a work directly or submits it for approval",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/company/works",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "company",
+                "works"
+              ],
+              "query": []
+            },
+            "description": "Creates a work directly or submits it for approval",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"finalCustomerId\": \"{{finalCustomerId}}\",\n  \"name\": \"name\",\n  \"reference\": \"reference\",\n  \"executionLocationType\": \"FINAL_CUSTOMER_LOCATION\",\n  \"executionAddress\": \"executionAddress\",\n  \"status\": \"DRAFT\",\n  \"startedOn\": \"2026-08-19\",\n  \"expectedCompletionOn\": \"2026-08-19\",\n  \"completedOn\": \"2026-08-19\",\n  \"justification\": \"justification\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": []
+        },
+        {
+          "name": "Finds a work in the authenticated company",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/company/works/{{workId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "company",
+                "works",
+                "{{workId}}"
+              ],
+              "query": []
+            },
+            "description": "Finds a work in the authenticated company"
+          },
+          "response": [],
+          "event": []
+        }
+      ]
+    }
+  ]
+}
