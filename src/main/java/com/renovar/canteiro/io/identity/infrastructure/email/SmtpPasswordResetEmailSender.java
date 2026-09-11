@@ -4,10 +4,11 @@ import com.renovar.canteiro.io.identity.application.PasswordResetEmailSender;
 import com.renovar.canteiro.io.identity.application.PasswordResetProperties;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Component;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 
 @Component
@@ -27,12 +28,30 @@ public class SmtpPasswordResetEmailSender implements PasswordResetEmailSender {
             throw new IllegalStateException("SMTP is not configured");
         }
 
-        SimpleMailMessage message = new SimpleMailMessage();
-        message.setFrom(passwordResetProperties.emailFrom());
-        message.setTo(email);
-        message.setSubject("Redefinição de senha - Canteiro.io");
-        message.setText("Use o token abaixo para redefinir sua senha. Ele expira em " + expiresAt + ".\n\n"
-                + rawPasswordResetToken);
-        javaMailSender.send(message);
+        String passwordResetUrl = passwordResetProperties.frontendPasswordResetUrl()
+                + "#passwordResetToken=" + rawPasswordResetToken;
+        try {
+            MimeMessageHelper message = new MimeMessageHelper(
+                    javaMailSender.createMimeMessage(),
+                    MimeMessageHelper.MULTIPART_MODE_MIXED_RELATED,
+                    StandardCharsets.UTF_8.name()
+            );
+            message.setFrom(passwordResetProperties.emailFrom());
+            message.setTo(email);
+            message.setSubject("Redefinição de senha - Canteiro.io");
+            message.setText(
+                    "Abra o link para redefinir sua senha. Ele expira em " + expiresAt + ".\n\n" + passwordResetUrl,
+                    "<p>Olá,</p>"
+                            + "<p>Para redefinir sua senha, clique no botão abaixo. "
+                            + "O link expira em " + expiresAt + ".</p>"
+                            + "<p><a href=\"" + passwordResetUrl + "\" "
+                            + "style=\"display:inline-block;padding:12px 20px;background:#2563eb;color:#ffffff;"
+                            + "text-decoration:none;border-radius:6px;font-weight:bold\">Redefinir minha senha</a></p>"
+                            + "<p>Se você não solicitou esta redefinição, ignore este e-mail.</p>"
+            );
+            javaMailSender.send(message.getMimeMessage());
+        } catch (jakarta.mail.MessagingException exception) {
+            throw new IllegalStateException("Could not create password reset email", exception);
+        }
     }
 }

@@ -31,6 +31,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -198,6 +199,16 @@ public class PlatformCatalogManagementService {
     }
 
     @Transactional(readOnly = true)
+    public List<PlanPrice> findPlanPrices(UUID planId) {
+        requireOwner();
+        requirePlan(planId);
+        return planPriceRepository.findByPlanId(planId).stream()
+                .sorted(Comparator.comparing(PlanPrice::getValidFrom).reversed()
+                        .thenComparing(PlanPrice::getCreatedAt, Comparator.reverseOrder()))
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
     public List<PlanFeature> findFeatures() {
         requireOwner();
         return planFeatureRepository.findAll();
@@ -207,6 +218,16 @@ public class PlatformCatalogManagementService {
     public List<PlanBundle> findBundles() {
         requireOwner();
         return planBundleRepository.findAll();
+    }
+
+    @Transactional(readOnly = true)
+    public List<PlanBundlePrice> findBundlePrices(UUID bundleId) {
+        requireOwner();
+        requireBundle(bundleId);
+        return planBundlePriceRepository.findByPlanBundleId(bundleId).stream()
+                .sorted(Comparator.comparing(PlanBundlePrice::getValidFrom).reversed()
+                        .thenComparing(PlanBundlePrice::getCreatedAt, Comparator.reverseOrder()))
+                .toList();
     }
 
     private void requireOwner() {

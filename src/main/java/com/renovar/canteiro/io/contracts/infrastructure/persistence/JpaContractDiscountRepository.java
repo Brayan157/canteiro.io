@@ -16,10 +16,14 @@ public class JpaContractDiscountRepository implements ContractDiscountRepository
 
     @Override
     public ContractDiscount save(ContractDiscount contractDiscount) {
-        ContractDiscountJpaEntity entity = contractDiscountJpaRepository.save(new ContractDiscountJpaEntity(
-                contractDiscount.getCompanyId(), contractDiscount.getContractId(), contractDiscount.getDiscountType(),
-                contractDiscount.getDiscountValue()
-        ));
+        ContractDiscountJpaEntity entity = contractDiscountJpaRepository
+                .findByContractIdAndCompanyId(contractDiscount.getContractId(), contractDiscount.getCompanyId())
+                .orElseGet(() -> new ContractDiscountJpaEntity(
+                        contractDiscount.getCompanyId(), contractDiscount.getContractId(),
+                        contractDiscount.getDiscountType(), contractDiscount.getDiscountValue()
+                ));
+        entity.update(contractDiscount.getDiscountType(), contractDiscount.getDiscountValue());
+        entity = contractDiscountJpaRepository.save(entity);
         return toDomain(entity);
     }
 

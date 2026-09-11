@@ -42,6 +42,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -199,6 +200,65 @@ class CompanyAccessApiIntegrationTest extends AbstractPostgresIntegrationTest {
                 .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
     }
 
+    @Test
+    void keepsTheInitialCompanyOwnerAndItsRoleImmutableToCompanyAdministration() throws Exception {
+        Company company = createCompany("Protected owner");
+        User owner = createInitialCompanyOwner(company, "owner@example.com");
+        Role protectedOwnerRole = roleRepository.save(Role.createInitialOwnerRole(
+                company.getId(),
+                "Company Administrator",
+                "Initial company owner with all currently active permissions"
+        ));
+        userRoleRepository.save(UserRole.create(owner.getId(), protectedOwnerRole.getId(), company.getId()));
+        User administrator = createCompanyUser(company, "access-administrator@example.com");
+        grantAccessManagementPermissions(administrator, company);
+
+        mockMvc.perform(get("/api/v1/company/access/users")
+                        .with(jwt().jwt(token -> token.subject(administrator.getId().toString()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[?(@.id == '" + owner.getId() + "')].companyOwner[0]").value(true));
+
+        mockMvc.perform(put("/api/v1/company/access/users/{userId}/roles", owner.getId())
+                        .with(jwt().jwt(token -> token.subject(administrator.getId().toString())))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"roleIds\":[]}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+        mockMvc.perform(patch("/api/v1/company/access/users/{userId}/deactivate", owner.getId())
+                        .with(jwt().jwt(token -> token.subject(administrator.getId().toString()))))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+        mockMvc.perform(put("/api/v1/company/access/roles/{roleId}", protectedOwnerRole.getId())
+                        .with(jwt().jwt(token -> token.subject(administrator.getId().toString())))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Changed\",\"description\":\"Must not apply\"}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+        mockMvc.perform(patch("/api/v1/company/access/roles/{roleId}/deactivate", protectedOwnerRole.getId())
+                        .with(jwt().jwt(token -> token.subject(administrator.getId().toString()))))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+        mockMvc.perform(put("/api/v1/company/access/roles/{roleId}/permissions", protectedOwnerRole.getId())
+                        .with(jwt().jwt(token -> token.subject(administrator.getId().toString())))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"permissionIds\":[]}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+        mockMvc.perform(put("/api/v1/company/access/users/{userId}/roles", administrator.getId())
+                        .with(jwt().jwt(token -> token.subject(administrator.getId().toString())))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"roleIds\":[\"" + protectedOwnerRole.getId() + "\"]}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+
+        assertEquals("ACTIVE", userRepository.findById(owner.getId()).orElseThrow().getStatus().name());
+        assertTrue(userRoleRepository.findByUserIdAndRoleIdAndCompanyId(
+                owner.getId(), protectedOwnerRole.getId(), company.getId()
+        ).orElseThrow().isActive());
+        assertTrue(roleRepository.findByIdAndCompanyId(protectedOwnerRole.getId(), company.getId())
+                .orElseThrow().isActive());
+    }
+
     private Company createCompany(String suffix) {
         return companyRepository.save(Company.create(
                 suffix + " Ltda.",
@@ -216,6 +276,14 @@ class CompanyAccessApiIntegrationTest extends AbstractPostgresIntegrationTest {
         user.activate(passwordHasher.hash(PASSWORD), Instant.now());
         User persistedUser = userRepository.save(user);
         companyUserRepository.save(CompanyUser.create(persistedUser.getId(), company.getId()));
+        return persistedUser;
+    }
+
+    private User createInitialCompanyOwner(Company company, String email) {
+        User user = User.create(email, UserType.COMPANY);
+        user.activate(passwordHasher.hash(PASSWORD), Instant.now());
+        User persistedUser = userRepository.save(user);
+        companyUserRepository.save(CompanyUser.createInitialOwner(persistedUser.getId(), company.getId()));
         return persistedUser;
     }
 

@@ -1,0 +1,2 @@
+ALTER TABLE refresh_token
+    ADD COLUMN remember_access BOOLEAN NOT NULL DEFAULT FALSE;

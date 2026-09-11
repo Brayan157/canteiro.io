@@ -33,6 +33,11 @@ public class JpaEmployeeRepository implements EmployeeRepository {
     }
 
     @Override
+    public Optional<Employee> findByUserIdAndCompanyId(UUID userId, UUID companyId) {
+        return jpaRepository.findByUserIdAndCompanyId(userId, companyId).map(mapper::toDomain);
+    }
+
+    @Override
     public Page<Employee> findByCompanyId(UUID companyId, Pageable pageable) {
         return jpaRepository.findByCompanyId(companyId, pageable).map(mapper::toDomain);
     }

@@ -7,6 +7,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -44,6 +45,10 @@ public class ContractJpaEntity extends BaseJpaEntity {
 
     @Column(name = "completed_on")
     private LocalDate completedOn;
+
+    @Version
+    @Column(name = "billing_version", nullable = false)
+    private Long billingVersion;
 
     public ContractJpaEntity(UUID companyId, UUID workId, String reference, String name, ContractStatus status,
                              LocalDate startedOn, LocalDate expectedCompletionOn, LocalDate completedOn) {

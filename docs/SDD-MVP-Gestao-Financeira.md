@@ -2,8 +2,8 @@
 
 **Nome comercial:** a definir  
 **Repositório atual:** Canteiro.io  
-**Versão do documento:** 0.2<br>
-**Data:** 12 de agosto de 2026<br>
+**Versão do documento:** 0.3<br>
+**Data:** 8 de setembro de 2026<br>
 **Status:** requisitos de negócio consolidados; recomendações técnicas identificadas como tal  
 
 ## 1. Objetivo
@@ -122,6 +122,13 @@ O frontend será um projeto separado no futuro e consumirá a API REST Spring. E
 | D-17 | Controle de faturamento, parcelas, saldo faturável, NFs e contas a receber pertencem ao contrato. A obra somente consolida esses valores entre seus contratos. |
 | D-18 | Receita, custos, gastos vinculados e lucro são apurados no nível da obra, somando os resultados dos seus contratos e os gastos diretamente atribuídos à obra. |
 | D-19 | Todo gasto possui escopo Obra ou Empresa. Gasto de Empresa não possui obra/contrato, integra caixa e relatórios gerais da empresa, mas não altera lucro de qualquer obra. |
+| D-20 | O `DELETE` operacional de dados pessoais de funcionário, como endereço, conta bancária e chave Pix, é exclusão lógica: desativa o registro e o retira das consultas operacionais, sem apagar a trilha de auditoria. A eliminação ou anonimização definitiva é um fluxo separado de privacidade, autorizado e auditado, executado apenas após avaliar a finalidade e as obrigações de retenção aplicáveis. |
+| D-21 | Conta bancária, dígito de conta e chave Pix de funcionário são referências para pagamento manual, não uma integração bancária. Listagens e detalhes operacionais exibem somente valores mascarados. A visualização do valor completo exige ação explícita, permissão granular controlada `EMPLOYEES.VIEW_PAYMENT_DETAILS`, tenant derivado da sessão e `AuditEvent` imutável de consulta; não pode ser exportada, registrada em logs ou mantida em cache do cliente. Quando houver chave Pix e nome/cidade confirmados do seu titular, a visualização pode gerar BR Code/QR estático sem valor, cobrança, vencimento ou identificador financeiro; esses artefatos são efêmeros, nunca persistidos/auditados, e dados do funcionário não podem ser inferidos como dados do titular. |
+| D-22 | O proprietário inicial da empresa e o papel criado para ele no onboarding são protegidos pelo sistema. Eles permanecem legíveis nas listagens por transparência, sinalizados como `companyOwner` e `systemProtected`, mas a administração da própria empresa não pode desativar o proprietário, trocar seus papéis, alterar/desativar o papel protegido, modificar suas permissões ou atribuir esse papel a outro usuário. Uma eventual transferência de propriedade é fluxo separado, auditado e fora do MVP. |
+| D-23 | A central de aprovações pesquisa e apresenta solicitações apenas por projeções seguras, legíveis e derivadas no servidor. A busca considera o solicitante e o registro por nome/título sanitizados, sempre dentro do tenant autenticado e com `AUDIT.READ`; nunca consulta nem expõe documentos, PIS, telefones, endereços, remuneração ou referências de pagamento. A aprovação de uma criação retorna a entidade efetivamente criada quando o caso de uso a fornecer. |
+| D-24 | A auditoria apresenta o responsável por `actorDisplayName`, um nome seguro e legível — jamais e-mail, UUID ou identificador técnico. Para usuário vinculado a funcionário, usa o nome completo do funcionário; `SYSTEM` aparece como “Sistema”; sem nome histórico seguro, usa “Usuário histórico indisponível”. O e-mail do ator, quando disponível, é um campo separado (`actorEmail`) e somente é retornado a quem já possui `AUDIT.READ`. |
+| D-25 | A foto de funcionário é opcional e serve exclusivamente para identificação visual interna. Não é usada para reconhecimento facial, extração biométrica, ponto, vigilância ou decisão automatizada. É armazenada em chave privada, disponibilizada somente por download autenticado no tenant, limitada a PNG/JPEG validado de até 2 MiB e 2048 × 2048 pixels, sem cache público. A auditoria registra apenas a existência/remoção da foto, nunca sua imagem ou chave de storage. |
+| D-26 | A central de aprovações pode projetar no solicitante o `employeeId` e a rota autenticada `photoUrl`, exclusivamente quando o usuário estiver vinculado a funcionário da mesma empresa e tiver foto. A projeção não revela chave de storage, URL pública ou dado pessoal adicional; o download mantém sua própria permissão `EMPLOYEES.READ`. |
 
 ## 4. Atores e acesso
 
@@ -150,6 +157,7 @@ Permissões devem separar, no mínimo:
 - envio de relatório;
 - gestão de usuários;
 - gestão de papéis.
+- visualização de dados completos de pagamento de funcionário, separada da consulta comum de funcionários e concedida somente pelo catálogo controlado como `EMPLOYEES.VIEW_PAYMENT_DETAILS`.
 
 Para cada módulo e operação, a API calcula a **alçada direta efetiva**: ela existe quando
 o usuário possui a permissão direta correspondente ou quando reúne a permissão de
@@ -383,7 +391,7 @@ O frontend não fala diretamente com o banco, com o gateway de pagamento ou com 
 
 ### 6.4 Autenticação e segurança
 
-- Spring Security com tokens de acesso de curta duração e refresh tokens revogáveis.
+- Spring Security com tokens de acesso de curta duração e refresh tokens revogáveis. O refresh token é entregue somente em cookie host-only `HttpOnly`, `Secure`, `SameSite=Strict`, restrito a `/api/v1/auth`, rotacionado a cada renovação e nunca retornado no JSON. “Lembrar acesso” persiste o cookie até o TTL do token; sem a opção, o cookie é de sessão. A preferência acompanha o token no backend e o logout sempre expira o cookie.
 - Senhas com hash forte, política de senha e recuperação por e-mail.
 - Verificação de e-mail na ativação de usuário.
 - MFA fica preparado como evolução, mas não entra no MVP.
@@ -391,6 +399,8 @@ O frontend não fala diretamente com o banco, com o gateway de pagamento ou com 
 - Validação de entrada, autorização no serviço e não apenas no controlador.
 - Logs sem senha, token, dados completos de cartão ou conteúdo fiscal sensível.
 - Segredos em variáveis de ambiente ou serviço de segredos, nunca em application.properties versionado.
+- Endereço residencial, documento, conta bancária e chave Pix de funcionário são dados pessoais protegidos. Consultas operacionais retornam somente o mínimo necessário; conta, dígito de conta e Pix permanecem cifrados em repouso e são devolvidos apenas de forma mascarada. A exceção é uma consulta pontual de referência de pagamento manual, sempre por permissão granular, ação explícita, tenant da sessão e auditoria imutável da visualização; a resposta não pode ser exportada, incluída em relatórios, logs, telemetria ou cache persistente.
+- O `DELETE` operacional apenas desativa o dado e preserva auditoria mínima, sem registrar o valor pessoal no evento. A eliminação/anonimização definitiva exige fluxo específico de privacidade, decisão auditada, prazo de retenção configurável e verificação prévia de obrigação legal/regulatória ou exercício regular de direitos.
 
 ## 7. Modelo de dados conceitual
 
@@ -452,6 +462,7 @@ erDiagram
 - Work registra o tipo de local de execução e o endereço utilizado naquela obra. Isso permite executar na unidade do cliente final, na sede/unidade da empresa prestadora ou em outro endereço.
 - Payable possui financial_scope obrigatório. Para escopo Obra, work_id é obrigatório e contract_id é opcional; quando contract_id existir, ele deve pertencer ao mesmo work_id. Para escopo Empresa, work_id e contract_id devem ser nulos.
 - Receita, gastos e lucro de obra são projeções calculadas a partir dos contratos e títulos financeiros da obra; não haverá lançamento direto de receita ou saldo na tabela obra.
+- `EmployeePaymentAccount` armazena banco, código, agência, tipo, número de conta, dígito e chave Pix. Número, dígito e chave Pix usam ciphertext em repouso; a consulta operacional devolve somente máscaras. A leitura completa é pontual, permissionada e auditada, para o responsável executar pagamento manual fora do sistema.
 - Nenhum saldo é informado manualmente quando puder ser calculado a partir de lançamentos aprovados.
 - Registros financeiros usam referência, descrição, emissão, vencimento, valor bruto, descontos, impostos, valor líquido, situação e origem.
 - Títulos parcelados são registros individuais ligados por um identificador de grupo financeiro; isso permite vencimentos, baixas, renegociações e estornos independentes por parcela.

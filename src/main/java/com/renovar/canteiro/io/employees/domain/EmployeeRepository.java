@@ -9,5 +9,6 @@ import java.util.UUID;
 public interface EmployeeRepository {
     Employee save(Employee employee);
     Optional<Employee> findByIdAndCompanyId(UUID id, UUID companyId);
+    Optional<Employee> findByUserIdAndCompanyId(UUID userId, UUID companyId);
     Page<Employee> findByCompanyId(UUID companyId, Pageable pageable);
 }

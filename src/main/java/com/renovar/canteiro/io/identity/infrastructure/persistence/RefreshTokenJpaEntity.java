@@ -27,6 +27,9 @@ public class RefreshTokenJpaEntity extends BaseJpaEntity {
     @Column(name = "expires_at", nullable = false)
     private Instant expiresAt;
 
+    @Column(name = "remember_access", nullable = false)
+    private boolean rememberAccess;
+
     @Column(name = "revoked_at")
     private Instant revokedAt;
 
@@ -37,10 +40,11 @@ public class RefreshTokenJpaEntity extends BaseJpaEntity {
     @Column(name = "version", nullable = false)
     private long version;
 
-    public RefreshTokenJpaEntity(UUID userId, String tokenHash, Instant expiresAt) {
+    public RefreshTokenJpaEntity(UUID userId, String tokenHash, Instant expiresAt, boolean rememberAccess) {
         this.userId = userId;
         this.tokenHash = tokenHash;
         this.expiresAt = expiresAt;
+        this.rememberAccess = rememberAccess;
     }
 
     public void revoke(Instant revokedAt, UUID replacedByTokenId) {

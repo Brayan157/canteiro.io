@@ -22,8 +22,16 @@ public class CompanyUserJpaEntity extends BaseJpaEntity {
     @Column(name = "company_id", nullable = false)
     private UUID companyId;
 
+    @Column(name = "company_owner", nullable = false)
+    private boolean companyOwner;
+
     public CompanyUserJpaEntity(UUID userId, UUID companyId) {
+        this(userId, companyId, false);
+    }
+
+    public CompanyUserJpaEntity(UUID userId, UUID companyId, boolean companyOwner) {
         this.userId = userId;
         this.companyId = companyId;
+        this.companyOwner = companyOwner;
     }
 }

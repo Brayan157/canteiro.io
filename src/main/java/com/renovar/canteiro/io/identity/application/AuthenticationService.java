@@ -32,7 +32,7 @@ public class AuthenticationService {
                 .filter(currentUser -> passwordHasher.matches(command.password(), currentUser.getPasswordHash()))
                 .orElseThrow(() -> new InvalidAuthenticationException("Invalid email or password"));
 
-        return issueTokens(user);
+        return issueTokens(user, command.rememberAccess());
     }
 
     @Transactional
@@ -45,7 +45,7 @@ public class AuthenticationService {
                 .filter(this::isActiveWithPassword)
                 .orElseThrow(() -> new InvalidAuthenticationException("Refresh token is invalid or expired"));
 
-        AuthenticationTokens authenticationTokens = issueTokens(user);
+        AuthenticationTokens authenticationTokens = issueTokens(user, currentRefreshToken.isRememberAccess());
         RefreshToken replacement = refreshTokenRepository.findByTokenHash(refreshTokenHasher.hash(authenticationTokens.refreshToken()))
                 .orElseThrow(() -> new IllegalStateException("Replacement refresh token must exist"));
         currentRefreshToken.replaceWith(replacement.getId(), currentInstant);
@@ -62,18 +62,21 @@ public class AuthenticationService {
                 });
     }
 
-    private AuthenticationTokens issueTokens(User user) {
+    private AuthenticationTokens issueTokens(User user, boolean rememberAccess) {
         String rawRefreshToken = refreshTokenGenerator.generate();
         Instant currentInstant = clock.instant();
         refreshTokenRepository.save(RefreshToken.create(
                 user.getId(),
                 refreshTokenHasher.hash(rawRefreshToken),
-                currentInstant.plus(authenticationProperties.refreshTokenTtl())
+                currentInstant.plus(authenticationProperties.refreshTokenTtl()),
+                rememberAccess
         ));
         return new AuthenticationTokens(
                 accessTokenIssuer.issue(user),
                 rawRefreshToken,
-                authenticationProperties.accessTokenTtl().toSeconds()
+                authenticationProperties.accessTokenTtl().toSeconds(),
+                authenticationProperties.refreshTokenTtl().toSeconds(),
+                rememberAccess
         );
     }
 

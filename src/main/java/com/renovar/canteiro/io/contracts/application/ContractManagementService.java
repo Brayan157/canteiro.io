@@ -8,6 +8,8 @@ import com.renovar.canteiro.io.access.domain.ChangeAuthorizationMode;
 import com.renovar.canteiro.io.access.domain.ChangeOperation;
 import com.renovar.canteiro.io.contracts.domain.Contract;
 import com.renovar.canteiro.io.contracts.domain.ContractRepository;
+import com.renovar.canteiro.io.contracts.domain.ContractService;
+import com.renovar.canteiro.io.contracts.domain.ContractServiceRepository;
 import com.renovar.canteiro.io.contracts.domain.ContractStatus;
 import com.renovar.canteiro.io.governance.application.AuditEventRecorder;
 import com.renovar.canteiro.io.governance.application.ChangeRequestService;
@@ -22,6 +24,8 @@ import com.renovar.canteiro.io.tenancy.application.TenantContextHolder;
 import com.renovar.canteiro.io.works.domain.WorkRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
@@ -37,6 +41,7 @@ public class ContractManagementService {
     private final AccessAuthorizationService accessAuthorizationService;
     private final WorkRepository workRepository;
     private final ContractRepository contractRepository;
+    private final ContractServiceRepository contractServiceRepository;
     private final ChangeRequestService changeRequestService;
     private final AuditEventRecorder auditEventRecorder;
 
@@ -73,6 +78,21 @@ public class ContractManagementService {
         UUID companyId = tenantContextHolder.requireCurrentTenant().companyId();
         return contractRepository.findByIdAndCompanyId(contractId, companyId)
                 .orElseThrow(() -> new TenantResourceNotFoundException("Contract"));
+    }
+
+    @Transactional(readOnly = true)
+    public Page<Contract> findAll(Pageable pageable) {
+        accessAuthorizationService.requirePermission(AccessModule.CONTRACTS, AccessAction.READ);
+        return contractRepository.findByCompanyId(tenantContextHolder.requireCurrentTenant().companyId(), pageable);
+    }
+
+    @Transactional(readOnly = true)
+    public java.util.List<ContractService> findServices(UUID contractId) {
+        accessAuthorizationService.requirePermission(AccessModule.SERVICES, AccessAction.READ);
+        UUID companyId = tenantContextHolder.requireCurrentTenant().companyId();
+        contractRepository.findByIdAndCompanyId(contractId, companyId)
+                .orElseThrow(() -> new TenantResourceNotFoundException("Contract"));
+        return contractServiceRepository.findByContractIdAndCompanyId(contractId, companyId);
     }
 
     @Transactional

@@ -83,7 +83,7 @@ public class CompanyAccessManagementService {
                 employeeAuditData(employee),
                 Map.of()
         );
-        return new CompanyEmployee(employee, Set.of());
+        return new CompanyEmployee(employee, Set.of(), false);
     }
 
     @Transactional(readOnly = true)
@@ -93,7 +93,7 @@ public class CompanyAccessManagementService {
         return companyUserRepository.findByCompanyId(companyId, pageable).map(companyUser -> {
             User user = userRepository.findById(companyUser.getUserId())
                     .orElseThrow(() -> new IllegalStateException("Company user must reference an existing user"));
-            return new CompanyEmployee(user, activeRoleIds(user.getId(), companyId));
+            return new CompanyEmployee(user, activeRoleIds(user.getId(), companyId), companyUser.isCompanyOwner());
         });
     }
 
@@ -101,14 +101,17 @@ public class CompanyAccessManagementService {
     public CompanyEmployee findEmployee(UUID userId) {
         requireUsersRead();
         UUID companyId = currentCompanyId();
-        User user = findCompanyUser(userId);
-        return new CompanyEmployee(user, activeRoleIds(user.getId(), companyId));
+        CompanyUser companyUser = findCompanyUserMembership(userId);
+        User user = findUser(companyUser);
+        return new CompanyEmployee(user, activeRoleIds(user.getId(), companyId), companyUser.isCompanyOwner());
     }
 
     @Transactional
     public void deactivateEmployee(UUID userId) {
         requireUsersManagement();
-        User employee = findCompanyUser(userId);
+        CompanyUser companyUser = findCompanyUserMembership(userId);
+        requireMutableCompanyOwner(companyUser);
+        User employee = findUser(companyUser);
         Map<String, Object> beforeData = employeeAuditData(employee);
         employee.deactivate();
         userRepository.save(employee);
@@ -155,6 +158,7 @@ public class CompanyAccessManagementService {
     public Role updateRole(UUID roleId, UpdateRoleCommand command) {
         requireRolesManagement();
         Role role = findCurrentCompanyRole(roleId);
+        requireMutableSystemRole(role);
         Map<String, Object> beforeData = roleAuditData(role);
         role.update(command.name(), command.description());
         Role updatedRole = roleRepository.save(role);
@@ -174,6 +178,7 @@ public class CompanyAccessManagementService {
     public void deactivateRole(UUID roleId) {
         requireRolesManagement();
         Role role = findCurrentCompanyRole(roleId);
+        requireMutableSystemRole(role);
         Map<String, Object> beforeData = roleAuditData(role);
         role.deactivate();
         Role deactivatedRole = roleRepository.save(role);
@@ -192,6 +197,7 @@ public class CompanyAccessManagementService {
     public Set<UUID> replaceRolePermissions(UUID roleId, ReplaceRolePermissionsCommand command) {
         requireRolesManagement();
         Role role = findCurrentCompanyRole(roleId);
+        requireMutableSystemRole(role);
         Set<UUID> permissionIds = new HashSet<>(command.permissionIds());
         Set<UUID> previousPermissionIds = activePermissionIds(role.getId());
         permissionIds.forEach(this::requireActivePermission);
@@ -230,7 +236,9 @@ public class CompanyAccessManagementService {
     public Set<UUID> replaceEmployeeRoles(UUID userId, ReplaceUserRolesCommand command) {
         requireUsersManagement();
         UUID companyId = currentCompanyId();
-        User employee = findCompanyUser(userId);
+        CompanyUser companyUser = findCompanyUserMembership(userId);
+        requireMutableCompanyOwner(companyUser);
+        User employee = findUser(companyUser);
         Set<UUID> roleIds = new HashSet<>(command.roleIds());
         Set<UUID> previousRoleIds = activeRoleIds(employee.getId(), companyId);
         roleIds.forEach(this::requireActiveCurrentCompanyRole);
@@ -276,11 +284,15 @@ public class CompanyAccessManagementService {
         accountActivationEmailSender.send(employee.getEmail(), rawActivationToken, expiresAt);
     }
 
-    private User findCompanyUser(UUID userId) {
+    private CompanyUser findCompanyUserMembership(UUID userId) {
         UUID companyId = currentCompanyId();
-        companyUserRepository.findByUserIdAndCompanyId(userId, companyId)
+        return companyUserRepository.findByUserIdAndCompanyId(userId, companyId)
                 .orElseThrow(() -> new TenantResourceNotFoundException("Employee"));
-        return userRepository.findById(userId).orElseThrow(() -> new TenantResourceNotFoundException("Employee"));
+    }
+
+    private User findUser(CompanyUser companyUser) {
+        return userRepository.findById(companyUser.getUserId())
+                .orElseThrow(() -> new TenantResourceNotFoundException("Employee"));
     }
 
     private Role findCurrentCompanyRole(UUID roleId) {
@@ -289,8 +301,12 @@ public class CompanyAccessManagementService {
     }
 
     private void requireActiveCurrentCompanyRole(UUID roleId) {
-        if (!findCurrentCompanyRole(roleId).isActive()) {
+        Role role = findCurrentCompanyRole(roleId);
+        if (!role.isActive()) {
             throw new ApiException(HttpStatus.BAD_REQUEST, ErrorCode.BUSINESS_RULE_VIOLATION, "Role is inactive");
+        }
+        if (role.isSystemProtected()) {
+            throw protectedAccessManagementResource("The initial company owner role cannot be assigned through company administration");
         }
     }
 
@@ -344,6 +360,26 @@ public class CompanyAccessManagementService {
         return tenantContextHolder.requireCurrentTenant().companyId();
     }
 
+    private void requireMutableCompanyOwner(CompanyUser companyUser) {
+        if (companyUser.isCompanyOwner()) {
+            throw protectedAccessManagementResource(
+                    "The initial company owner cannot be deactivated or have roles changed through company administration"
+            );
+        }
+    }
+
+    private void requireMutableSystemRole(Role role) {
+        if (role.isSystemProtected()) {
+            throw protectedAccessManagementResource(
+                    "The initial company owner role cannot be changed or deactivated through company administration"
+            );
+        }
+    }
+
+    private ApiException protectedAccessManagementResource(String detail) {
+        return new ApiException(HttpStatus.FORBIDDEN, ErrorCode.ACCESS_DENIED, detail);
+    }
+
     private void requireUsersRead() {
         accessAuthorizationService.requirePermission(AccessModule.USERS, AccessAction.READ);
     }
@@ -373,6 +409,7 @@ public class CompanyAccessManagementService {
         roleData.put("name", role.getName());
         roleData.put("description", role.getDescription());
         roleData.put("active", role.isActive());
+        roleData.put("systemProtected", role.isSystemProtected());
         return roleData;
     }
 

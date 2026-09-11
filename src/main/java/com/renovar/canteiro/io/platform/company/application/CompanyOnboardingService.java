@@ -81,7 +81,7 @@ public class CompanyOnboardingService {
                 command.phone(), command.address(), command.logo()
         ));
         User owner = userRepository.save(User.create(ownerEmail, UserType.COMPANY));
-        companyUserRepository.save(CompanyUser.create(owner.getId(), company.getId()));
+        companyUserRepository.save(CompanyUser.createInitialOwner(owner.getId(), company.getId()));
         InitialCompanyOwnerAccess initialOwnerAccess = initialCompanyOwnerAccessProvisioner.provision(
                 company.getId(), owner.getId()
         );

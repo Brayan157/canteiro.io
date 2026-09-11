@@ -27,6 +27,15 @@ final class LocalStorageProvider implements StorageProvider {
     }
 
     @Override
+    public byte[] load(String storageKey) {
+        try {
+            return Files.readAllBytes(resolve(storageKey));
+        } catch (IOException exception) {
+            throw new IllegalStateException("Could not load attachment", exception);
+        }
+    }
+
+    @Override
     public void delete(String storageKey) {
         try {
             Files.deleteIfExists(resolve(storageKey));

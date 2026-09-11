@@ -6,7 +6,7 @@ COPY gradle gradle
 COPY gradlew build.gradle.kts settings.gradle.kts ./
 RUN chmod +x gradlew
 COPY src src
-RUN ./gradlew --no-daemon bootJar -x test
+RUN gradle --no-daemon bootJar -x test
 
 FROM eclipse-temurin:21-jre
 

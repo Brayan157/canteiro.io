@@ -6,6 +6,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
@@ -27,6 +28,13 @@ public class JpaTrustUnlockRepository implements TrustUnlockRepository {
     @Override
     public long countByChargeId(UUID chargeId) {
         return repository.countByChargeId(chargeId);
+    }
+
+    @Override
+    public List<TrustUnlock> findByChargeId(UUID chargeId) {
+        return repository.findByChargeIdOrderByExpiresAtDesc(chargeId).stream()
+                .map(mapper::toDomain)
+                .toList();
     }
 
     @Override

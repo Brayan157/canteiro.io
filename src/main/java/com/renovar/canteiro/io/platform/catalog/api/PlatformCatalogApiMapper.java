@@ -43,12 +43,12 @@ public class PlatformCatalogApiMapper {
     }
 
     public CatalogPriceResponse toResponse(PlanPrice price) {
-        return new CatalogPriceResponse(price.getId(), price.getPlanId(), price.getAmount(), price.getValidFrom(),
+        return new CatalogPriceResponse(price.getId(), price.getPlanId(), price.getAmount().toPlainString(), price.getValidFrom(),
                 price.getValidUntil(), price.getCreatedAt(), price.getUpdatedAt());
     }
 
     public CatalogPriceResponse toResponse(PlanBundlePrice price) {
-        return new CatalogPriceResponse(price.getId(), price.getPlanBundleId(), price.getAmount(), price.getValidFrom(),
+        return new CatalogPriceResponse(price.getId(), price.getPlanBundleId(), price.getAmount().toPlainString(), price.getValidFrom(),
                 price.getValidUntil(), price.getCreatedAt(), price.getUpdatedAt());
     }
 }

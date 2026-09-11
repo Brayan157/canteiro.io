@@ -1,6 +1,7 @@
 package com.renovar.canteiro.io.platform.catalog.api.response;
 
-import java.math.BigDecimal;
+import io.swagger.v3.oas.annotations.media.Schema;
+
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.UUID;
@@ -8,7 +9,8 @@ import java.util.UUID;
 public record CatalogPriceResponse(
         UUID id,
         UUID catalogItemId,
-        BigDecimal amount,
+        @Schema(type = "string", format = "decimal", example = "99.90", pattern = "^-?\\d+\\.\\d{2}$")
+        String amount,
         LocalDate validFrom,
         LocalDate validUntil,
         Instant createdAt,

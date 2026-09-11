@@ -42,6 +42,7 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -143,6 +144,35 @@ class TrustUnlockApiIntegrationTest extends AbstractPostgresIntegrationTest {
                 .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
 
         assertEquals(0, trustUnlockRepository.countByChargeId(charge.getId()));
+    }
+
+    @Test
+    void ownerListsOverdueChargesEligibleForTrustUnlock() throws Exception {
+        User owner = createPlatformUser(PlatformUserRole.PLATFORM_OWNER);
+        PlatformCharge charge = overdueCharge();
+        grant(owner, charge, "Payment promised", Instant.now().plusSeconds(86_400)).andExpect(status().isCreated());
+
+        mockMvc.perform(get("/api/v1/platform/subscriptions/charges")
+                        .with(jwt().jwt(token -> token.subject(owner.getId().toString())))
+                        .param("eligibleForTrustUnlock", "true"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].id").value(charge.getId().toString()))
+                .andExpect(jsonPath("$.items[0].company.id").value(charge.getCompanyId().toString()))
+                .andExpect(jsonPath("$.items[0].amount").value("99.90"))
+                .andExpect(jsonPath("$.items[0].trustUnlocksUsed").value(1))
+                .andExpect(jsonPath("$.items[0].trustUnlockLimit").value(2))
+                .andExpect(jsonPath("$.items[0].remainingTrustUnlocks").value(1))
+                .andExpect(jsonPath("$.items[0].activeTrustUnlock.expiresAt").exists());
+    }
+
+    @Test
+    void platformSupportCannotListOverdueCharges() throws Exception {
+        User support = createPlatformUser(PlatformUserRole.PLATFORM_SUPPORT);
+
+        mockMvc.perform(get("/api/v1/platform/subscriptions/charges")
+                        .with(jwt().jwt(token -> token.subject(support.getId().toString()))))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
     }
 
     private org.springframework.test.web.servlet.ResultActions grant(

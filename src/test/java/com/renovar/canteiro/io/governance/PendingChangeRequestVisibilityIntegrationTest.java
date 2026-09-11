@@ -13,6 +13,8 @@ import com.renovar.canteiro.io.access.domain.RoleRepository;
 import com.renovar.canteiro.io.access.domain.UserRole;
 import com.renovar.canteiro.io.access.domain.UserRoleRepository;
 import com.renovar.canteiro.io.governance.application.ChangeRequestQueryService;
+import com.renovar.canteiro.io.governance.application.ChangeRequestFilter;
+import com.renovar.canteiro.io.governance.application.ChangeRequestListItem;
 import com.renovar.canteiro.io.governance.application.ChangeRequestService;
 import com.renovar.canteiro.io.governance.application.CreateChangeRequestCommand;
 import com.renovar.canteiro.io.governance.domain.AuditModule;
@@ -36,8 +38,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -136,6 +140,44 @@ class PendingChangeRequestVisibilityIntegrationTest extends AbstractPostgresInte
         assertTrue(officialRoles.stream().noneMatch(role -> "Proposed description".equals(role.getDescription())));
         assertEquals(List.of(pendingRequest.getId()), pendingRequests.stream().map(ChangeRequest::getId).toList());
         assertTrue(pendingRequests.stream().noneMatch(request -> request.getId().equals(approvedRequestId)));
+    }
+
+    @Test
+    void filtersTheApprovalInboxUsingOnlySafeHumanReadableEmployeeProjections() {
+        Company company = createCompany();
+        User requester = createCompanyUser(company);
+        grantReadPermissions(requester, company);
+        ChangeRequest employeeRequest = changeRequestRepository.save(ChangeRequest.create(
+                company.getId(),
+                requester.getId(), AuditModule.EMPLOYEES, ChangeRequestOperation.CREATE, "Employee", null, 0,
+                new ChangeRequestSnapshot(null, new AuditPayload(Map.of(
+                        "fullName", "Marina Souza", "jobTitle", "Encarregada", "department", "Obras",
+                        "employmentType", "EMPLOYEE", "currentlyEmployed", true,
+                        "documentNumber", "52998224725", "phone", "11999999999",
+                        "compensationAmount", "4500.00", "pis", "12345678901"
+                ))),
+                "Awaiting review"
+        ));
+        tenantContextHolder.setCurrentTenant(new TenantContext(requester.getId(), company.getId()));
+
+        List<ChangeRequestListItem> results = changeRequestQueryService.findPending(
+                        new ChangeRequestFilter("Marina", AuditModule.EMPLOYEES, ChangeRequestOperation.CREATE,
+                                requester.getId(), LocalDate.now(java.time.ZoneOffset.UTC), LocalDate.now(java.time.ZoneOffset.UTC)),
+                        PageRequest.of(0, 10)
+                ).getContent();
+
+        assertEquals(1, results.size());
+        ChangeRequestListItem item = results.getFirst();
+        assertEquals(employeeRequest.getId(), item.changeRequest().getId());
+        assertEquals("Marina Souza", item.entity().displayName());
+        assertEquals("Marina Souza", item.proposedSummary().get("fullName"));
+        assertEquals("Encarregada", item.proposedSummary().get("jobTitle"));
+        assertEquals("Obras", item.proposedSummary().get("department"));
+        assertEquals(true, item.proposedSummary().get("hasDocument"));
+        assertEquals(true, item.proposedSummary().get("hasCompensationAmount"));
+        assertTrue(item.proposedData().keySet().stream().noneMatch(key -> Set.of(
+                "documentNumber", "pis", "phone", "compensationAmount", "birthDate"
+        ).contains(key)));
     }
 
     private void grantReadPermissions(User user, Company company) {

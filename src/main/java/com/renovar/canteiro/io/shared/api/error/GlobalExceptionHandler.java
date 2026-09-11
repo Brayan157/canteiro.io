@@ -8,6 +8,7 @@ import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -75,6 +76,12 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(IllegalStateException.class)
     ProblemDetail handleIllegalState(IllegalStateException exception, HttpServletRequest request) {
         return problem(HttpStatus.CONFLICT, ErrorCode.BUSINESS_RULE_VIOLATION, exception.getMessage(), request);
+    }
+
+    @ExceptionHandler(OptimisticLockingFailureException.class)
+    ProblemDetail handleOptimisticLockingFailure(OptimisticLockingFailureException exception, HttpServletRequest request) {
+        return problem(HttpStatus.CONFLICT, ErrorCode.BUSINESS_RULE_VIOLATION,
+                "The contract billing balance changed concurrently. Retry the operation.", request);
     }
 
     @ExceptionHandler(PaymentGatewayWebhookAuthenticationException.class)

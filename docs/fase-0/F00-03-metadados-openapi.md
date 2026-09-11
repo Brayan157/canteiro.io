@@ -16,5 +16,5 @@ canal de suporte: eles serão adicionados quando forem definidos pelo produto.
 ## Sem mudança de escopo
 
 Esta alteração é somente de metadados de documentação. Endpoints, autenticação,
-regras de domínio e caminhos da UI Swagger (`/swagger` e `/api-docs`) foram
+regras de domínio e caminhos da UI Swagger (`/swagger` e `/v3/api-docs`) foram
 preservados.

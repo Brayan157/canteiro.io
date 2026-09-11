@@ -19,6 +19,7 @@ public final class AuditEvent {
     private final AuditPayload beforeData;
     private final AuditPayload afterData;
     private final AuditPayload metadata;
+    private final AuditPresentation presentation;
     private final Instant occurredAt;
     private final Instant createdAt;
 
@@ -33,7 +34,7 @@ public final class AuditEvent {
             UUID entityId,
             AuditPayload beforeData,
             AuditPayload afterData,
-            AuditPayload metadata,
+            AuditPayload metadata, AuditPresentation presentation,
             Instant occurredAt,
             Instant createdAt
     ) {
@@ -48,6 +49,7 @@ public final class AuditEvent {
         this.beforeData = beforeData;
         this.afterData = afterData;
         this.metadata = metadata == null ? AuditPayload.empty() : metadata;
+        this.presentation = presentation;
         this.occurredAt = require(occurredAt, "Occurred at");
         this.createdAt = createdAt;
     }
@@ -65,6 +67,11 @@ public final class AuditEvent {
             AuditPayload metadata,
             Instant occurredAt
     ) {
+        return create(companyId, actorUserId, actorType, module, action, entityType, entityId, beforeData, afterData, metadata, occurredAt, null);
+    }
+    public static AuditEvent create(UUID companyId, UUID actorUserId, AuditActorType actorType, AuditModule module,
+                                    AuditAction action, String entityType, UUID entityId, AuditPayload beforeData,
+                                    AuditPayload afterData, AuditPayload metadata, Instant occurredAt, AuditPresentation presentation) {
         return new AuditEvent(
                 null,
                 companyId,
@@ -76,7 +83,7 @@ public final class AuditEvent {
                 entityId,
                 beforeData,
                 afterData,
-                metadata,
+                metadata, presentation,
                 occurredAt,
                 null
         );
@@ -93,7 +100,7 @@ public final class AuditEvent {
             UUID entityId,
             AuditPayload beforeData,
             AuditPayload afterData,
-            AuditPayload metadata,
+            AuditPayload metadata, AuditPresentation presentation,
             Instant occurredAt,
             Instant createdAt
     ) {
@@ -108,7 +115,7 @@ public final class AuditEvent {
                 entityId,
                 beforeData,
                 afterData,
-                metadata,
+                metadata, presentation,
                 occurredAt,
                 createdAt
         );

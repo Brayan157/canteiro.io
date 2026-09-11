@@ -10,8 +10,8 @@ public final class AccountActivationToken {
 
     private final UUID id;
     private final UUID userId;
-    private final String tokenHash;
-    private final Instant expiresAt;
+    private String tokenHash;
+    private Instant expiresAt;
     private Instant consumedAt;
     private final Instant createdAt;
     private final Instant updatedAt;
@@ -58,5 +58,18 @@ public final class AccountActivationToken {
             throw new IllegalStateException("Activation token has expired");
         }
         consumedAt = currentInstant;
+    }
+
+    /** Replaces an outstanding invitation without creating a second token for the user. */
+    public void replace(String replacementTokenHash, Instant replacementExpiresAt) {
+        if (replacementTokenHash == null || replacementTokenHash.isBlank()) {
+            throw new IllegalArgumentException("Replacement activation token hash is required");
+        }
+        if (replacementExpiresAt == null) {
+            throw new IllegalArgumentException("Replacement activation token expiration is required");
+        }
+        tokenHash = replacementTokenHash;
+        expiresAt = replacementExpiresAt;
+        consumedAt = null;
     }
 }

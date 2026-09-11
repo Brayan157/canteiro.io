@@ -4,6 +4,7 @@ import com.nimbusds.jose.jwk.source.ImmutableSecret;
 import com.renovar.canteiro.io.identity.application.AuthenticationProperties;
 import com.renovar.canteiro.io.identity.application.AccountActivationProperties;
 import com.renovar.canteiro.io.identity.application.PasswordResetProperties;
+import com.renovar.canteiro.io.identity.application.RefreshCookieProperties;
 import com.renovar.canteiro.io.platform.support.infrastructure.PlatformOperatorAuthenticationFilter;
 import com.renovar.canteiro.io.platform.support.infrastructure.SupportTargetContextFilter;
 import com.renovar.canteiro.io.platform.subscription.infrastructure.SubscriptionAccessFilter;
@@ -24,15 +25,25 @@ import org.springframework.security.oauth2.jwt.JwtValidators;
 import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
 import org.springframework.security.web.SecurityFilterChain;
 import com.renovar.canteiro.io.tenancy.infrastructure.TenantContextAuthenticationFilter;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 
 @Configuration
 @EnableWebSecurity
 @RequiredArgsConstructor
-@EnableConfigurationProperties({AuthenticationProperties.class, PasswordResetProperties.class, AccountActivationProperties.class})
+@EnableConfigurationProperties({
+        AuthenticationProperties.class,
+        PasswordResetProperties.class,
+        AccountActivationProperties.class,
+        RefreshCookieProperties.class,
+        ApiCorsProperties.class
+})
 public class JwtSecurityConfiguration {
 
     private final AuthenticationProperties authenticationProperties;
@@ -40,14 +51,29 @@ public class JwtSecurityConfiguration {
     private final SubscriptionAccessFilter subscriptionAccessFilter;
     private final PlatformOperatorAuthenticationFilter platformOperatorAuthenticationFilter;
     private final SupportTargetContextFilter supportTargetContextFilter;
+    private final ApiCorsProperties apiCorsProperties;
 
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity httpSecurity) throws Exception {
         return httpSecurity
+                .cors(Customizer.withDefaults())
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(authorize -> authorize
-                        .requestMatchers("/api/v1/auth/**", "/api/v1/onboarding/**", "/api/v1/webhooks/payments", "/swagger/**", "/api-docs/**", "/v3/api-docs/**").permitAll()
+                        .requestMatchers(
+                                "/api/v1/auth/activate",
+                                "/api/v1/auth/activation/resend",
+                                "/api/v1/auth/login",
+                                "/api/v1/auth/refresh",
+                                "/api/v1/auth/logout",
+                                "/api/v1/auth/password-reset/**",
+                                "/api/v1/catalog",
+                                "/api/v1/onboarding/**",
+                                "/api/v1/webhooks/payments",
+                                "/swagger/**",
+                                "/api-docs/**",
+                                "/v3/api-docs/**"
+                        ).permitAll()
                         .anyRequest().authenticated()
                 )
                 .oauth2ResourceServer(resourceServer -> resourceServer.jwt(Customizer.withDefaults()))
@@ -56,6 +82,20 @@ public class JwtSecurityConfiguration {
                 .addFilterAfter(platformOperatorAuthenticationFilter, TenantContextAuthenticationFilter.class)
                 .addFilterAfter(supportTargetContextFilter, PlatformOperatorAuthenticationFilter.class)
                 .build();
+    }
+
+    @Bean
+    CorsConfigurationSource corsConfigurationSource() {
+        CorsConfiguration configuration = new CorsConfiguration();
+        configuration.setAllowedOrigins(apiCorsProperties.allowedOrigins());
+        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
+        configuration.setAllowedHeaders(List.of("Accept", "Authorization", "Content-Type", "X-Correlation-Id"));
+        configuration.setExposedHeaders(List.of("X-Correlation-Id"));
+        configuration.setAllowCredentials(true);
+
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/api/**", configuration);
+        return source;
     }
 
     @Bean

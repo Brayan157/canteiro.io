@@ -54,7 +54,7 @@ class AuthenticationIntegrationTest extends AbstractPostgresIntegrationTest {
     void logsInWithActiveCredentialsAndStoresOnlyRefreshTokenHash() {
         User user = createActiveUser("login@example.com");
 
-        AuthenticationTokens tokens = authenticationService.login(new LoginCommand("LOGIN@example.com", PASSWORD));
+        AuthenticationTokens tokens = authenticationService.login(new LoginCommand("LOGIN@example.com", PASSWORD, true));
         Jwt accessToken = jwtDecoder.decode(tokens.accessToken());
         RefreshToken storedRefreshToken = refreshTokenRepository.findByTokenHash(refreshTokenHasher.hash(tokens.refreshToken()))
                 .orElseThrow();
@@ -63,6 +63,8 @@ class AuthenticationIntegrationTest extends AbstractPostgresIntegrationTest {
         assertEquals("login@example.com", accessToken.getClaimAsString("email"));
         assertEquals(UserType.COMPANY.name(), accessToken.getClaimAsString("user_type"));
         assertEquals(900, tokens.accessTokenExpiresInSeconds());
+        assertTrue(tokens.rememberAccess());
+        assertTrue(storedRefreshToken.isRememberAccess());
         assertFalse(storedRefreshToken.getTokenHash().contains(tokens.refreshToken()));
         assertTrue(storedRefreshToken.isUsableAt(Instant.now()));
     }
@@ -73,14 +75,22 @@ class AuthenticationIntegrationTest extends AbstractPostgresIntegrationTest {
 
         assertThrows(
                 InvalidAuthenticationException.class,
-                () -> authenticationService.login(new LoginCommand("wrong-password@example.com", "Senha#Errada2026"))
+                () -> authenticationService.login(new LoginCommand(
+                        "wrong-password@example.com",
+                        "Senha#Errada2026",
+                        false
+                ))
         );
     }
 
     @Test
     void rotatesRefreshTokenAndRejectsReuseOfThePreviousToken() {
         createActiveUser("rotation@example.com");
-        AuthenticationTokens firstSession = authenticationService.login(new LoginCommand("rotation@example.com", PASSWORD));
+        AuthenticationTokens firstSession = authenticationService.login(new LoginCommand(
+                "rotation@example.com",
+                PASSWORD,
+                true
+        ));
 
         AuthenticationTokens rotatedSession = authenticationService.refresh(new RefreshSessionCommand(firstSession.refreshToken()));
         RefreshToken previousRefreshToken = refreshTokenRepository.findByTokenHash(
@@ -88,6 +98,7 @@ class AuthenticationIntegrationTest extends AbstractPostgresIntegrationTest {
         ).orElseThrow();
 
         assertNotEquals(firstSession.refreshToken(), rotatedSession.refreshToken());
+        assertTrue(rotatedSession.rememberAccess());
         assertNotNull(previousRefreshToken.getRevokedAt());
         assertNotNull(previousRefreshToken.getReplacedByTokenId());
         assertThrows(
@@ -99,7 +110,11 @@ class AuthenticationIntegrationTest extends AbstractPostgresIntegrationTest {
     @Test
     void revokesRefreshTokenOnLogout() {
         createActiveUser("logout@example.com");
-        AuthenticationTokens session = authenticationService.login(new LoginCommand("logout@example.com", PASSWORD));
+        AuthenticationTokens session = authenticationService.login(new LoginCommand(
+                "logout@example.com",
+                PASSWORD,
+                false
+        ));
 
         authenticationService.logout(new LogoutCommand(session.refreshToken()));
 

@@ -1,0 +1,2 @@
+ALTER TABLE contract
+    ADD COLUMN billing_version BIGINT NOT NULL DEFAULT 0;

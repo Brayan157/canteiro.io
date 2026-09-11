@@ -13,6 +13,7 @@ import com.renovar.canteiro.io.access.domain.UserRole;
 import com.renovar.canteiro.io.access.domain.UserRoleRepository;
 import com.renovar.canteiro.io.governance.application.ApproveChangeRequestCommand;
 import com.renovar.canteiro.io.governance.application.ChangeRequestDecisionService;
+import com.renovar.canteiro.io.governance.application.ChangeRequestDecisionResult;
 import com.renovar.canteiro.io.governance.application.ChangeRequestService;
 import com.renovar.canteiro.io.governance.application.CreateChangeRequestCommand;
 import com.renovar.canteiro.io.governance.application.RejectChangeRequestCommand;
@@ -30,6 +31,7 @@ import com.renovar.canteiro.io.identity.domain.CompanyUserRepository;
 import com.renovar.canteiro.io.identity.domain.User;
 import com.renovar.canteiro.io.identity.domain.UserRepository;
 import com.renovar.canteiro.io.identity.domain.UserType;
+import com.renovar.canteiro.io.employees.domain.EmployeeRepository;
 import com.renovar.canteiro.io.platform.company.domain.Company;
 import com.renovar.canteiro.io.platform.company.domain.CompanyRepository;
 import com.renovar.canteiro.io.shared.api.error.ApiException;
@@ -86,6 +88,9 @@ class ChangeRequestDecisionIntegrationTest extends AbstractPostgresIntegrationTe
 
     @Autowired
     private TenantContextHolder tenantContextHolder;
+
+    @Autowired
+    private EmployeeRepository employeeRepository;
 
     @AfterEach
     void clearTenantContext() {
@@ -146,6 +151,36 @@ class ChangeRequestDecisionIntegrationTest extends AbstractPostgresIntegrationTe
         assertNull(persistedRequest.getDecidedAt());
     }
 
+    @Test
+    void returnsTheEmployeeCreatedWhenAnEmployeeCreationRequestIsApproved() {
+        Company company = createCompany("Employee approval");
+        User requester = createCompanyUser(company, "employee-requester@example.com");
+        User approver = createCompanyUser(company, "employee-approver@example.com");
+        ChangeRequest request = changeRequestRepository.save(ChangeRequest.create(
+                company.getId(), requester.getId(), AuditModule.EMPLOYEES, ChangeRequestOperation.CREATE,
+                "Employee", null, 0,
+                new ChangeRequestSnapshot(null, new AuditPayload(Map.of(
+                        "fullName", "Marina Souza", "jobTitle", "Encarregada", "department", "Obras",
+                        "documentType", "CPF", "documentNumber", "52998224725", "birthDate", "1990-05-20",
+                        "employmentType", "EMPLOYEE", "employmentStartDate", "2025-02-03",
+                        "currentlyEmployed", true, "gender", "FEMALE", "compensationFrequency", "MONTHLY",
+                        "compensationAmount", "4500.00"
+                ))),
+                "Needs approval"
+        ));
+        grantEmployeeApprovalPermission(approver, company);
+        tenantContextHolder.setCurrentTenant(new TenantContext(approver.getId(), company.getId()));
+
+        ChangeRequestDecisionResult result = changeRequestDecisionService.approveWithAppliedEntity(
+                new ApproveChangeRequestCommand(request.getId(), "Approved")
+        );
+
+        assertEquals(ChangeRequestStatus.APPROVED, result.changeRequest().getStatus());
+        assertEquals("Employee", result.appliedEntity().type());
+        assertEquals("Marina Souza", result.appliedEntity().displayName());
+        assertTrue(employeeRepository.findByIdAndCompanyId(result.appliedEntity().id(), company.getId()).isPresent());
+    }
+
     private ChangeRequest createPendingContractChangeRequest(User requester, Company company, String beforeStatus, String afterStatus) {
         tenantContextHolder.setCurrentTenant(new TenantContext(requester.getId(), company.getId()));
         return changeRequestService.create(new CreateChangeRequestCommand(
@@ -180,6 +215,14 @@ class ChangeRequestDecisionIntegrationTest extends AbstractPostgresIntegrationTe
                 AccessAction.REQUEST_UPDATE
         ).orElseThrow();
         rolePermissionRepository.save(RolePermission.create(role.getId(), requestPermission.getId()));
+        userRoleRepository.save(UserRole.create(user.getId(), role.getId(), company.getId()));
+    }
+
+    private void grantEmployeeApprovalPermission(User user, Company company) {
+        Role role = roleRepository.save(Role.create(company.getId(), "Employee approver " + UUID.randomUUID(), null));
+        Permission approvePermission = permissionRepository.findByModuleAndAction(AccessModule.EMPLOYEES, AccessAction.APPROVE)
+                .orElseThrow();
+        rolePermissionRepository.save(RolePermission.create(role.getId(), approvePermission.getId()));
         userRoleRepository.save(UserRole.create(user.getId(), role.getId(), company.getId()));
     }
 

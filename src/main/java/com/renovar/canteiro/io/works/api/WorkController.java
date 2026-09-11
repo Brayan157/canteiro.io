@@ -18,7 +18,12 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.RequestParam;
+import com.renovar.canteiro.io.shared.api.pagination.PageQuery;
+import com.renovar.canteiro.io.shared.api.pagination.PageResponse;
 
+import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @RestController
@@ -28,6 +33,21 @@ import java.util.UUID;
 public class WorkController {
 
     private final WorkManagementService workManagementService;
+
+    private static final Set<String> SORT_FIELDS = Set.of("name", "reference", "status", "createdAt", "updatedAt");
+
+    @GetMapping
+    @Operation(summary = "Lists works in the authenticated company")
+    public PageResponse<WorkResponse> findAll(
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer size,
+            @RequestParam(required = false) List<String> sort
+    ) {
+        return PageResponse.from(
+                workManagementService.findAll(new PageQuery(page, size, sort).toPageable(SORT_FIELDS)),
+                this::toResponse
+        );
+    }
 
     @PostMapping
     @Operation(summary = "Creates a work directly or submits it for approval")

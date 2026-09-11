@@ -9,6 +9,7 @@ public record RoleResponse(
         String name,
         String description,
         boolean active,
+        boolean systemProtected,
         Set<UUID> permissionIds,
         Instant createdAt,
         Instant updatedAt

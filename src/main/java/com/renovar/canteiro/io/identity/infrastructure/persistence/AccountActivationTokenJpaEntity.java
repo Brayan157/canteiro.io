@@ -38,4 +38,10 @@ public class AccountActivationTokenJpaEntity extends BaseJpaEntity {
     public void consume(Instant consumedAt) {
         this.consumedAt = consumedAt;
     }
+
+    public void replace(String tokenHash, Instant expiresAt) {
+        this.tokenHash = tokenHash;
+        this.expiresAt = expiresAt;
+        this.consumedAt = null;
+    }
 }

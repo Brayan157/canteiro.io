@@ -6,6 +6,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
 import java.util.Optional;
+import java.util.UUID;
 
 @Repository
 @RequiredArgsConstructor
@@ -31,6 +32,12 @@ public class JpaAccountActivationTokenRepository implements AccountActivationTok
     @Override
     public Optional<AccountActivationToken> findByTokenHash(String tokenHash) {
         return accountActivationTokenJpaRepository.findByTokenHash(tokenHash)
+                .map(accountActivationTokenPersistenceMapper::toDomain);
+    }
+
+    @Override
+    public Optional<AccountActivationToken> findByUserId(UUID userId) {
+        return accountActivationTokenJpaRepository.findByUserId(userId)
                 .map(accountActivationTokenPersistenceMapper::toDomain);
     }
 }

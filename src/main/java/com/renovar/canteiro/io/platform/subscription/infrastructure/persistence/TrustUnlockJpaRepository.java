@@ -12,6 +12,8 @@ interface TrustUnlockJpaRepository extends JpaRepository<TrustUnlockJpaEntity, U
 
     long countByChargeId(UUID chargeId);
 
+    List<TrustUnlockJpaEntity> findByChargeIdOrderByExpiresAtDesc(UUID chargeId);
+
     @Query("""
             SELECT DISTINCT trustUnlock.chargeId
             FROM TrustUnlockJpaEntity trustUnlock

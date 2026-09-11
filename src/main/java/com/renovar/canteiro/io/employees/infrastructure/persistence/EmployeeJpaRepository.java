@@ -9,5 +9,6 @@ import java.util.UUID;
 
 interface EmployeeJpaRepository extends JpaRepository<EmployeeJpaEntity, UUID> {
     Optional<EmployeeJpaEntity> findByIdAndCompanyId(UUID id, UUID companyId);
+    Optional<EmployeeJpaEntity> findByUserIdAndCompanyId(UUID userId, UUID companyId);
     Page<EmployeeJpaEntity> findByCompanyId(UUID companyId, Pageable pageable);
 }

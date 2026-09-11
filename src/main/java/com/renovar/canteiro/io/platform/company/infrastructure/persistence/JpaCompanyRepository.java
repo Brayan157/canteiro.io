@@ -3,6 +3,8 @@ package com.renovar.canteiro.io.platform.company.infrastructure.persistence;
 import com.renovar.canteiro.io.platform.company.domain.Company;
 import com.renovar.canteiro.io.platform.company.domain.CompanyRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -46,5 +48,10 @@ public class JpaCompanyRepository implements CompanyRepository {
     @Override
     public List<Company> findAll() {
         return companyJpaRepository.findAll().stream().map(companyPersistenceMapper::toDomain).toList();
+    }
+
+    @Override
+    public Page<Company> findAll(Pageable pageable) {
+        return companyJpaRepository.findAll(pageable).map(companyPersistenceMapper::toDomain);
     }
 }

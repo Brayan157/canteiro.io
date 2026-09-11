@@ -23,6 +23,8 @@ import com.renovar.canteiro.io.works.domain.WorkRepository;
 import com.renovar.canteiro.io.works.domain.WorkStatus;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
@@ -73,6 +75,12 @@ public class WorkManagementService {
         UUID companyId = tenantContextHolder.requireCurrentTenant().companyId();
         return workRepository.findByIdAndCompanyId(workId, companyId)
                 .orElseThrow(() -> new TenantResourceNotFoundException("Work"));
+    }
+
+    @Transactional(readOnly = true)
+    public Page<Work> findAll(Pageable pageable) {
+        accessAuthorizationService.requirePermission(AccessModule.WORKS, AccessAction.READ);
+        return workRepository.findByCompanyId(tenantContextHolder.requireCurrentTenant().companyId(), pageable);
     }
 
     @Transactional
