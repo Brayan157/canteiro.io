@@ -45,6 +45,9 @@ public final class ContractService {
                 "Contract service gross amount must not be negative", 2)) != 0) {
             throw new IllegalArgumentException("Contract service gross amount must equal quantity times unit price");
         }
+        if (discountType == null && discountValue != null) {
+            throw new IllegalArgumentException("Contract service discount type is required when a discount value is provided");
+        }
         this.discountType = discountType;
         this.discountValue = discountType == null ? null : requireDiscountValue(discountType, discountValue);
         this.discountAmount = calculateDiscountAmount(this.grossAmount, this.discountType, this.discountValue);
@@ -87,6 +90,24 @@ public final class ContractService {
                                             Instant createdAt, Instant updatedAt) {
         return new ContractService(id, companyId, contractId, sourceServiceTemplateId, name, description, status, quantity,
                 unitPrice, grossAmount, discountType, discountValue, discountAmount, netAmount, createdAt, updatedAt);
+    }
+
+    public static ContractService create(UUID companyId, UUID contractId, UUID sourceServiceTemplateId, String name, String description,
+                                         ContractServiceStatus status, BigDecimal quantity, BigDecimal unitPrice,
+                                         DiscountType discountType, BigDecimal discountValue) {
+        return new ContractService(null, companyId, contractId, sourceServiceTemplateId, name, description, status, quantity, unitPrice,
+                null, discountType, discountValue, null, null, null, null);
+    }
+
+    public ContractService updateProfile(String name, String description, ContractServiceStatus status,
+                                         BigDecimal quantity, BigDecimal unitPrice) {
+        return new ContractService(id, companyId, contractId, sourceServiceTemplateId, name, description, status,
+                quantity, unitPrice, null, discountType, discountValue, null, null, createdAt, updatedAt);
+    }
+
+    public ContractService withDiscount(DiscountType discountType, BigDecimal discountValue) {
+        return new ContractService(id, companyId, contractId, sourceServiceTemplateId, name, description, status,
+                quantity, unitPrice, null, discountType, discountValue, null, null, createdAt, updatedAt);
     }
 
     private static String requireText(String value, String message) {

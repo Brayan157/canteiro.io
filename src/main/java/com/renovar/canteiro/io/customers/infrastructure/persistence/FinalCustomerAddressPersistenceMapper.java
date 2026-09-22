@@ -14,6 +14,12 @@ class FinalCustomerAddressPersistenceMapper {
         );
     }
 
+    void updateJpaEntity(FinalCustomerAddressJpaEntity entity, FinalCustomerAddress address) {
+        entity.update(address.getLabel(), address.getPostalCode(), address.getStreet(), address.getNumber(),
+                address.getComplement(), address.getDistrict(), address.getCity(), address.getState(), address.getCountry(),
+                address.isPrimaryAddress(), address.isActive());
+    }
+
     FinalCustomerAddress toDomain(FinalCustomerAddressJpaEntity entity) {
         return FinalCustomerAddress.rehydrate(
                 entity.getId(), entity.getCompanyId(), entity.getFinalCustomerId(), entity.getLabel(), entity.getPostalCode(),

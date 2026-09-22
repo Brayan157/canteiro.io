@@ -79,4 +79,19 @@ class ContractServiceJpaEntity extends BaseJpaEntity {
         this.discountAmount = discountAmount;
         this.netAmount = netAmount;
     }
+
+    void update(String name, String description, ContractServiceStatus status, BigDecimal quantity, BigDecimal unitPrice,
+                BigDecimal grossAmount, DiscountType discountType, BigDecimal discountValue, BigDecimal discountAmount,
+                BigDecimal netAmount) {
+        this.name = name;
+        this.description = description;
+        this.status = status;
+        this.quantity = quantity;
+        this.unitPrice = unitPrice;
+        this.grossAmount = grossAmount;
+        this.discountType = discountType;
+        this.discountValue = discountValue;
+        this.discountAmount = discountAmount;
+        this.netAmount = netAmount;
+    }
 }

@@ -8,6 +8,7 @@ import java.util.UUID;
 public record ContractResponse(
         UUID id,
         UUID workId,
+        String contractIdentifier,
         String reference,
         String name,
         ContractStatus status,

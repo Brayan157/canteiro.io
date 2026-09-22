@@ -25,4 +25,10 @@ public class WorkJpaEntity extends BaseJpaEntity {
     @Column(name = "expected_completion_on") private LocalDate expectedCompletionOn;
     @Column(name = "completed_on") private LocalDate completedOn;
     public WorkJpaEntity(UUID companyId, UUID finalCustomerId, String name, String reference, WorkExecutionLocationType executionLocationType, String executionAddress, WorkStatus status, LocalDate startedOn, LocalDate expectedCompletionOn, LocalDate completedOn) { this.companyId=companyId; this.finalCustomerId=finalCustomerId; this.name=name; this.reference=reference; this.executionLocationType=executionLocationType; this.executionAddress=executionAddress; this.status=status; this.startedOn=startedOn; this.expectedCompletionOn=expectedCompletionOn; this.completedOn=completedOn; }
+    public void updateProfile(String name, String reference, WorkExecutionLocationType executionLocationType, String executionAddress,
+                              WorkStatus status, LocalDate startedOn, LocalDate expectedCompletionOn, LocalDate completedOn) {
+        this.name = name; this.reference = reference; this.executionLocationType = executionLocationType;
+        this.executionAddress = executionAddress; this.status = status; this.startedOn = startedOn;
+        this.expectedCompletionOn = expectedCompletionOn; this.completedOn = completedOn;
+    }
 }

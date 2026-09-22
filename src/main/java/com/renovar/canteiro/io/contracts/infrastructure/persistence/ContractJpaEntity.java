@@ -27,6 +27,9 @@ public class ContractJpaEntity extends BaseJpaEntity {
     @Column(name = "work_id", nullable = false, updatable = false)
     private UUID workId;
 
+    @Column(name = "contract_identifier", length = 100)
+    private String contractIdentifier;
+
     @Column(name = "reference", length = 100)
     private String reference;
 
@@ -52,8 +55,30 @@ public class ContractJpaEntity extends BaseJpaEntity {
 
     public ContractJpaEntity(UUID companyId, UUID workId, String reference, String name, ContractStatus status,
                              LocalDate startedOn, LocalDate expectedCompletionOn, LocalDate completedOn) {
+        this(companyId, workId, null, reference, name, status, startedOn, expectedCompletionOn, completedOn);
+    }
+
+    public ContractJpaEntity(UUID companyId, UUID workId, String contractIdentifier, String reference, String name, ContractStatus status,
+                             LocalDate startedOn, LocalDate expectedCompletionOn, LocalDate completedOn) {
         this.companyId = companyId;
         this.workId = workId;
+        this.contractIdentifier = contractIdentifier;
+        this.reference = reference;
+        this.name = name;
+        this.status = status;
+        this.startedOn = startedOn;
+        this.expectedCompletionOn = expectedCompletionOn;
+        this.completedOn = completedOn;
+    }
+
+    public void updateProfile(String reference, String name, ContractStatus status, LocalDate startedOn,
+                              LocalDate expectedCompletionOn, LocalDate completedOn) {
+        updateProfile(contractIdentifier, reference, name, status, startedOn, expectedCompletionOn, completedOn);
+    }
+
+    public void updateProfile(String contractIdentifier, String reference, String name, ContractStatus status, LocalDate startedOn,
+                              LocalDate expectedCompletionOn, LocalDate completedOn) {
+        this.contractIdentifier = contractIdentifier;
         this.reference = reference;
         this.name = name;
         this.status = status;

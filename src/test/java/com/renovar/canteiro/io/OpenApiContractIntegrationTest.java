@@ -65,6 +65,12 @@ class OpenApiContractIntegrationTest extends AbstractPostgresIntegrationTest {
         assertTrue(openApi.contains("\"amount\":{\"type\":\"string\""));
         assertEmployeeAndAccessUserSchemas(openApi);
         assertEmployeeProfilePathsAndSchemas(openApi);
+        assertCustomerAndEmployeeListFilters(openApi);
+        assertFinalCustomerContactAndAddressCrud(openApi);
+        assertBillingControlAmountsUseCanonicalDecimalStrings(openApi);
+        assertContractServiceAndDiscountContract(openApi);
+        assertWorkAndContractEditingAndListFilters(openApi);
+        assertMeasurementExportsAreBinaryStreamingDownloads(openApi);
         assertAuditEventSchema(openApi);
         assertChangeRequestApprovalInboxContract(openApi);
 
@@ -168,6 +174,151 @@ class OpenApiContractIntegrationTest extends AbstractPostgresIntegrationTest {
         assertTrue(document.at("/components/schemas/EmployeeEmploymentType/enum").isArray());
         assertTrue(document.at("/components/schemas/EmployeeGender/enum").isArray());
         assertTrue(document.at("/components/schemas/EmployeeCompensationFrequency/enum").isArray());
+    }
+
+    private void assertCustomerAndEmployeeListFilters(String openApi) throws Exception {
+        JsonNode document = new ObjectMapper().readTree(openApi);
+        String customers = "/api/v1/company/customers";
+        assertOperation(document, customers, "get", "200", "403");
+        assertOperation(document, customers + "/{customerId}", "put", "200", "202", "400", "403", "404", "409");
+        assertEquals("#/components/schemas/PageResponseFinalCustomerResponse",
+                responseSchemaReference(document, customers, "get", "200"));
+        JsonNode customerParameters = document.at("/paths/" + escapeJsonPointer(customers) + "/get/parameters");
+        for (String parameter : Set.of("name", "document", "customerType", "active")) {
+            assertTrue(hasParameter(customerParameters, parameter), () -> "Customer query is missing " + parameter);
+        }
+        JsonNode employeeParameters = document.at("/paths/~1api~1v1~1company~1employees/get/parameters");
+        for (String parameter : Set.of("name", "document", "jobTitle", "department", "employmentType",
+                "compensationFrequency", "compensationMin", "compensationMax", "currentlyEmployed", "active")) {
+            assertTrue(hasParameter(employeeParameters, parameter), () -> "Employee query is missing " + parameter);
+        }
+        JsonNode updateCustomerRequired = document.at("/components/schemas/UpdateFinalCustomerRequest/required");
+        for (String field : Set.of("customerType", "name", "document")) {
+            assertTrue(contains(updateCustomerRequired, field), () -> "UpdateFinalCustomerRequest must require " + field);
+        }
+    }
+
+    private void assertWorkAndContractEditingAndListFilters(String openApi) throws Exception {
+        JsonNode document = new ObjectMapper().readTree(openApi);
+        String works = "/api/v1/company/works";
+        String contracts = "/api/v1/company/contracts";
+        assertOperation(document, works, "get", "200", "403");
+        assertOperation(document, works + "/{workId}", "put", "200", "202", "400", "403", "404");
+        assertEquals("#/components/schemas/PageResponseWorkResponse",
+                responseSchemaReference(document, works, "get", "200"));
+        JsonNode workParameters = document.at("/paths/" + escapeJsonPointer(works) + "/get/parameters");
+        for (String parameter : Set.of("name", "reference", "finalCustomerId", "finalCustomerName", "finalCustomerDocument", "status", "executionLocationType",
+                "startedFrom", "startedTo", "expectedCompletionFrom", "expectedCompletionTo")) {
+            assertTrue(hasParameter(workParameters, parameter), () -> "Work query is missing " + parameter);
+        }
+        JsonNode updateWorkRequired = document.at("/components/schemas/UpdateWorkRequest/required");
+        for (String field : Set.of("name", "executionLocationType", "status")) {
+            assertTrue(contains(updateWorkRequired, field), () -> "UpdateWorkRequest must require " + field);
+        }
+        assertFalse(document.at("/components/schemas/UpdateWorkRequest/properties").has("finalCustomerId"));
+
+        assertOperation(document, contracts, "get", "200", "403");
+        assertOperation(document, contracts + "/{contractId}", "put", "200", "202", "400", "403", "404");
+        assertEquals("#/components/schemas/PageResponseContractResponse",
+                responseSchemaReference(document, contracts, "get", "200"));
+        JsonNode contractParameters = document.at("/paths/" + escapeJsonPointer(contracts) + "/get/parameters");
+        for (String parameter : Set.of("name", "reference", "workId", "workName", "finalCustomerName", "status", "startedFrom", "startedTo",
+                "expectedCompletionFrom", "expectedCompletionTo", "completedFrom", "completedTo")) {
+            assertTrue(hasParameter(contractParameters, parameter), () -> "Contract query is missing " + parameter);
+        }
+        JsonNode updateContractRequired = document.at("/components/schemas/UpdateContractRequest/required");
+        for (String field : Set.of("name", "status")) {
+            assertTrue(contains(updateContractRequired, field), () -> "UpdateContractRequest must require " + field);
+        }
+        assertFalse(document.at("/components/schemas/UpdateContractRequest/properties").has("workId"));
+    }
+
+    private void assertBillingControlAmountsUseCanonicalDecimalStrings(String openApi) throws Exception {
+        JsonNode document = new ObjectMapper().readTree(openApi);
+        String contractBillingControl = "/api/v1/company/billing-control/contracts/{contractId}";
+        assertOperation(document, contractBillingControl, "get", "200");
+        assertCanonicalDecimalProperties(document.at("/components/schemas/ContractBillingControlResponse/properties"),
+                "contractNetAmount", "activeAllocatedAmount", "availableAmount");
+        assertCanonicalDecimalProperties(document.at("/components/schemas/BillingServiceControlResponse/properties"),
+                "serviceNetAmount", "activeAllocatedAmount", "availableAmount", "issuedInInvoicesAmount");
+        assertCanonicalDecimalProperties(document.at("/components/schemas/BillingAllocationControlResponse/properties"),
+                "allocatedAmount", "registeredInvoiceAmount", "availableInvoiceAmount");
+    }
+
+    private void assertContractServiceAndDiscountContract(String openApi) throws Exception {
+        JsonNode document = new ObjectMapper().readTree(openApi);
+        String contract = "/api/v1/company/contracts/{contractId}";
+        String services = contract + "/services";
+        String service = services + "/{serviceId}";
+        assertOperation(document, services, "post", "201", "202", "400", "403", "404", "409");
+        assertOperation(document, service, "put", "200", "202", "400", "403", "404", "409");
+        assertOperation(document, service + "/discount", "put", "200", "202", "400", "403", "404", "409");
+        assertOperation(document, contract + "/discount", "put", "200", "202", "400", "403", "404", "409");
+        assertOperation(document, "/api/v1/company/service-templates", "get", "200", "403");
+        assertCanonicalDecimalProperties(document.at("/components/schemas/ContractServiceResponse/properties"),
+                "quantity", "unitPrice", "grossAmount", "discountValue", "discountAmount", "netAmount");
+        assertTrue(document.at("/components/schemas/ContractResponse/properties").has("contractIdentifier"));
+        assertTrue(document.at("/components/schemas/UpsertContractServiceRequest/properties").has("sourceServiceTemplateId"));
+        assertFalse(document.at("/components/schemas/UpsertContractServiceRequest/properties").has("contractId"));
+    }
+
+    private void assertCanonicalDecimalProperties(JsonNode properties, String... names) {
+        for (String name : names) {
+            JsonNode property = properties.path(name);
+            assertEquals("string", property.path("type").asText(), () -> name + " must be a decimal string");
+            assertEquals("decimal", property.path("format").asText(), () -> name + " must declare decimal format");
+            assertEquals("99.90", property.path("example").asText(), () -> name + " must use canonical decimal example");
+        }
+    }
+
+    private void assertFinalCustomerContactAndAddressCrud(String openApi) throws Exception {
+        JsonNode document = new ObjectMapper().readTree(openApi);
+        String customer = "/api/v1/company/customers/{customerId}";
+        String contacts = customer + "/contacts";
+        String contact = contacts + "/{contactId}";
+        String contactPrimary = contact + "/primary";
+        String addresses = customer + "/addresses";
+        String address = addresses + "/{addressId}";
+        String addressPrimary = address + "/primary";
+
+        assertOperation(document, contacts, "get", "200", "403", "404");
+        assertOperation(document, contacts, "post", "201", "202", "400", "403", "404");
+        assertOperation(document, contact, "put", "200", "202", "400", "403", "404");
+        assertOperation(document, contactPrimary, "put", "200", "202", "403", "404");
+        assertOperation(document, contact, "delete", "204", "202", "403", "404");
+        assertOperation(document, addresses, "get", "200", "403", "404");
+        assertOperation(document, addresses, "post", "201", "202", "400", "403", "404");
+        assertOperation(document, address, "put", "200", "202", "400", "403", "404");
+        assertOperation(document, addressPrimary, "put", "200", "202", "403", "404");
+        assertOperation(document, address, "delete", "204", "202", "403", "404");
+
+        assertEquals("array", document.at("/paths/" + escapeJsonPointer(contacts)
+                + "/get/responses/200/content/application~1json/schema/type").asText());
+        assertEquals("#/components/schemas/FinalCustomerContactResponse", document.at("/paths/"
+                + escapeJsonPointer(contacts) + "/get/responses/200/content/application~1json/schema/items/$ref").asText());
+        assertEquals("array", document.at("/paths/" + escapeJsonPointer(addresses)
+                + "/get/responses/200/content/application~1json/schema/type").asText());
+        assertEquals("#/components/schemas/FinalCustomerAddressResponse", document.at("/paths/"
+                + escapeJsonPointer(addresses) + "/get/responses/200/content/application~1json/schema/items/$ref").asText());
+        assertTrue(document.at("/components/schemas/FinalCustomerContactRequest/required").toString().contains("name"));
+        JsonNode addressRequired = document.at("/components/schemas/FinalCustomerAddressRequest/required");
+        for (String field : Set.of("street", "city", "state")) {
+            assertTrue(contains(addressRequired, field), () -> "FinalCustomerAddressRequest must require " + field);
+        }
+    }
+
+    private void assertMeasurementExportsAreBinaryStreamingDownloads(String openApi) throws Exception {
+        JsonNode document = new ObjectMapper().readTree(openApi);
+        String base = "/api/v1/company/measurements/{measurementId}/versions/{versionId}";
+        String pdf = base + "/pdf";
+        String spreadsheet = base + "/spreadsheet";
+        assertOperation(document, pdf, "get", "200", "403", "404");
+        assertOperation(document, spreadsheet, "get", "200", "403", "404");
+        assertEquals("binary", document.at("/paths/" + escapeJsonPointer(pdf)
+                + "/get/responses/200/content/application~1pdf/schema/format").asText());
+        assertEquals("binary", document.at("/paths/" + escapeJsonPointer(spreadsheet)
+                + "/get/responses/200/content/application~1vnd.openxmlformats-officedocument.spreadsheetml.sheet/schema/format")
+                .asText());
     }
 
     private void assertOperation(JsonNode document, String path, String method, String... expectedStatuses) {

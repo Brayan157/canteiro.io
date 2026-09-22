@@ -70,9 +70,9 @@ public class EmployeeManagementService {
     }
 
     @Transactional(readOnly = true)
-    public Page<Employee> findAll(Pageable pageable) {
+    public Page<Employee> findAll(EmployeeFilter filter, Pageable pageable) {
         authorizationService.requirePermission(AccessModule.EMPLOYEES, AccessAction.READ);
-        return employeeRepository.findByCompanyId(tenantContextHolder.requireCurrentTenant().companyId(), pageable);
+        return employeeRepository.findByCompanyId(tenantContextHolder.requireCurrentTenant().companyId(), filter, pageable);
     }
 
     @Transactional(readOnly = true)

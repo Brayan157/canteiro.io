@@ -47,6 +47,21 @@ public final class FinalCustomerContact {
         return new FinalCustomerContact(id, companyId, finalCustomerId, name, email, phone, primaryContact, active, createdAt, updatedAt);
     }
 
+    public FinalCustomerContact update(String name, String email, String phone, boolean primaryContact) {
+        return new FinalCustomerContact(id, companyId, finalCustomerId, name, email, phone, primaryContact, active,
+                createdAt, updatedAt);
+    }
+
+    public FinalCustomerContact withPrimaryContact(boolean primaryContact) {
+        return new FinalCustomerContact(id, companyId, finalCustomerId, name, email, phone, primaryContact, active,
+                createdAt, updatedAt);
+    }
+
+    public FinalCustomerContact deactivate() {
+        return new FinalCustomerContact(id, companyId, finalCustomerId, name, email, phone, false, false,
+                createdAt, updatedAt);
+    }
+
     private static <T> T require(T value, String message) {
         if (value == null) {
             throw new IllegalArgumentException(message);

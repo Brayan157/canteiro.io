@@ -112,6 +112,7 @@ Regras para escolher o perfil:
 | F03-13 | Implementar revisão de contrato que bloqueia redução abaixo de faturamento aprovado. | F03-12 | Sol xhigh |
 | F03-14 | Testar hierarquia FinalCustomer → Work → Contract → ContractService e soft delete/status. | F03-01 a F03-13 | Terra xhigh |
 | F03-15 | Revisar modelo, descontos, tenant e constraints antes de faturamento. | F03-01 a F03-14 | Sol xhigh |
+| F03-16 | Concluído — Expor CRUD aprovado/direto de serviços, descontos explícitos, modelos de seleção e contrato decimal canônico para o frontend. | F03-08 a F03-13 | Sol xhigh |
 
 **Gate da fase:** obra é entidade própria; contrato pertence a uma obra; serviço pertence a um contrato; valores e descontos preservam os invariantes.
 
@@ -220,6 +221,11 @@ Regras para escolher o perfil:
 | F08-15 | Concluído — projeção de ator da auditoria separa nome legível seguro (`actorDisplayName`) e e-mail (`actorEmail`). O nome usa o perfil de funcionário quando vinculado, preserva “Sistema” para ações automáticas e aplica fallback histórico sem expor e-mail ou UUID como identidade de tela. | F01-13, F01-14 | Terra alto |
 | F08-16 | Concluído — foto opcional de funcionário para identificação visual interna, com upload/consulta/remoção autenticados por tenant, PNG/JPEG validado, storage privado, sem reconhecimento facial ou uso biométrico. Auditoria retém somente `hasPhoto`. | F01-07, F01-14, F04-10 | Terra alto |
 | F08-17 | Concluído — a central de aprovações projeta `requester.employeeId` e `requester.photoUrl` somente para funcionário vinculado no tenant e com foto. A resposta nunca expõe chave de storage nem URL pública; o download continua sujeito a `EMPLOYEES.READ`. | F08-14, F08-16 | Terra alto |
+| F08-18 | Concluído — edição de cliente final e listagens operacionais filtráveis de clientes/funcionários. Cliente final aceita filtro por nome, CPF/CNPJ normalizado, tipo e situação; funcionário por nome, documento, cargo, departamento, vínculo, modalidade/remuneração e situações. A edição respeita alçada direta ou solicitação de aprovação, auditoria e isolamento de tenant; contrato OpenAPI e guia de frontend atualizados. | F01-10, F01-14, F03-02 | Terra alto |
+| F08-19 | Concluído — edição e listagens operacionais filtráveis de obras/contratos. Obra pode ser filtrada por nome, referência, cliente final, situação, local de execução e períodos; contrato, por nome, referência, obra, situação e períodos. Atualizações respeitam alçada direta ou solicitação de aprovação, auditoria e isolamento de tenant. Os vínculos `finalCustomerId` da obra e `workId` do contrato são preservados nas rotas de edição; OpenAPI e guia de frontend atualizados. | F01-10, F01-14, F03-05, F03-07 | Terra alto |
+| F08-22 | Concluído — filtros relacionais sem UUID no frontend: obras podem ser localizadas por nome ou CPF/CNPJ do cliente final; contratos por nome da obra e do cliente final. As subconsultas preservam paginação, ordenação e isolamento do tenant autenticado; OpenAPI e guia de frontend foram atualizados. | F08-19 | Terra alto |
+| F08-20 | Concluído — exportações existentes de medição em XLSX/PDF passaram a leitura paginada, geração com armazenamento temporário e resposta HTTP em streaming. O XLSX usa SXSSF, o PDF usa cache temporário do PDFBox; não há `List` ou `byte[]` proporcional ao arquivo. O SDD fixa a mesma regra para relatórios futuros. | F04-11, F04-12, F08-05 | Terra alto |
+| F08-21 | Concluído — CRUD de contatos e endereços do cliente final, com leitura por tenant, criação/edição/definição de principal/desativação lógica. Cada alteração usa alçada direta ou `ChangeRequest` sem alterar o dado oficial até aprovação; auditoria e OpenAPI cobrem os dois fluxos. | F01-07, F01-14, F03-02 | Terra alto |
 
 ## Caminho crítico recomendado
 

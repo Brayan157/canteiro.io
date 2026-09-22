@@ -63,6 +63,22 @@ public final class FinalCustomerAddress {
                 district, city, state, country, primaryAddress, active, createdAt, updatedAt);
     }
 
+    public FinalCustomerAddress update(String label, String postalCode, String street, String number, String complement,
+                                       String district, String city, String state, String country, boolean primaryAddress) {
+        return new FinalCustomerAddress(id, companyId, finalCustomerId, label, postalCode, street, number, complement,
+                district, city, state, country, primaryAddress, active, createdAt, updatedAt);
+    }
+
+    public FinalCustomerAddress withPrimaryAddress(boolean primaryAddress) {
+        return new FinalCustomerAddress(id, companyId, finalCustomerId, label, postalCode, street, number, complement,
+                district, city, state, country, primaryAddress, active, createdAt, updatedAt);
+    }
+
+    public FinalCustomerAddress deactivate() {
+        return new FinalCustomerAddress(id, companyId, finalCustomerId, label, postalCode, street, number, complement,
+                district, city, state, country, false, false, createdAt, updatedAt);
+    }
+
     private static String normalizePostalCode(String postalCode) {
         if (postalCode == null || postalCode.isBlank()) {
             return null;

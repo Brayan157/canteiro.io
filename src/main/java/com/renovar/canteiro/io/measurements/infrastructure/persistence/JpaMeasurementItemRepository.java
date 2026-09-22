@@ -3,6 +3,8 @@ package com.renovar.canteiro.io.measurements.infrastructure.persistence;
 import com.renovar.canteiro.io.measurements.domain.MeasurementItem;
 import com.renovar.canteiro.io.measurements.domain.MeasurementItemRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -43,6 +45,13 @@ public class JpaMeasurementItemRepository implements MeasurementItemRepository {
         return measurementItemJpaRepository.findByMeasurementVersionIdAndCompanyId(measurementVersionId, companyId).stream()
                 .map(this::toDomain)
                 .toList();
+    }
+
+    @Override
+    public Page<MeasurementItem> findByMeasurementVersionIdAndCompanyId(UUID measurementVersionId, UUID companyId,
+                                                                          Pageable pageable) {
+        return measurementItemJpaRepository.findByMeasurementVersionIdAndCompanyId(measurementVersionId, companyId, pageable)
+                .map(this::toDomain);
     }
 
     private MeasurementItem toDomain(MeasurementItemJpaEntity entity) {

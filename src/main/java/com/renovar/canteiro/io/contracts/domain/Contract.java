@@ -12,6 +12,7 @@ public final class Contract {
     private final UUID id;
     private final UUID companyId;
     private final UUID workId;
+    private final String contractIdentifier;
     private final String reference;
     private final String name;
     private final ContractStatus status;
@@ -21,12 +22,13 @@ public final class Contract {
     private final Instant createdAt;
     private final Instant updatedAt;
 
-    private Contract(UUID id, UUID companyId, UUID workId, String reference, String name, ContractStatus status,
+    private Contract(UUID id, UUID companyId, UUID workId, String contractIdentifier, String reference, String name, ContractStatus status,
                      LocalDate startedOn, LocalDate expectedCompletionOn, LocalDate completedOn, Instant createdAt,
                      Instant updatedAt) {
         this.id = id;
         this.companyId = require(companyId, "Contract company is required");
         this.workId = require(workId, "Contract work is required");
+        this.contractIdentifier = normalize(contractIdentifier);
         this.reference = normalize(reference);
         this.name = requireName(name);
         this.status = require(status, "Contract status is required");
@@ -40,14 +42,36 @@ public final class Contract {
 
     public static Contract create(UUID companyId, UUID workId, String reference, String name, ContractStatus status,
                                   LocalDate startedOn, LocalDate expectedCompletionOn, LocalDate completedOn) {
-        return new Contract(null, companyId, workId, reference, name, status, startedOn, expectedCompletionOn,
+        return create(companyId, workId, null, reference, name, status, startedOn, expectedCompletionOn, completedOn);
+    }
+
+    public static Contract create(UUID companyId, UUID workId, String contractIdentifier, String reference, String name, ContractStatus status,
+                                  LocalDate startedOn, LocalDate expectedCompletionOn, LocalDate completedOn) {
+        return new Contract(null, companyId, workId, contractIdentifier, reference, name, status, startedOn, expectedCompletionOn,
                 completedOn, null, null);
     }
 
     public static Contract rehydrate(UUID id, UUID companyId, UUID workId, String reference, String name,
                                      ContractStatus status, LocalDate startedOn, LocalDate expectedCompletionOn,
                                      LocalDate completedOn, Instant createdAt, Instant updatedAt) {
-        return new Contract(id, companyId, workId, reference, name, status, startedOn, expectedCompletionOn,
+        return rehydrate(id, companyId, workId, null, reference, name, status, startedOn, expectedCompletionOn, completedOn, createdAt, updatedAt);
+    }
+
+    public static Contract rehydrate(UUID id, UUID companyId, UUID workId, String contractIdentifier, String reference, String name,
+                                     ContractStatus status, LocalDate startedOn, LocalDate expectedCompletionOn,
+                                     LocalDate completedOn, Instant createdAt, Instant updatedAt) {
+        return new Contract(id, companyId, workId, contractIdentifier, reference, name, status, startedOn, expectedCompletionOn,
+                completedOn, createdAt, updatedAt);
+    }
+
+    public Contract updateProfile(String reference, String name, ContractStatus status, LocalDate startedOn,
+                                  LocalDate expectedCompletionOn, LocalDate completedOn) {
+        return updateProfile(contractIdentifier, reference, name, status, startedOn, expectedCompletionOn, completedOn);
+    }
+
+    public Contract updateProfile(String contractIdentifier, String reference, String name, ContractStatus status, LocalDate startedOn,
+                                  LocalDate expectedCompletionOn, LocalDate completedOn) {
+        return new Contract(id, companyId, workId, contractIdentifier, reference, name, status, startedOn, expectedCompletionOn,
                 completedOn, createdAt, updatedAt);
     }
 

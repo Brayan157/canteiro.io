@@ -21,6 +21,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -53,10 +55,11 @@ public class BillingControlController {
         ContractBillingControl control = getBillingControlUseCase.get(contractId);
         return new ContractBillingControlResponse(control.contract().getId(), control.contract().getWorkId(),
                 control.contract().getReference(), control.contract().getName(), control.contract().getStatus(),
-                control.balance().contractNetAmount(), control.balance().activeAllocatedAmount(), control.balance().availableAmount(),
+                canonicalMoney(control.balance().contractNetAmount()), canonicalMoney(control.balance().activeAllocatedAmount()),
+                canonicalMoney(control.balance().availableAmount()),
                 control.services().stream().map(service -> new BillingServiceControlResponse(service.contractServiceId(),
-                        service.serviceName(), service.serviceNetAmount(), service.activeAllocatedAmount(),
-                        service.availableAmount(), service.issuedInInvoicesAmount())).toList(),
+                        service.serviceName(), canonicalMoney(service.serviceNetAmount()), canonicalMoney(service.activeAllocatedAmount()),
+                        canonicalMoney(service.availableAmount()), canonicalMoney(service.issuedInInvoicesAmount()))).toList(),
                 control.allocations().stream().map(this::allocation).toList());
     }
 
@@ -70,7 +73,12 @@ public class BillingControlController {
         return new BillingAllocationControlResponse(value.allocation().getId(), value.installment().getId(),
                 value.installment().getReference(), value.installment().getDueOn(), value.installment().getStatus(),
                 value.allocation().getContractServiceId(), value.serviceName(), value.allocation().getType(),
-                value.allocation().getStatus(), value.allocation().getAllocatedAmount(),
-                value.invoiceBalance().registeredInvoiceAmount(), value.invoiceBalance().availableInvoiceAmount());
+                value.allocation().getStatus(), canonicalMoney(value.allocation().getAllocatedAmount()),
+                canonicalMoney(value.invoiceBalance().registeredInvoiceAmount()),
+                canonicalMoney(value.invoiceBalance().availableInvoiceAmount()));
+    }
+
+    private String canonicalMoney(BigDecimal value) {
+        return value.setScale(2, RoundingMode.HALF_UP).toPlainString();
     }
 }

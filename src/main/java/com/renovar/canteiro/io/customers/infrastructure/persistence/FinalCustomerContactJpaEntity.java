@@ -47,4 +47,12 @@ public class FinalCustomerContactJpaEntity extends BaseJpaEntity {
         this.primaryContact = primaryContact;
         this.active = active;
     }
+
+    public void update(String name, String email, String phone, boolean primaryContact, boolean active) {
+        this.name = name;
+        this.email = email;
+        this.phone = phone;
+        this.primaryContact = primaryContact;
+        this.active = active;
+    }
 }

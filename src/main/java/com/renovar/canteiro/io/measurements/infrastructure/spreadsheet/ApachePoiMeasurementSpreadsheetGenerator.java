@@ -1,10 +1,13 @@
 package com.renovar.canteiro.io.measurements.infrastructure.spreadsheet;
 
-import com.renovar.canteiro.io.measurements.application.MeasurementSpreadsheetData;
+import com.renovar.canteiro.io.measurements.application.MeasurementExportData;
+import com.renovar.canteiro.io.measurements.application.MeasurementExportResult;
+import com.renovar.canteiro.io.measurements.application.MeasurementItemSource;
 import com.renovar.canteiro.io.measurements.application.MeasurementSpreadsheetGenerator;
 import com.renovar.canteiro.io.measurements.domain.MeasurementChargeType;
 import com.renovar.canteiro.io.measurements.domain.MeasurementDiscountType;
 import com.renovar.canteiro.io.measurements.domain.MeasurementItem;
+import com.renovar.canteiro.io.measurements.domain.MeasurementVersionAmountCalculator;
 import org.apache.poi.ss.usermodel.BorderStyle;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.CellStyle;
@@ -14,24 +17,28 @@ import org.apache.poi.ss.usermodel.IndexedColors;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.VerticalAlignment;
-import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.apache.poi.ss.usermodel.Workbook;
+import org.apache.poi.xssf.streaming.SXSSFWorkbook;
 import org.springframework.stereotype.Component;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.util.List;
 
 @Component
 public class ApachePoiMeasurementSpreadsheetGenerator implements MeasurementSpreadsheetGenerator {
 
     private static final String CURRENCY_FORMAT = "R$ #,##0.00";
     private static final String QUANTITY_FORMAT = "#,##0.0000";
+    private static final int ROW_WINDOW = 100;
 
     @Override
-    public byte[] generate(MeasurementSpreadsheetData data) {
-        try (XSSFWorkbook workbook = new XSSFWorkbook(); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+    public MeasurementExportResult write(MeasurementExportData data, MeasurementItemSource items, OutputStream output)
+            throws IOException {
+        SXSSFWorkbook workbook = new SXSSFWorkbook(ROW_WINDOW);
+        try (workbook) {
+            workbook.setCompressTempFiles(true);
             Sheet sheet = workbook.createSheet("Medição");
             sheet.setDisplayGridlines(false);
 
@@ -40,19 +47,23 @@ public class ApachePoiMeasurementSpreadsheetGenerator implements MeasurementSpre
             int itemHeaderRow = 8;
             writeItemHeader(sheet, itemHeaderRow, styles);
             int firstItemRow = itemHeaderRow + 1;
-            writeItems(sheet, firstItemRow, data.items(), styles);
-            writeTotals(sheet, firstItemRow, data.items().size(), data, styles);
+            ItemSummary summary = writeItems(sheet, firstItemRow, items, styles);
+            writeTotals(sheet, firstItemRow, summary.itemCount(), data.discount(), styles);
             configureColumns(sheet);
             sheet.createFreezePane(0, firstItemRow);
             workbook.setForceFormulaRecalculation(true);
             workbook.write(output);
-            return output.toByteArray();
-        } catch (IOException exception) {
-            throw new IllegalStateException("Unable to generate measurement spreadsheet", exception);
+            output.flush();
+            return new MeasurementExportResult(summary.itemCount(),
+                    MeasurementVersionAmountCalculator.calculate(summary.grossAmount(), data.discount()));
+        } finally {
+            // SXSSF uses temporary files for flushed rows; dispose removes them deterministically.
+            // Close alone is not sufficient on all supported Apache POI versions.
+            workbook.dispose();
         }
     }
 
-    private void writeHeader(Sheet sheet, MeasurementSpreadsheetData data, Styles styles) {
+    private void writeHeader(Sheet sheet, MeasurementExportData data, Styles styles) {
         sheet.addMergedRegion(new org.apache.poi.ss.util.CellRangeAddress(0, 0, 0, 11));
         Row titleRow = sheet.createRow(0);
         Cell title = titleRow.createCell(0);
@@ -100,10 +111,10 @@ public class ApachePoiMeasurementSpreadsheetGenerator implements MeasurementSpre
         row.setHeightInPoints(28);
     }
 
-    private void writeItems(Sheet sheet, int firstRow, List<MeasurementItem> items, Styles styles) {
-        for (int index = 0; index < items.size(); index++) {
-            MeasurementItem item = items.get(index);
-            int rowNumber = firstRow + index;
+    private ItemSummary writeItems(Sheet sheet, int firstRow, MeasurementItemSource items, Styles styles) throws IOException {
+        ItemSummary summary = new ItemSummary();
+        items.consume(item -> {
+            int rowNumber = firstRow + summary.itemCount();
             Row row = sheet.createRow(rowNumber);
             writeNumber(row, 0, BigDecimal.valueOf(item.getItemNumber()), styles.integer());
             writeText(row, 1, item.getActivity(), styles.text());
@@ -117,7 +128,9 @@ public class ApachePoiMeasurementSpreadsheetGenerator implements MeasurementSpre
             writeWeightFormula(row, item.getChargeType(), rowNumber + 1, styles.quantity());
             writeAmountFormula(row, item.getChargeType(), rowNumber + 1, styles.currency());
             writeText(row, 11, item.getCalculationFormula(), styles.formula());
-        }
+            summary.add(item);
+        });
+        return summary;
     }
 
     private void writeWeightFormula(Row row, MeasurementChargeType chargeType, int excelRow, CellStyle style) {
@@ -141,7 +154,8 @@ public class ApachePoiMeasurementSpreadsheetGenerator implements MeasurementSpre
         cell.setCellStyle(style);
     }
 
-    private void writeTotals(Sheet sheet, int firstItemRow, int itemCount, MeasurementSpreadsheetData data, Styles styles) {
+    private void writeTotals(Sheet sheet, int firstItemRow, int itemCount,
+                             com.renovar.canteiro.io.measurements.domain.MeasurementDiscount discount, Styles styles) {
         int grossRow = firstItemRow + itemCount + 1;
         int discountRow = grossRow + 1;
         int netRow = grossRow + 2;
@@ -159,12 +173,12 @@ public class ApachePoiMeasurementSpreadsheetGenerator implements MeasurementSpre
 
         writeTotalLabel(sheet, discountRow, "Desconto de cabeçalho", styles.total());
         Cell discountAmount = row(sheet, discountRow).createCell(10);
-        if (data.discount() == null) {
+        if (discount == null) {
             discountAmount.setCellValue(0);
-        } else if (data.discount().getDiscountType() == MeasurementDiscountType.PERCENTAGE) {
-            discountAmount.setCellFormula("K" + (grossRow + 1) + "*" + data.discount().getDiscountValue().toPlainString() + "/100");
+        } else if (discount.getDiscountType() == MeasurementDiscountType.PERCENTAGE) {
+            discountAmount.setCellFormula("K" + (grossRow + 1) + "*" + discount.getDiscountValue().toPlainString() + "/100");
         } else {
-            discountAmount.setCellValue(data.discount().getDiscountValue().doubleValue());
+            discountAmount.setCellValue(discount.getDiscountValue().doubleValue());
         }
         discountAmount.setCellStyle(styles.totalCurrency());
 
@@ -206,7 +220,7 @@ public class ApachePoiMeasurementSpreadsheetGenerator implements MeasurementSpre
         return row == null ? sheet.createRow(rowNumber) : row;
     }
 
-    private String discountDescription(MeasurementSpreadsheetData data) {
+    private String discountDescription(MeasurementExportData data) {
         if (data.discount() == null) {
             return "Sem desconto";
         }
@@ -234,7 +248,7 @@ public class ApachePoiMeasurementSpreadsheetGenerator implements MeasurementSpre
     private record Styles(CellStyle title, CellStyle label, CellStyle value, CellStyle date, CellStyle tableHeader,
                           CellStyle text, CellStyle formula, CellStyle quantity, CellStyle currency, CellStyle integer,
                           CellStyle total, CellStyle totalCurrency, CellStyle netTotal, CellStyle netTotalCurrency) {
-        static Styles create(XSSFWorkbook workbook) {
+        static Styles create(Workbook workbook) {
             CellStyle title = style(workbook, IndexedColors.DARK_TEAL, IndexedColors.WHITE, true, HorizontalAlignment.LEFT);
             CellStyle label = style(workbook, IndexedColors.LIGHT_CORNFLOWER_BLUE, IndexedColors.BLACK, true, HorizontalAlignment.LEFT);
             CellStyle value = style(workbook, IndexedColors.WHITE, IndexedColors.BLACK, false, HorizontalAlignment.LEFT);
@@ -258,7 +272,7 @@ public class ApachePoiMeasurementSpreadsheetGenerator implements MeasurementSpre
                     total, totalCurrency, netTotal, netTotalCurrency);
         }
 
-        private static CellStyle style(XSSFWorkbook workbook, IndexedColors fill, IndexedColors fontColor,
+        private static CellStyle style(Workbook workbook, IndexedColors fill, IndexedColors fontColor,
                                        boolean bold, HorizontalAlignment alignment) {
             CellStyle style = workbook.createCellStyle();
             style.setFillForegroundColor(fill.getIndex());
@@ -276,13 +290,31 @@ public class ApachePoiMeasurementSpreadsheetGenerator implements MeasurementSpre
             return style;
         }
 
-        private static CellStyle copy(XSSFWorkbook workbook, CellStyle source, String numberFormat) {
+        private static CellStyle copy(Workbook workbook, CellStyle source, String numberFormat) {
             CellStyle copy = workbook.createCellStyle();
             copy.cloneStyleFrom(source);
             if (numberFormat != null) {
                 copy.setDataFormat(workbook.createDataFormat().getFormat(numberFormat));
             }
             return copy;
+        }
+    }
+
+    private static final class ItemSummary {
+        private int itemCount;
+        private BigDecimal grossAmount = BigDecimal.ZERO;
+
+        void add(MeasurementItem item) {
+            itemCount++;
+            grossAmount = grossAmount.add(item.getTotalAmount());
+        }
+
+        int itemCount() {
+            return itemCount;
+        }
+
+        BigDecimal grossAmount() {
+            return grossAmount;
         }
     }
 }

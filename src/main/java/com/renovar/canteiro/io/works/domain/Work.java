@@ -52,6 +52,12 @@ public final class Work {
         return new Work(id, companyId, finalCustomerId, name, reference, status, executionLocationType, executionAddress,
                 startedOn, expectedCompletionOn, completedOn, createdAt, updatedAt);
     }
+    public Work updateProfile(String name, String reference, WorkExecutionLocationType executionLocationType,
+                              String executionAddress, WorkStatus status, LocalDate startedOn,
+                              LocalDate expectedCompletionOn, LocalDate completedOn) {
+        return new Work(id, companyId, finalCustomerId, name, reference, status, executionLocationType, executionAddress,
+                startedOn, expectedCompletionOn, completedOn, createdAt, updatedAt);
+    }
     private static void validateDates(LocalDate startedOn, LocalDate expected, LocalDate completed) {
         if (startedOn != null && expected != null && expected.isBefore(startedOn) || startedOn != null && completed != null && completed.isBefore(startedOn)) throw new IllegalArgumentException("Work dates must not precede its start date");
     }

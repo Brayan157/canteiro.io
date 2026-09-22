@@ -16,12 +16,16 @@ class ContractChangeRequestApprovalHandler implements ChangeRequestApprovalHandl
     @Override
     public boolean supports(ChangeRequest changeRequest) {
         return changeRequest.getModule() == AuditModule.CONTRACTS
-                && changeRequest.getOperation() == ChangeRequestOperation.CREATE
+                && (changeRequest.getOperation() == ChangeRequestOperation.CREATE || changeRequest.getOperation() == ChangeRequestOperation.UPDATE)
                 && "Contract".equals(changeRequest.getEntityType());
     }
 
     @Override
     public void apply(ChangeRequest changeRequest) {
-        contractManagementService.applyApprovedCreation(changeRequest);
+        if (changeRequest.getOperation() == ChangeRequestOperation.CREATE) {
+            contractManagementService.applyApprovedCreation(changeRequest);
+        } else {
+            contractManagementService.applyApprovedUpdate(changeRequest);
+        }
     }
 }

@@ -1,10 +1,14 @@
 package com.renovar.canteiro.io.measurements.infrastructure.pdf;
 
-import com.renovar.canteiro.io.measurements.application.MeasurementPdfData;
+import com.renovar.canteiro.io.measurements.application.MeasurementExportData;
+import com.renovar.canteiro.io.measurements.application.MeasurementExportResult;
+import com.renovar.canteiro.io.measurements.application.MeasurementItemSource;
 import com.renovar.canteiro.io.measurements.application.MeasurementPdfGenerator;
 import com.renovar.canteiro.io.measurements.domain.MeasurementChargeType;
 import com.renovar.canteiro.io.measurements.domain.MeasurementDiscountType;
 import com.renovar.canteiro.io.measurements.domain.MeasurementItem;
+import com.renovar.canteiro.io.measurements.domain.MeasurementVersionAmountCalculator;
+import org.apache.pdfbox.io.IOUtils;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;
@@ -14,8 +18,8 @@ import org.apache.pdfbox.pdmodel.font.PDType1Font;
 import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
 import org.springframework.stereotype.Component;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.math.BigDecimal;
 import java.text.NumberFormat;
 import java.time.format.DateTimeFormatter;
@@ -45,31 +49,35 @@ public class PdfBoxMeasurementPdfGenerator implements MeasurementPdfGenerator {
     }
 
     @Override
-    public byte[] generate(MeasurementPdfData data) {
-        try (PDDocument document = new PDDocument(); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+    public MeasurementExportResult write(MeasurementExportData data, MeasurementItemSource items, OutputStream output)
+            throws IOException {
+        try (PDDocument document = new PDDocument(IOUtils.createTempFileOnlyStreamCache())) {
             RenderState state = addPage(document, 1, data);
-            for (MeasurementItem item : data.items()) {
-                if (state.y() - ROW_HEIGHT < BOTTOM + 65) {
-                    closePage(state);
-                    state = addPage(document, state.pageNumber() + 1, data);
+            RenderStateHolder stateHolder = new RenderStateHolder(state);
+            ItemSummary summary = new ItemSummary();
+            items.consume(item -> {
+                if (stateHolder.state.y() - ROW_HEIGHT < BOTTOM + 65) {
+                    closePage(stateHolder.state);
+                    stateHolder.state = addPage(document, stateHolder.state.pageNumber() + 1, data);
                 }
-                drawItem(state, item);
-                state = state.withY(state.y() - ROW_HEIGHT);
+                drawItem(stateHolder.state, item);
+                stateHolder.state = stateHolder.state.withY(stateHolder.state.y() - ROW_HEIGHT);
+                summary.add(item);
+            });
+            if (stateHolder.state.y() - (ROW_HEIGHT * 3) < BOTTOM) {
+                closePage(stateHolder.state);
+                stateHolder.state = addPage(document, stateHolder.state.pageNumber() + 1, data);
             }
-            if (state.y() - (ROW_HEIGHT * 3) < BOTTOM) {
-                closePage(state);
-                state = addPage(document, state.pageNumber() + 1, data);
-            }
-            drawTotals(state, data);
-            closePage(state);
+            var amounts = MeasurementVersionAmountCalculator.calculate(summary.grossAmount(), data.discount());
+            drawTotals(stateHolder.state, data.discount(), amounts);
+            closePage(stateHolder.state);
             document.save(output);
-            return output.toByteArray();
-        } catch (IOException exception) {
-            throw new IllegalStateException("Unable to generate measurement PDF", exception);
+            output.flush();
+            return new MeasurementExportResult(summary.itemCount(), amounts);
         }
     }
 
-    private RenderState addPage(PDDocument document, int pageNumber, MeasurementPdfData data) throws IOException {
+    private RenderState addPage(PDDocument document, int pageNumber, MeasurementExportData data) throws IOException {
         PDPage page = new PDPage(LANDSCAPE_A4);
         document.addPage(page);
         PDPageContentStream stream = new PDPageContentStream(document, page);
@@ -107,15 +115,16 @@ public class PdfBoxMeasurementPdfGenerator implements MeasurementPdfGenerator {
         }
     }
 
-    private void drawTotals(RenderState state, MeasurementPdfData data) throws IOException {
+    private void drawTotals(RenderState state, com.renovar.canteiro.io.measurements.domain.MeasurementDiscount discount,
+                            com.renovar.canteiro.io.measurements.domain.MeasurementVersionAmounts amounts) throws IOException {
         float x = LEFT + 500;
         float y = state.y() - 4;
-        drawSummaryRow(state.stream(), x, y, "Total bruto", currency(data.amounts().grossAmount()), false);
-        drawSummaryRow(state.stream(), x, y - ROW_HEIGHT, "Desconto de cabeçalho", currency(data.amounts().discountAmount()), false);
-        String discount = data.discount() == null ? "Sem desconto" : data.discount().getDiscountType() == MeasurementDiscountType.PERCENTAGE
-                ? data.discount().getDiscountValue().stripTrailingZeros().toPlainString() + "%" : currency(data.discount().getDiscountValue());
-        drawText(state.stream(), REGULAR, 7, x, y - (ROW_HEIGHT * 2) - 3, discount);
-        drawSummaryRow(state.stream(), x, y - (ROW_HEIGHT * 3), "Total líquido", currency(data.amounts().netAmount()), true);
+        drawSummaryRow(state.stream(), x, y, "Total bruto", currency(amounts.grossAmount()), false);
+        drawSummaryRow(state.stream(), x, y - ROW_HEIGHT, "Desconto de cabeçalho", currency(amounts.discountAmount()), false);
+        String discountDescription = discount == null ? "Sem desconto" : discount.getDiscountType() == MeasurementDiscountType.PERCENTAGE
+                ? discount.getDiscountValue().stripTrailingZeros().toPlainString() + "%" : currency(discount.getDiscountValue());
+        drawText(state.stream(), REGULAR, 7, x, y - (ROW_HEIGHT * 2) - 3, discountDescription);
+        drawSummaryRow(state.stream(), x, y - (ROW_HEIGHT * 3), "Total líquido", currency(amounts.netAmount()), true);
     }
 
     private void drawSummaryRow(PDPageContentStream stream, float x, float y, String label, String amount, boolean highlight)
@@ -172,5 +181,24 @@ public class PdfBoxMeasurementPdfGenerator implements MeasurementPdfGenerator {
     private record Column(String label, float width) { }
     private record RenderState(PDPageContentStream stream, float y, int pageNumber) {
         RenderState withY(float nextY) { return new RenderState(stream, nextY, pageNumber); }
+    }
+    private static final class RenderStateHolder {
+        private RenderState state;
+
+        private RenderStateHolder(RenderState state) {
+            this.state = state;
+        }
+    }
+    private static final class ItemSummary {
+        private int itemCount;
+        private BigDecimal grossAmount = BigDecimal.ZERO;
+
+        void add(MeasurementItem item) {
+            itemCount++;
+            grossAmount = grossAmount.add(item.getTotalAmount());
+        }
+
+        int itemCount() { return itemCount; }
+        BigDecimal grossAmount() { return grossAmount; }
     }
 }

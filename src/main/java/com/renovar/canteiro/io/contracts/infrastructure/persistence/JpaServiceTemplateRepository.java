@@ -6,6 +6,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
 import java.util.Optional;
+import java.util.List;
 import java.util.UUID;
 
 @Repository
@@ -25,6 +26,12 @@ public class JpaServiceTemplateRepository implements ServiceTemplateRepository {
     @Override
     public Optional<ServiceTemplate> findByIdAndCompanyId(UUID id, UUID companyId) {
         return serviceTemplateJpaRepository.findByIdAndCompanyId(id, companyId).map(this::toDomain);
+    }
+
+    @Override
+    public List<ServiceTemplate> findByCompanyId(UUID companyId, boolean activeOnly) {
+        return (activeOnly ? serviceTemplateJpaRepository.findByCompanyIdAndActiveTrueOrderByNameAsc(companyId)
+                : serviceTemplateJpaRepository.findByCompanyIdOrderByNameAsc(companyId)).stream().map(this::toDomain).toList();
     }
 
     private ServiceTemplate toDomain(ServiceTemplateJpaEntity entity) {

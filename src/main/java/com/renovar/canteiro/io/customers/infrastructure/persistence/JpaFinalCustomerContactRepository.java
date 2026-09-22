@@ -6,6 +6,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Repository
@@ -17,6 +18,12 @@ public class JpaFinalCustomerContactRepository implements FinalCustomerContactRe
 
     @Override
     public FinalCustomerContact save(FinalCustomerContact contact) {
+        if (contact.getId() != null) {
+            FinalCustomerContactJpaEntity entity = finalCustomerContactJpaRepository.findById(contact.getId())
+                    .orElseThrow(() -> new IllegalStateException("Final customer contact must exist before it can be updated"));
+            finalCustomerContactPersistenceMapper.updateJpaEntity(entity, contact);
+            return finalCustomerContactPersistenceMapper.toDomain(finalCustomerContactJpaRepository.save(entity));
+        }
         return finalCustomerContactPersistenceMapper.toDomain(
                 finalCustomerContactJpaRepository.save(finalCustomerContactPersistenceMapper.toJpaEntity(contact))
         );
@@ -27,5 +34,11 @@ public class JpaFinalCustomerContactRepository implements FinalCustomerContactRe
         return finalCustomerContactJpaRepository.findByFinalCustomerIdAndCompanyId(finalCustomerId, companyId).stream()
                 .map(finalCustomerContactPersistenceMapper::toDomain)
                 .toList();
+    }
+
+    @Override
+    public Optional<FinalCustomerContact> findByIdAndFinalCustomerIdAndCompanyId(UUID id, UUID finalCustomerId, UUID companyId) {
+        return finalCustomerContactJpaRepository.findByIdAndFinalCustomerIdAndCompanyId(id, finalCustomerId, companyId)
+                .map(finalCustomerContactPersistenceMapper::toDomain);
     }
 }

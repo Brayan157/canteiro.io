@@ -2,8 +2,8 @@
 
 **Nome comercial:** a definir  
 **Repositório atual:** Canteiro.io  
-**Versão do documento:** 0.3<br>
-**Data:** 8 de setembro de 2026<br>
+**Versão do documento:** 0.4<br>
+**Data:** 15 de setembro de 2026<br>
 **Status:** requisitos de negócio consolidados; recomendações técnicas identificadas como tal  
 
 ## 1. Objetivo
@@ -129,6 +129,10 @@ O frontend será um projeto separado no futuro e consumirá a API REST Spring. E
 | D-24 | A auditoria apresenta o responsável por `actorDisplayName`, um nome seguro e legível — jamais e-mail, UUID ou identificador técnico. Para usuário vinculado a funcionário, usa o nome completo do funcionário; `SYSTEM` aparece como “Sistema”; sem nome histórico seguro, usa “Usuário histórico indisponível”. O e-mail do ator, quando disponível, é um campo separado (`actorEmail`) e somente é retornado a quem já possui `AUDIT.READ`. |
 | D-25 | A foto de funcionário é opcional e serve exclusivamente para identificação visual interna. Não é usada para reconhecimento facial, extração biométrica, ponto, vigilância ou decisão automatizada. É armazenada em chave privada, disponibilizada somente por download autenticado no tenant, limitada a PNG/JPEG validado de até 2 MiB e 2048 × 2048 pixels, sem cache público. A auditoria registra apenas a existência/remoção da foto, nunca sua imagem ou chave de storage. |
 | D-26 | A central de aprovações pode projetar no solicitante o `employeeId` e a rota autenticada `photoUrl`, exclusivamente quando o usuário estiver vinculado a funcionário da mesma empresa e tiver foto. A projeção não revela chave de storage, URL pública ou dado pessoal adicional; o download mantém sua própria permissão `EMPLOYEES.READ`. |
+| D-27 | Clientes finais e funcionários possuem consulta paginada e filtrável exclusivamente no tenant autenticado. Cliente final pode ser pesquisado por nome, CPF/CNPJ normalizado, tipo e situação; funcionário, por nome, documento normalizado, cargo, departamento, vínculo, modalidade/remuneração, situação de trabalho e situação do cadastro. Filtros de documento e remuneração são internos à empresa, exigem a permissão de leitura do módulo correspondente e não são indexados nem expostos fora da API autenticada. A edição de cliente final usa a alçada direta/solicitação de aprovação já existente e preserva auditoria antes/depois. |
+| D-28 | Obras e contratos possuem consulta paginada e filtrável exclusivamente no tenant autenticado. Obras podem ser pesquisadas por nome, referência, cliente final, situação, tipo/local de execução e períodos de início/previsão; além do UUID opcional, o cliente final pode ser localizado por trecho de nome ou CPF/CNPJ normalizado. Contratos podem ser pesquisados por nome, referência, obra, nome do cliente final da obra, situação e períodos de início/previsão/conclusão; os filtros relacionais por nome são resolvidos somente no servidor dentro do tenant. A edição usa alçada direta ou solicitação de aprovação e registra auditoria antes/depois. A edição de obra preserva `finalCustomerId` e a edição de contrato preserva `workId`: uma troca desses vínculos exige fluxo explícito futuro, pois pode afetar a hierarquia comercial, medições e faturamento. |
+| D-29 | Relatórios, planilhas e documentos potencialmente volumosos são produzidos por streaming. A leitura ocorre em lotes ordenados e limitados; a resposta HTTP grava diretamente no fluxo de saída, sem montar uma lista completa de linhas ou um `byte[]` completo do arquivo. XLSX usa escrita de linhas em disco temporário e PDF usa cache temporário configurado. O tamanho do lote e a janela de linhas são parâmetros técnicos limitados, e toda consulta mantém tenant, permissão, filtros e auditoria. |
+| D-30 | Contrato possui `contractIdentifier` opcional, texto livre de negócio para número, código ou nome externo do instrumento (por exemplo, `0001/2027` ou `Contrato padrão`). Ele não é único, nem mesmo dentro da empresa, pois clientes finais distintos podem reutilizar a mesma numeração ou padrão. |
 
 ## 4. Atores e acesso
 
@@ -513,6 +517,8 @@ Convenções obrigatórias:
 
 Formatos: Excel, PDF e DOCX. Relatórios devem ser gerados de dados aprovados/efetivos, exceto quando o filtro selecionar explicitamente pendências.
 
+Toda exportação deve usar streaming: buscar dados em lotes ordenados, escrever o arquivo diretamente no `OutputStream` HTTP e manter no heap somente a janela técnica atual. É proibido materializar o conjunto completo de linhas, `List` integral, `byte[]` integral ou `ByteArrayOutputStream` proporcional ao arquivo. Para XLSX, usar escritor de linhas com arquivos temporários; para PDF/DOCX, usar o mecanismo de cache temporário/flush oferecido pela biblioteca. O evento de auditoria registra formato, filtros seguros, total de linhas e resumo permitido, nunca o conteúdo do relatório.
+
 ### 9.2 Armazenamento de arquivos
 
 - Interface StorageProvider para não acoplar o sistema a um fornecedor.
@@ -656,6 +662,7 @@ O desenho será considerado atendido quando:
 16. empresa inadimplente passar pelos estados de consulta e bloqueio definidos;
 17. relatórios respeitarem tenant, permissão, aprovação e filtros;
 18. todas as migrations possam iniciar um banco vazio e atualizar um ambiente existente sem alterar dados manualmente.
+19. exportações e relatórios de grande volume lerem e escreverem em streaming, sem reter o conjunto ou o arquivo completo em memória.
 
 ## 14. Próximos passos de implementação
 

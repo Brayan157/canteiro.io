@@ -30,13 +30,13 @@ public class FinalCustomerJpaEntity extends BaseJpaEntity {
     private UUID companyId;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "customer_type", nullable = false, updatable = false, length = 20)
+    @Column(name = "customer_type", nullable = false, length = 20)
     private FinalCustomerType customerType;
 
     @Column(name = "name", nullable = false, length = 255)
     private String name;
 
-    @Column(name = "document", nullable = false, updatable = false, length = 20)
+    @Column(name = "document", nullable = false, length = 20)
     private String document;
 
     @Column(name = "active", nullable = false)
@@ -56,8 +56,10 @@ public class FinalCustomerJpaEntity extends BaseJpaEntity {
         this.active = active;
     }
 
-    public void update(String name, boolean active) {
+    public void update(FinalCustomerType customerType, String name, String document, boolean active) {
+        this.customerType = customerType;
         this.name = name;
+        this.document = document;
         this.active = active;
     }
 }

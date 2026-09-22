@@ -10,6 +10,10 @@ import com.renovar.canteiro.io.measurements.application.UploadMeasurementDocumen
 import com.renovar.canteiro.io.measurements.domain.MeasurementDocument;
 import com.renovar.canteiro.io.measurements.domain.MeasurementDocumentType;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ContentDisposition;
@@ -23,6 +27,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -38,28 +43,42 @@ public class MeasurementDocumentController {
     private final GenerateMeasurementPdfService generatePdfService;
 
     @GetMapping(path = "/{measurementId}/versions/{versionId}/pdf", produces = MediaType.APPLICATION_PDF_VALUE)
-    @Operation(summary = "Generates a PDF for a measurement version")
-    public ResponseEntity<byte[]> downloadPdf(@PathVariable UUID measurementId, @PathVariable UUID versionId) {
+    @Operation(summary = "Streams a PDF for a measurement version")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Streaming PDF download",
+                    content = @Content(mediaType = MediaType.APPLICATION_PDF_VALUE,
+                            schema = @Schema(type = "string", format = "binary"))),
+            @ApiResponse(responseCode = "403", ref = "#/components/responses/ProblemDetail"),
+            @ApiResponse(responseCode = "404", ref = "#/components/responses/ProblemDetail")
+    })
+    public ResponseEntity<StreamingResponseBody> downloadPdf(@PathVariable UUID measurementId, @PathVariable UUID versionId) {
         GeneratedMeasurementPdf pdf = generatePdfService.generate(measurementId, versionId);
         return ResponseEntity.ok()
                 .contentType(MediaType.APPLICATION_PDF)
                 .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment()
                         .filename(pdf.filename(), StandardCharsets.UTF_8)
                         .build().toString())
-                .body(pdf.content());
+                .body(pdf.writer()::writeTo);
     }
 
     @GetMapping(path = "/{measurementId}/versions/{versionId}/spreadsheet",
             produces = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-    @Operation(summary = "Generates an XLSX spreadsheet for a measurement version")
-    public ResponseEntity<byte[]> downloadSpreadsheet(@PathVariable UUID measurementId, @PathVariable UUID versionId) {
+    @Operation(summary = "Streams an XLSX spreadsheet for a measurement version")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Streaming XLSX download",
+                    content = @Content(mediaType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            schema = @Schema(type = "string", format = "binary"))),
+            @ApiResponse(responseCode = "403", ref = "#/components/responses/ProblemDetail"),
+            @ApiResponse(responseCode = "404", ref = "#/components/responses/ProblemDetail")
+    })
+    public ResponseEntity<StreamingResponseBody> downloadSpreadsheet(@PathVariable UUID measurementId, @PathVariable UUID versionId) {
         GeneratedMeasurementSpreadsheet spreadsheet = generateSpreadsheetService.generate(measurementId, versionId);
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
                 .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment()
                         .filename(spreadsheet.filename(), StandardCharsets.UTF_8)
                         .build().toString())
-                .body(spreadsheet.content());
+                .body(spreadsheet.writer()::writeTo);
     }
 
     @PostMapping(path = "/{measurementId}/versions/{versionId}/documents", consumes = MediaType.MULTIPART_FORM_DATA_VALUE,

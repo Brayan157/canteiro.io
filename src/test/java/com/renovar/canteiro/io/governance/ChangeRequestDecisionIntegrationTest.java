@@ -159,12 +159,13 @@ class ChangeRequestDecisionIntegrationTest extends AbstractPostgresIntegrationTe
         ChangeRequest request = changeRequestRepository.save(ChangeRequest.create(
                 company.getId(), requester.getId(), AuditModule.EMPLOYEES, ChangeRequestOperation.CREATE,
                 "Employee", null, 0,
-                new ChangeRequestSnapshot(null, new AuditPayload(Map.of(
-                        "fullName", "Marina Souza", "jobTitle", "Encarregada", "department", "Obras",
-                        "documentType", "CPF", "documentNumber", "52998224725", "birthDate", "1990-05-20",
-                        "employmentType", "EMPLOYEE", "employmentStartDate", "2025-02-03",
-                        "currentlyEmployed", true, "gender", "FEMALE", "compensationFrequency", "MONTHLY",
-                        "compensationAmount", "4500.00"
+                new ChangeRequestSnapshot(null, new AuditPayload(Map.ofEntries(
+                        Map.entry("fullName", "Marina Souza"), Map.entry("jobTitle", "Encarregada"),
+                        Map.entry("department", "Obras"), Map.entry("documentType", "CPF"),
+                        Map.entry("documentNumber", "52998224725"), Map.entry("birthDate", "1990-05-20"),
+                        Map.entry("employmentType", "EMPLOYEE"), Map.entry("employmentStartDate", "2025-02-03"),
+                        Map.entry("currentlyEmployed", true), Map.entry("gender", "FEMALE"),
+                        Map.entry("compensationFrequency", "MONTHLY"), Map.entry("compensationAmount", "4500.00")
                 ))),
                 "Needs approval"
         ));

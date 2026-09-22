@@ -16,8 +16,11 @@ import com.renovar.canteiro.io.employees.application.EmployeeAccessInvitationSer
 import com.renovar.canteiro.io.employees.application.EmployeeManagementService;
 import com.renovar.canteiro.io.employees.application.EmployeePrivateDetailsService;
 import com.renovar.canteiro.io.employees.application.EmployeePhotoService;
+import com.renovar.canteiro.io.employees.application.EmployeeFilter;
 import com.renovar.canteiro.io.employees.application.InviteEmployeeAccessCommand;
 import com.renovar.canteiro.io.employees.domain.Employee;
+import com.renovar.canteiro.io.employees.domain.EmployeeCompensationFrequency;
+import com.renovar.canteiro.io.employees.domain.EmployeeEmploymentType;
 import com.renovar.canteiro.io.shared.api.pagination.PageQuery;
 import com.renovar.canteiro.io.shared.api.pagination.PageResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -48,6 +51,7 @@ import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -58,7 +62,8 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class EmployeeController {
 
-    private static final Set<String> SORT_FIELDS = Set.of("fullName", "createdAt", "updatedAt");
+    private static final Set<String> SORT_FIELDS = Set.of("fullName", "jobTitle", "department", "employmentType",
+            "compensationAmount", "compensationFrequency", "currentlyEmployed", "active", "createdAt", "updatedAt");
     private static final Set<String> EMPLOYEE_PHOTO_TYPES = Set.of("image/png", "image/jpeg");
     private static final long MAX_EMPLOYEE_PHOTO_SIZE_BYTES = 2 * 1024 * 1024;
     private static final int MAX_EMPLOYEE_PHOTO_DIMENSION = 2048;
@@ -108,8 +113,20 @@ public class EmployeeController {
     })
     public PageResponse<EmployeeResponse> findAll(@RequestParam(required = false) Integer page,
                                                   @RequestParam(required = false) Integer size,
-                                                  @RequestParam(required = false) List<String> sort) {
+                                                  @RequestParam(required = false) List<String> sort,
+                                                  @RequestParam(required = false) String name,
+                                                  @RequestParam(required = false) String document,
+                                                  @RequestParam(required = false) String jobTitle,
+                                                  @RequestParam(required = false) String department,
+                                                  @RequestParam(required = false) EmployeeEmploymentType employmentType,
+                                                  @RequestParam(required = false) EmployeeCompensationFrequency compensationFrequency,
+                                                  @RequestParam(required = false) BigDecimal compensationMin,
+                                                  @RequestParam(required = false) BigDecimal compensationMax,
+                                                  @RequestParam(required = false) Boolean currentlyEmployed,
+                                                  @RequestParam(required = false) Boolean active) {
         return PageResponse.from(employeeManagementService.findAll(
+                new EmployeeFilter(name, document, jobTitle, department, employmentType, compensationFrequency,
+                        compensationMin, compensationMax, currentlyEmployed, active),
                 new PageQuery(page, size, sort).toPageable(SORT_FIELDS)), this::response);
     }
 

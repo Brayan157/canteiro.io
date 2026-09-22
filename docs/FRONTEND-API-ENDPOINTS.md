@@ -1,8 +1,8 @@
 # Catálogo da API para arquitetura do frontend
 
-Documento gerado a partir dos controllers, DTOs, segurança e tratamento de erros existentes no backend em 02/09/2026.
+Documento gerado a partir dos controllers, DTOs, segurança e tratamento de erros existentes no backend em 14/09/2026.
 
-Cobertura validada: 72 operações de controller documentadas em 72 linhas de endpoint; os aliases de usuários totalizam 76 URLs efetivas.
+Cobertura validada: 105 operações de controller documentadas no OpenAPI executável atual. Aliases de acesso continuam a ser URLs distintas para a mesma operação de negócio.
 
 > Fonte de verdade executável: código Java e OpenAPI da aplicação. Este arquivo descreve somente endpoints que já existem; lacunas estão listadas no final.
 
@@ -153,9 +153,33 @@ Base: `/api/v1/company/customers`
 |---|---|---|---|---|
 | POST | `/` | `CreateFinalCustomerRequest` | `FinalCustomerChangeResponse` | `201` direto ou `202` aprovação |
 | GET | `/{customerId}` | path UUID | `FinalCustomerResponse` | `200` |
-| GET | `/` | `page`, `size`, `sort` | `PageResponse<FinalCustomerResponse>` | `200` |
+| PUT | `/{customerId}` | `UpdateFinalCustomerRequest` | `FinalCustomerChangeResponse` | `200` direto ou `202` aprovação |
+| GET | `/` | `page`, `size`, `sort`, filtros abaixo | `PageResponse<FinalCustomerResponse>` | `200` |
+| GET | `/{customerId}/contacts` | — | `FinalCustomerContactResponse[]` | `200` |
+| POST | `/{customerId}/contacts` | `FinalCustomerContactRequest` | `FinalCustomerContactChangeResponse` | `201` direto ou `202` aprovação |
+| PUT | `/{customerId}/contacts/{contactId}` | `FinalCustomerContactRequest` | `FinalCustomerContactChangeResponse` | `200` direto ou `202` aprovação |
+| PUT | `/{customerId}/contacts/{contactId}/primary` | — | `FinalCustomerContactChangeResponse` | `200` direto ou `202` aprovação |
+| DELETE | `/{customerId}/contacts/{contactId}` | `justification` opcional | vazio ou `FinalCustomerChangeRequestResponse` | `204` direto ou `202` aprovação |
+| GET | `/{customerId}/addresses` | — | `FinalCustomerAddressResponse[]` | `200` |
+| POST | `/{customerId}/addresses` | `FinalCustomerAddressRequest` | `FinalCustomerAddressChangeResponse` | `201` direto ou `202` aprovação |
+| PUT | `/{customerId}/addresses/{addressId}` | `FinalCustomerAddressRequest` | `FinalCustomerAddressChangeResponse` | `200` direto ou `202` aprovação |
+| PUT | `/{customerId}/addresses/{addressId}/primary` | — | `FinalCustomerAddressChangeResponse` | `200` direto ou `202` aprovação |
+| DELETE | `/{customerId}/addresses/{addressId}` | `justification` opcional | vazio ou `FinalCustomerChangeRequestResponse` | `204` direto ou `202` aprovação |
 
-Ordenação permitida: `name`, `createdAt`.
+Filtros da listagem:
+
+| Parâmetro | Tipo | Regra |
+|---|---|---|
+| `name` | string | contém, sem diferenciar maiúsculas/minúsculas |
+| `document` | string | contém; CPF/CNPJ é normalizado para dígitos antes da busca |
+| `customerType` | `INDIVIDUAL` ou `LEGAL` | tipo de cliente |
+| `active` | boolean | situação do cadastro |
+
+Ordenação permitida: `name`, `document`, `customerType`, `active`, `createdAt`, `updatedAt`.
+
+`UpdateFinalCustomerRequest` contém `customerType`, `name`, `document` e `justification`. A edição não altera obras/contratos; ela atualiza somente o perfil comercial do cliente. Com alçada direta, retorna `200` e `customer`; sem ela, retorna `202`, `customer: null` e `changeRequestId`.
+
+Os contatos exigem `name` e ao menos `email` ou `phone`. Endereços exigem `street`, `city` e `state`; `country` assume `BR` quando omitido. Listagens retornam apenas registros ativos, priorizando o principal. O `DELETE` é sempre desativação lógica: o frontend remove o item da tela após `204`, mas não deve supor exclusão física. Para uma resposta `202`, nenhum dado oficial mudou; aguarde a aprovação usando `changeRequestId`.
 
 ### 2.5 Obras — JWT de empresa
 
@@ -163,9 +187,28 @@ Base: `/api/v1/company/works`
 
 | Método | Caminho | Entrada | Resposta | Status |
 |---|---|---|---|---|
-| GET | `/` | `page`, `size`, `sort` | `PageResponse<WorkResponse>` | `200` |
+| GET | `/` | `page`, `size`, `sort`, filtros abaixo | `PageResponse<WorkResponse>` | `200` |
 | POST | `/` | `CreateWorkRequest` | `WorkChangeResponse` | `201` direto ou `202` aprovação |
 | GET | `/{workId}` | path UUID | `WorkResponse` | `200` |
+| PUT | `/{workId}` | `UpdateWorkRequest` | `WorkChangeResponse` | `200` direto ou `202` aprovação |
+
+Filtros da listagem:
+
+| Query | Tipo | Uso |
+|---|---|---|
+| `name` | string | trecho do nome da obra |
+| `reference` | string | trecho da referência/código da obra |
+| `finalCustomerId` | UUID | cliente final da obra |
+| `finalCustomerName` | string | trecho do nome do cliente final; permite localizar obras sem conhecer UUID |
+| `finalCustomerDocument` | string | trecho do CPF/CNPJ do cliente final; a API normaliza pontuação antes da pesquisa |
+| `status` | `WorkStatus` | situação da obra |
+| `executionLocationType` | `WorkExecutionLocationType` | local do cliente final, unidade da prestadora ou outro endereço |
+| `startedFrom` / `startedTo` | `YYYY-MM-DD` | intervalo inclusivo da data de início |
+| `expectedCompletionFrom` / `expectedCompletionTo` | `YYYY-MM-DD` | intervalo inclusivo da previsão de conclusão |
+
+Ordenação permitida: `name`, `reference`, `status`, `executionLocationType`, `startedOn`, `expectedCompletionOn`, `completedOn`, `createdAt`, `updatedAt`.
+
+`UpdateWorkRequest` contém `name`, `reference`, `executionLocationType`, `executionAddress`, `status`, datas e `justification`. Ele não recebe `finalCustomerId`: a edição preserva o cliente final da obra e evita movimentação silenciosa na hierarquia comercial.
 
 ### 2.6 Contratos — JWT de empresa
 
@@ -173,10 +216,39 @@ Base: `/api/v1/company/contracts`
 
 | Método | Caminho | Entrada | Resposta | Status |
 |---|---|---|---|---|
-| GET | `/` | `page`, `size`, `sort` | `PageResponse<ContractResponse>` | `200` |
+| GET | `/` | `page`, `size`, `sort`, filtros abaixo | `PageResponse<ContractResponse>` | `200` |
 | POST | `/` | `CreateContractRequest` | `ContractChangeResponse` | `201` direto ou `202` aprovação |
 | GET | `/{contractId}` | path UUID | `ContractResponse` | `200` |
+| PUT | `/{contractId}` | `UpdateContractRequest` | `ContractChangeResponse` | `200` direto ou `202` aprovação |
 | GET | `/{contractId}/services` | path UUID | `List<ContractServiceResponse>` | `200` |
+| POST | `/{contractId}/services` | `UpsertContractServiceRequest` | `ContractServiceChangeResponse` | `201` direto ou `202` aprovação |
+| PUT | `/{contractId}/services/{serviceId}` | `UpsertContractServiceRequest` | `ContractServiceChangeResponse` | `200` direto ou `202` aprovação |
+| PUT | `/{contractId}/services/{serviceId}/discount` | `SetContractDiscountRequest` | `ContractServiceChangeResponse` | `200` direto ou `202` aprovação |
+| PUT | `/{contractId}/discount` | `SetContractDiscountRequest` | `ContractServiceChangeResponse` | `200` direto ou `202` aprovação |
+
+Modelos de serviço para seleção: `GET /api/v1/company/service-templates?includeInactive=false`. A lista é do tenant autenticado e retorna somente modelos ativos por padrão.
+
+Filtros da listagem:
+
+| Query | Tipo | Uso |
+|---|---|---|
+| `name` | string | trecho do nome do contrato |
+| `reference` | string | trecho da referência/código do contrato |
+| `workId` | UUID | obra à qual o contrato pertence |
+| `workName` | string | trecho do nome da obra; permite localizar contratos sem conhecer UUID |
+| `finalCustomerName` | string | trecho do nome do cliente final da obra; pode ser combinado com `workName` |
+| `status` | `ContractStatus` | situação do contrato |
+| `startedFrom` / `startedTo` | `YYYY-MM-DD` | intervalo inclusivo da data de início |
+| `expectedCompletionFrom` / `expectedCompletionTo` | `YYYY-MM-DD` | intervalo inclusivo da previsão de conclusão |
+| `completedFrom` / `completedTo` | `YYYY-MM-DD` | intervalo inclusivo da data de conclusão |
+
+Ordenação permitida: `name`, `reference`, `status`, `startedOn`, `expectedCompletionOn`, `completedOn`, `createdAt`, `updatedAt`.
+
+`CreateContractRequest` e `UpdateContractRequest` incluem `contractIdentifier`, uma identificação livre de negócio (por exemplo, `0001/2027` ou `Contrato padrão`). Esse identificador **não é único**, inclusive quando se repetir em contratos de clientes finais distintos. `UpdateContractRequest` também contém `reference`, `name`, `status`, datas e `justification`. Ele não recebe `workId`: a obra do contrato é preservada para não alterar silenciosamente o encadeamento comercial, de medição e de faturamento.
+
+`UpsertContractServiceRequest` contém `sourceServiceTemplateId` opcional, `name`, `description`, `status`, `quantity`, `unitPrice`, `discountType`, `discountValue` e `justification`. Na criação, o modelo informado deve pertencer à empresa e fica registrado como origem. Na edição, ele pode ser reenviado somente se for o mesmo modelo de origem; não pode ser trocado. A edição nunca recebe nem troca `contractId`. `SetContractDiscountRequest` exige `discountType`, `discountValue` e `justification`.
+
+Todo valor de quantidade ou dinheiro dessas rotas é texto decimal canônico: `quantity` usa quatro casas (`"12.5000"`) e valores monetários duas (`"150.00"`). O frontend não calcula descontos, valores líquidos, totais ou saldos: a resposta direta traz o serviço oficial e os totais oficiais do contrato. Respostas `202` trazem somente `changeRequestId` e `mode`, sem serviço ou contrato fictício.
 
 ### 2.7 Funcionários operacionais — JWT de empresa
 
@@ -186,7 +258,7 @@ Base: `/api/v1/company/employees`
 |---|---|---|---|---|
 | POST | `/` | `CreateEmployeeRequest` | `EmployeeChangeResponse` | `201` direto ou `202` aprovação |
 | GET | `/{employeeId}` | path UUID | `EmployeeResponse` operacional | `200` |
-| GET | `/` | `page`, `size`, `sort` | `PageResponse<EmployeeResponse>` | `200` |
+| GET | `/` | `page`, `size`, `sort`, filtros abaixo | `PageResponse<EmployeeResponse>` | `200` |
 | POST | `/{employeeId}/access-invitations` | `InviteEmployeeAccessRequest` | `EmployeeAccessInvitationResponse` | `201` |
 | POST | `/{employeeId}/addresses` | `EmployeeAddressRequest` | `EmployeeAddressResponse` | `201` |
 | GET | `/{employeeId}/addresses` | — | `EmployeeAddressResponse[]` | `200` |
@@ -201,7 +273,24 @@ Base: `/api/v1/company/employees`
 | GET | `/{employeeId}/photo` | — | bytes da imagem | `200` |
 | DELETE | `/{employeeId}/photo` | — | — | `204` |
 
-Ordenação permitida: `fullName`, `createdAt`, `updatedAt`.
+Filtros da listagem:
+
+| Parâmetro | Tipo | Regra |
+|---|---|---|
+| `name` | string | contém em `fullName` ou `preferredName`, sem diferenciar maiúsculas/minúsculas |
+| `document` | string | contém; o documento é normalizado para dígitos antes da busca |
+| `jobTitle` | string | contém, sem diferenciar maiúsculas/minúsculas |
+| `department` | string | contém, sem diferenciar maiúsculas/minúsculas |
+| `employmentType` | `EmployeeEmploymentType` | tipo de vínculo |
+| `compensationFrequency` | `MONTHLY`, `DAILY` ou `HOURLY` | modalidade da remuneração |
+| `compensationMin` | decimal | limite inferior inclusivo da remuneração |
+| `compensationMax` | decimal | limite superior inclusivo da remuneração; deve ser maior ou igual ao mínimo |
+| `currentlyEmployed` | boolean | empregado atualmente na empresa |
+| `active` | boolean | cadastro ativo |
+
+`compensationMin` e `compensationMax` devem usar decimal em texto, por exemplo `3500.00`; não use ponto flutuante no estado do frontend. Os filtros de documento e remuneração só funcionam dentro do tenant autenticado e com `EMPLOYEES.READ`.
+
+Ordenação permitida: `fullName`, `jobTitle`, `department`, `employmentType`, `compensationAmount`, `compensationFrequency`, `currentlyEmployed`, `active`, `createdAt`, `updatedAt`.
 
 A foto é opcional e é destinada somente à identificação visual interna. Aceita PNG ou JPEG de até 2 MiB e 2048 × 2048 pixels; não há reconhecimento facial, uso biométrico ou URL pública. O `photoUrl` retornado em `EmployeeResponse` exige o mesmo Bearer JWT e deve ser baixado pelo cliente HTTP autenticado como Blob/object URL. Upload e remoção exigem `EMPLOYEES.UPDATE_DIRECT`; download exige `EMPLOYEES.READ`.
 
@@ -288,6 +377,8 @@ Para a linha do tempo, use exclusivamente `actorDisplayName` como identificaçã
 
 Base: `/api/v1/company/measurements`
 
+As exportações PDF e XLSX são respostas HTTP em streaming. O frontend continua fazendo download pelas mesmas URLs e tipos MIME; não há alteração de payload ou de contrato JSON. Para arquivos grandes, consumir a resposta como download/`Blob` e não tentar interpretá-la como JSON.
+
 | Método | Caminho | Entrada | Resposta | Status |
 |---|---|---|---|---|
 | POST | `/` | `CreateMeasurementRequest` | `MeasurementChangeResponse` | `201` ou `202` |
@@ -314,6 +405,8 @@ Base: `/api/v1/company/billing-control/contracts`
 | GET | `/{contractId}` | path UUID | `ContractBillingControlResponse` | `200` |
 
 Filtros: `contractId`, `status`, `query`. Ordenação: `name`, `reference`, `status`, `createdAt`.
+
+No detalhe `GET /{contractId}`, todos os valores monetários são strings decimais canônicas, sem símbolo de moeda ou formatação local (por exemplo, `"99.90"`). Não os converta para `number` no cliente. Os campos são `contractNetAmount`, `activeAllocatedAmount`, `availableAmount`, os valores de `services` e `allocations`, incluindo `registeredInvoiceAmount` e `availableInvoiceAmount`.
 
 ### 2.12 Parcelas de faturamento — JWT de empresa
 
@@ -445,10 +538,13 @@ Endpoint condicional: só existe quando `integrations.asaas.enabled=true`. Não 
 | DTO | Campos |
 |---|---|
 | `CreateFinalCustomerRequest` | `customerType*`, `name*`, `document*`, `contacts[]`, `addresses[]`, `justification` |
+| `UpdateFinalCustomerRequest` | `customerType*`, `name*`, `document*`, `justification` |
 | `ContactRequest` | `name*`, `email`, `phone`, `primaryContact` |
 | `AddressRequest` | `label`, `postalCode`, `street*`, `number`, `complement`, `district`, `city*`, `state*`, `country`, `primaryAddress` |
 | `CreateWorkRequest` | `finalCustomerId*`, `name*`, `reference`, `executionLocationType*`, `executionAddress`, `status*`, `startedOn`, `expectedCompletionOn`, `completedOn`, `justification` |
+| `UpdateWorkRequest` | `name*`, `reference`, `executionLocationType*`, `executionAddress`, `status*`, `startedOn`, `expectedCompletionOn`, `completedOn`, `justification`; não aceita `finalCustomerId` |
 | `CreateContractRequest` | `workId*`, `reference`, `name*`, `status*`, `startedOn`, `expectedCompletionOn`, `completedOn`, `justification` |
+| `UpdateContractRequest` | `reference`, `name*`, `status*`, `startedOn`, `expectedCompletionOn`, `completedOn`, `justification`; não aceita `workId` |
 | `CreateEmployeeRequest` | `fullName*`, `jobTitle*`, `documentType*`, `documentNumber*`, `birthDate*`, `employmentType*`, `employmentStartDate*`, `currentlyEmployed*`, `gender*`, `compensationAmount*`, `compensationFrequency*`, `pis` opcional e demais campos opcionais |
 | `UpdateEmployeeRequest` | mesmos campos obrigatórios de `CreateEmployeeRequest`, exceto matrícula, que é preservada |
 | `EmployeeAddressRequest` | `street*`, `city*`, `country*`, demais campos de endereço e `primaryAddress` |
@@ -654,22 +750,16 @@ Os campos de cálculo exigidos variam conforme `chargeType`; o frontend deve mos
 Não existem endpoints atuais para:
 
 1. consultar catálogo público de planos antes do onboarding;
-2. listar obras;
-3. listar contratos pelo módulo de contratos — existe apenas a listagem financeira em `/billing-control/contracts`;
-4. listar ou consultar serviços de contrato;
-5. definir/alterar desconto contratual pela API;
-6. listar medições;
-7. listar ou consultar detalhes individuais de parcelas;
-8. listar ou consultar NFs já registradas;
-9. listar anexos de NF ou baixar o anexo armazenado;
-10. listar contas a receber ou consultar seus dados básicos — existe apenas consulta de saldo por ID;
-11. listar baixas/recebimentos de uma conta a receber;
-12. listar impostos de uma NF;
-13. listar solicitações de alteração pendentes;
-14. editar clientes, obras, contratos e funcionários;
-15. consultar/editar os dados da própria empresa;
-16. endpoints de gastos/fornecedores/contas a pagar operacionais;
-17. relatórios e exportações da Fase 7.
+2. definir/alterar desconto contratual pela API;
+3. listar ou consultar detalhes individuais de parcelas;
+4. listar ou consultar NFs já registradas;
+5. listar anexos de NF ou baixar o anexo armazenado;
+6. listar contas a receber ou consultar seus dados básicos — existe apenas consulta de saldo por ID;
+7. listar baixas/recebimentos de uma conta a receber;
+8. listar impostos de uma NF;
+9. consultar/editar os dados da própria empresa;
+10. endpoints de gastos/fornecedores/contas a pagar operacionais;
+11. relatórios e exportações da Fase 7.
 
 Essas lacunas devem virar backlog de API antes de fechar navegação, telas de listagem e carregamento inicial do frontend. O frontend não deve acessar banco, storage ou gateway diretamente para contorná-las.
 
