@@ -1,19 +1,18 @@
 package com.renovar.canteiro.io.measurements.infrastructure.spreadsheet;
 
-import com.renovar.canteiro.io.measurements.application.MeasurementSpreadsheetData;
+import com.renovar.canteiro.io.measurements.application.MeasurementExportData;
 import com.renovar.canteiro.io.measurements.domain.Measurement;
 import com.renovar.canteiro.io.measurements.domain.MeasurementDiscount;
 import com.renovar.canteiro.io.measurements.domain.MeasurementDiscountType;
 import com.renovar.canteiro.io.measurements.domain.MeasurementItem;
 import com.renovar.canteiro.io.measurements.domain.MeasurementVersion;
-import com.renovar.canteiro.io.measurements.domain.MeasurementVersionAmountCalculator;
 import org.apache.poi.ss.usermodel.WorkbookFactory;
 import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.util.List;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -37,15 +36,19 @@ class ApachePoiMeasurementSpreadsheetGeneratorTest {
                 new BigDecimal("2.5000"), new BigDecimal("4.0000"), new BigDecimal("8.00"));
         MeasurementDiscount discount = MeasurementDiscount.create(companyId, versionId, MeasurementDiscountType.PERCENTAGE,
                 new BigDecimal("10.0000"));
-        var amounts = MeasurementVersionAmountCalculator.calculate(List.of(areaItem, weightItem), discount);
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        var result = generator.write(new MeasurementExportData(measurement, version, discount),
+                consumer -> {
+                    consumer.accept(areaItem);
+                    consumer.accept(weightItem);
+                }, output);
+        byte[] bytes = output.toByteArray();
 
-        byte[] result = generator.generate(new MeasurementSpreadsheetData(measurement, version,
-                List.of(areaItem, weightItem), discount, amounts));
-
-        assertTrue(result.length > 4);
-        assertEquals((byte) 'P', result[0]);
-        assertEquals((byte) 'K', result[1]);
-        try (var workbook = WorkbookFactory.create(new ByteArrayInputStream(result))) {
+        assertEquals(2, result.itemCount());
+        assertTrue(bytes.length > 4);
+        assertEquals((byte) 'P', bytes[0]);
+        assertEquals((byte) 'K', bytes[1]);
+        try (var workbook = WorkbookFactory.create(new ByteArrayInputStream(bytes))) {
             var sheet = workbook.getSheet("Medição");
             assertEquals("Medição Ago/2026", sheet.getRow(0).getCell(0).getStringCellValue());
             assertEquals("E10*I10", sheet.getRow(9).getCell(10).getCellFormula());

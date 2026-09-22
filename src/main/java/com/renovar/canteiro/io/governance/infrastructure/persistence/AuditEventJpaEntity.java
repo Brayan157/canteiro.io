@@ -69,6 +69,13 @@ public class AuditEventJpaEntity {
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "metadata", nullable = false, columnDefinition = "jsonb")
     private Map<String, Object> metadata;
+    @Column(name = "actor_display_name") private String actorDisplayName;
+    @Column(name = "entity_display_name") private String entityDisplayName;
+    @Column(name = "entity_display_reference") private String entityDisplayReference;
+    @Column(name = "event_summary") private String eventSummary;
+    @Column(name = "origin") private String origin;
+    @Column(name = "support_context") private String supportContext;
+    @Column(name = "correlation_id") private String correlationId;
 
     @Column(name = "occurred_at", nullable = false, updatable = false)
     private Instant occurredAt;
@@ -87,7 +94,8 @@ public class AuditEventJpaEntity {
             UUID entityId,
             Map<String, Object> beforeData,
             Map<String, Object> afterData,
-            Map<String, Object> metadata,
+            Map<String, Object> metadata, String actorDisplayName, String entityDisplayName,
+            String entityDisplayReference, String eventSummary, String origin, String supportContext, String correlationId,
             Instant occurredAt
     ) {
         this.companyId = companyId;
@@ -100,6 +108,9 @@ public class AuditEventJpaEntity {
         this.beforeData = beforeData;
         this.afterData = afterData;
         this.metadata = metadata;
+        this.actorDisplayName=actorDisplayName; this.entityDisplayName=entityDisplayName;
+        this.entityDisplayReference=entityDisplayReference; this.eventSummary=eventSummary;
+        this.origin=origin; this.supportContext=supportContext; this.correlationId=correlationId;
         this.occurredAt = occurredAt;
     }
 }

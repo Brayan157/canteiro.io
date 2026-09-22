@@ -17,7 +17,7 @@ class FinalCustomerPersistenceMapper {
     }
 
     void updateJpaEntity(FinalCustomerJpaEntity entity, FinalCustomer finalCustomer) {
-        entity.update(finalCustomer.getName(), finalCustomer.isActive());
+        entity.update(finalCustomer.getCustomerType(), finalCustomer.getName(), finalCustomer.getDocument(), finalCustomer.isActive());
     }
 
     FinalCustomer toDomain(FinalCustomerJpaEntity entity) {

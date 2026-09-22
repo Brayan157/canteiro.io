@@ -2,6 +2,7 @@ package com.renovar.canteiro.io.governance.infrastructure.persistence;
 
 import com.renovar.canteiro.io.governance.domain.AuditEvent;
 import com.renovar.canteiro.io.governance.domain.AuditPayload;
+import com.renovar.canteiro.io.governance.domain.AuditPresentation;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -19,6 +20,13 @@ public class AuditEventPersistenceMapper {
                 auditEvent.getBeforeData() == null ? null : auditEvent.getBeforeData().values(),
                 auditEvent.getAfterData() == null ? null : auditEvent.getAfterData().values(),
                 auditEvent.getMetadata().values(),
+                auditEvent.getPresentation() == null ? null : auditEvent.getPresentation().actorDisplayName(),
+                auditEvent.getPresentation() == null ? null : auditEvent.getPresentation().entityDisplayName(),
+                auditEvent.getPresentation() == null ? null : auditEvent.getPresentation().entityDisplayReference(),
+                auditEvent.getPresentation() == null ? null : auditEvent.getPresentation().summary(),
+                auditEvent.getPresentation() == null ? null : auditEvent.getPresentation().origin(),
+                auditEvent.getPresentation() == null ? null : auditEvent.getPresentation().supportContext(),
+                auditEvent.getPresentation() == null ? null : auditEvent.getPresentation().correlationId(),
                 auditEvent.getOccurredAt()
         );
     }
@@ -36,6 +44,8 @@ public class AuditEventPersistenceMapper {
                 entity.getBeforeData() == null ? null : new AuditPayload(entity.getBeforeData()),
                 entity.getAfterData() == null ? null : new AuditPayload(entity.getAfterData()),
                 new AuditPayload(entity.getMetadata()),
+                new AuditPresentation(entity.getActorDisplayName(), entity.getEntityDisplayName(), entity.getEntityDisplayReference(),
+                        entity.getEventSummary(), entity.getOrigin(), entity.getSupportContext(), entity.getCorrelationId()),
                 entity.getOccurredAt(),
                 entity.getCreatedAt()
         );

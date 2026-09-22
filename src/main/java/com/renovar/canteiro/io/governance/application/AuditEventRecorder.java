@@ -30,6 +30,7 @@ public class AuditEventRecorder {
     private final PlatformOperatorContextHolder platformOperatorContextHolder;
     private final SupportTargetContextHolder supportTargetContextHolder;
     private final Clock clock;
+    private final AuditPresentationService auditPresentationService;
 
     @Transactional(propagation = Propagation.MANDATORY)
     public AuditEvent recordDirectAction(
@@ -42,6 +43,7 @@ public class AuditEventRecorder {
             Map<String, Object> metadata
     ) {
         AuditActor actor = resolveActor();
+        AuditPayload safeMetadata = toMetadataPayload(metadata);
         return auditEventRepository.append(AuditEvent.create(
                 actor.companyId(),
                 actor.userId(),
@@ -52,8 +54,7 @@ public class AuditEventRecorder {
                 entityId,
                 toPayload(beforeData),
                 toPayload(afterData),
-                toMetadataPayload(metadata),
-                clock.instant()
+                safeMetadata, clock.instant(), auditPresentationService.capture(actor.companyId(), actor.userId(), actor.actorType(), action, entityType, entityId, safeMetadata.values())
         ));
     }
 
@@ -78,8 +79,8 @@ public class AuditEventRecorder {
                 companyId,
                 null,
                 toPayload(afterData),
-                toMetadataPayload(Map.of("origin", "public-onboarding")),
-                clock.instant()
+                toMetadataPayload(Map.of("origin", "direct")), clock.instant(),
+                auditPresentationService.capture(companyId, ownerUserId, AuditActorType.COMPANY_USER, AuditAction.CREATE, "Company", companyId, Map.of("origin", "direct"))
         ));
     }
 
@@ -94,6 +95,7 @@ public class AuditEventRecorder {
             Map<String, Object> afterData,
             Map<String, Object> metadata
     ) {
+        AuditPayload safeMetadata = toMetadataPayload(metadata);
         return auditEventRepository.append(AuditEvent.create(
                 companyId,
                 null,
@@ -104,8 +106,7 @@ public class AuditEventRecorder {
                 entityId,
                 toPayload(beforeData),
                 toPayload(afterData),
-                toMetadataPayload(metadata),
-                clock.instant()
+                safeMetadata, clock.instant(), auditPresentationService.capture(companyId, null, AuditActorType.SYSTEM, action, entityType, entityId, safeMetadata.values())
         ));
     }
 
@@ -122,6 +123,7 @@ public class AuditEventRecorder {
     ) {
         var operator = platformOperatorContextHolder.currentOperator()
                 .orElseThrow(() -> new IllegalStateException("A trusted platform actor context is required"));
+        AuditPayload safeMetadata = toMetadataPayload(metadata);
         return auditEventRepository.append(AuditEvent.create(
                 companyId,
                 operator.userId(),
@@ -132,8 +134,7 @@ public class AuditEventRecorder {
                 entityId,
                 toPayload(beforeData),
                 toPayload(afterData),
-                toMetadataPayload(metadata),
-                clock.instant()
+                safeMetadata, clock.instant(), auditPresentationService.capture(companyId, operator.userId(), AuditActorType.PLATFORM_USER, action, entityType, entityId, safeMetadata.values())
         ));
     }
 

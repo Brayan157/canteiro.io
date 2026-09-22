@@ -4,5 +4,6 @@
 build
 out
 .env
+src/test
 docs
 HELP.md

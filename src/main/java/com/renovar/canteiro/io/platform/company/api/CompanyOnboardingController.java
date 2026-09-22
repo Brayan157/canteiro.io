@@ -30,7 +30,7 @@ public class CompanyOnboardingController {
     public CompanyOnboardingResponse onboard(@Valid @RequestBody CompanyOnboardingCreateRequest request) {
         CompanyOnboardingResult result = companyOnboardingService.onboard(new CompanyOnboardingCommand(
                 request.corporateName(), request.tradeName(), request.document(), request.email(), request.phone(),
-                request.address(), request.logo(), request.ownerEmail(), request.planIds()
+                request.address(), null, request.ownerEmail(), request.planIds()
         ));
         return new CompanyOnboardingResponse(
                 result.companyId(), result.ownerUserId(), result.ownerEmail(), result.selectedPlanIds(),

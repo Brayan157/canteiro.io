@@ -109,4 +109,8 @@ public final class Company {
     public void deactivate() {
         active = false;
     }
+
+    public void updateLogo(String storageKey) {
+        this.logo = storageKey;
+    }
 }

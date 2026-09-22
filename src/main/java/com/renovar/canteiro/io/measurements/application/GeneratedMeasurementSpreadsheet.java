@@ -1,4 +1,4 @@
 package com.renovar.canteiro.io.measurements.application;
 
-public record GeneratedMeasurementSpreadsheet(String filename, byte[] content) {
+public record GeneratedMeasurementSpreadsheet(String filename, MeasurementDocumentWriter writer) {
 }

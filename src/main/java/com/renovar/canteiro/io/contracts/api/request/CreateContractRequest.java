@@ -9,6 +9,7 @@ import java.util.UUID;
 
 public record CreateContractRequest(
         @NotNull UUID workId,
+        @jakarta.validation.constraints.Size(max = 100) String contractIdentifier,
         String reference,
         @NotBlank String name,
         @NotNull ContractStatus status,

@@ -1,19 +1,18 @@
 package com.renovar.canteiro.io.measurements.infrastructure.pdf;
 
-import com.renovar.canteiro.io.measurements.application.MeasurementPdfData;
+import com.renovar.canteiro.io.measurements.application.MeasurementExportData;
 import com.renovar.canteiro.io.measurements.domain.Measurement;
 import com.renovar.canteiro.io.measurements.domain.MeasurementDiscount;
 import com.renovar.canteiro.io.measurements.domain.MeasurementDiscountType;
 import com.renovar.canteiro.io.measurements.domain.MeasurementItem;
 import com.renovar.canteiro.io.measurements.domain.MeasurementVersion;
-import com.renovar.canteiro.io.measurements.domain.MeasurementVersionAmountCalculator;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.text.PDFTextStripper;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.io.ByteArrayOutputStream;
 import java.time.LocalDate;
-import java.util.List;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -34,16 +33,18 @@ class PdfBoxMeasurementPdfGeneratorTest {
                 new BigDecimal("2.5000"), new BigDecimal("10.0000"), new BigDecimal("8.00"));
         MeasurementDiscount discount = MeasurementDiscount.create(companyId, versionId, MeasurementDiscountType.PERCENTAGE,
                 new BigDecimal("10.0000"));
-        var amounts = MeasurementVersionAmountCalculator.calculate(List.of(item), discount);
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        var result = generator.write(new MeasurementExportData(measurement, version, discount),
+                consumer -> consumer.accept(item), output);
+        byte[] bytes = output.toByteArray();
 
-        byte[] result = generator.generate(new MeasurementPdfData(measurement, version, List.of(item), discount, amounts));
-
-        assertTrue(result.length > 4);
-        assertEquals((byte) '%', result[0]);
-        assertEquals((byte) 'P', result[1]);
-        assertEquals((byte) 'D', result[2]);
-        assertEquals((byte) 'F', result[3]);
-        try (var document = Loader.loadPDF(result)) {
+        assertEquals(1, result.itemCount());
+        assertTrue(bytes.length > 4);
+        assertEquals((byte) '%', bytes[0]);
+        assertEquals((byte) 'P', bytes[1]);
+        assertEquals((byte) 'D', bytes[2]);
+        assertEquals((byte) 'F', bytes[3]);
+        try (var document = Loader.loadPDF(bytes)) {
             String text = new PDFTextStripper().getText(document);
             assertEquals(1, document.getNumberOfPages());
             assertTrue(text.contains("MEDIÇÃO Ago/2026"));

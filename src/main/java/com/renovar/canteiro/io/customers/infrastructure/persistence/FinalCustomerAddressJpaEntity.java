@@ -72,4 +72,19 @@ public class FinalCustomerAddressJpaEntity extends BaseJpaEntity {
         this.primaryAddress = primaryAddress;
         this.active = active;
     }
+
+    public void update(String label, String postalCode, String street, String number, String complement, String district,
+                       String city, String state, String country, boolean primaryAddress, boolean active) {
+        this.label = label;
+        this.postalCode = postalCode;
+        this.street = street;
+        this.number = number;
+        this.complement = complement;
+        this.district = district;
+        this.city = city;
+        this.state = state;
+        this.country = country;
+        this.primaryAddress = primaryAddress;
+        this.active = active;
+    }
 }

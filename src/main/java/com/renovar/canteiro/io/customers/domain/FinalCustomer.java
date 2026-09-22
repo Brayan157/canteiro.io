@@ -58,6 +58,10 @@ public final class FinalCustomer {
         this.name = requireName(name);
     }
 
+    public FinalCustomer updateProfile(FinalCustomerType customerType, String name, String document) {
+        return new FinalCustomer(id, companyId, customerType, name, document, active, createdAt, updatedAt);
+    }
+
     public void deactivate() {
         active = false;
     }

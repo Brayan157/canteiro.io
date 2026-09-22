@@ -39,7 +39,7 @@ public class InitialCompanyOwnerAccessProvisioner {
             throw new IllegalStateException("The active permission catalog is required to onboard a company");
         }
 
-        Role role = roleRepository.save(Role.create(companyId, ROLE_NAME, ROLE_DESCRIPTION));
+        Role role = roleRepository.save(Role.createInitialOwnerRole(companyId, ROLE_NAME, ROLE_DESCRIPTION));
         activePermissions.forEach(permission -> rolePermissionRepository.save(
                 RolePermission.create(role.getId(), permission.getId())
         ));

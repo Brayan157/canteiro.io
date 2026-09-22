@@ -13,7 +13,12 @@ import com.renovar.canteiro.io.platform.catalog.api.response.PlanBundleResponse;
 import com.renovar.canteiro.io.platform.catalog.api.response.PlanFeatureResponse;
 import com.renovar.canteiro.io.platform.catalog.api.response.PlanResponse;
 import com.renovar.canteiro.io.platform.catalog.application.PlatformCatalogManagementService;
+import io.swagger.v3.oas.annotations.media.ArraySchema;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -87,8 +92,27 @@ public class PlatformCatalogController {
             @Valid @RequestBody CreateCatalogPriceRequest request
     ) {
         return platformCatalogApiMapper.toResponse(platformCatalogManagementService.addPlanPrice(
-                planId, request.amount(), request.validFrom(), request.validUntil()
+                planId, request.amountAsBigDecimal(), request.validFrom(), request.validUntil()
         ));
+    }
+
+    @GetMapping("/plans/{planId}/prices")
+    @Operation(summary = "Lists all price periods for a plan as the platform owner")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Plan price history", content = @Content(array = @ArraySchema(
+                    schema = @Schema(implementation = CatalogPriceResponse.class)
+            ))),
+            @ApiResponse(responseCode = "403", description = "Platform owner role is required", content = @Content(
+                    mediaType = "application/problem+json", schema = @Schema(ref = "#/components/schemas/ProblemDetail")
+            )),
+            @ApiResponse(responseCode = "404", description = "Plan was not found", content = @Content(
+                    mediaType = "application/problem+json", schema = @Schema(ref = "#/components/schemas/ProblemDetail")
+            ))
+    })
+    public List<CatalogPriceResponse> findPlanPrices(@PathVariable UUID planId) {
+        return platformCatalogManagementService.findPlanPrices(planId).stream()
+                .map(platformCatalogApiMapper::toResponse)
+                .toList();
     }
 
     @GetMapping("/features")
@@ -169,7 +193,26 @@ public class PlatformCatalogController {
             @Valid @RequestBody CreateCatalogPriceRequest request
     ) {
         return platformCatalogApiMapper.toResponse(platformCatalogManagementService.addBundlePrice(
-                bundleId, request.amount(), request.validFrom(), request.validUntil()
+                bundleId, request.amountAsBigDecimal(), request.validFrom(), request.validUntil()
         ));
+    }
+
+    @GetMapping("/bundles/{bundleId}/prices")
+    @Operation(summary = "Lists all price periods for a bundle as the platform owner")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Plan bundle price history", content = @Content(array = @ArraySchema(
+                    schema = @Schema(implementation = CatalogPriceResponse.class)
+            ))),
+            @ApiResponse(responseCode = "403", description = "Platform owner role is required", content = @Content(
+                    mediaType = "application/problem+json", schema = @Schema(ref = "#/components/schemas/ProblemDetail")
+            )),
+            @ApiResponse(responseCode = "404", description = "Plan bundle was not found", content = @Content(
+                    mediaType = "application/problem+json", schema = @Schema(ref = "#/components/schemas/ProblemDetail")
+            ))
+    })
+    public List<CatalogPriceResponse> findBundlePrices(@PathVariable UUID bundleId) {
+        return platformCatalogManagementService.findBundlePrices(bundleId).stream()
+                .map(platformCatalogApiMapper::toResponse)
+                .toList();
     }
 }

@@ -79,7 +79,9 @@ class CompanyOnboardingServiceTest {
     @Mock
     private AuditEventRecorder auditEventRecorder;
 
-    private final AccountActivationProperties accountActivationProperties = new AccountActivationProperties(Duration.ofHours(24), null);
+    private final AccountActivationProperties accountActivationProperties = new AccountActivationProperties(
+            Duration.ofHours(24), null, "http://localhost:5173/ativar-conta"
+    );
     private final Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
 
     private CompanyOnboardingService service;

@@ -2,6 +2,8 @@ package com.renovar.canteiro.io.measurements.infrastructure.persistence;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 import jakarta.persistence.LockModeType;
 
@@ -17,4 +19,7 @@ interface MeasurementItemJpaRepository extends JpaRepository<MeasurementItemJpaE
     Optional<MeasurementItemJpaEntity> findWithLockByIdAndCompanyId(UUID id, UUID companyId);
 
     List<MeasurementItemJpaEntity> findByMeasurementVersionIdAndCompanyId(UUID measurementVersionId, UUID companyId);
+
+    Page<MeasurementItemJpaEntity> findByMeasurementVersionIdAndCompanyId(UUID measurementVersionId, UUID companyId,
+                                                                            Pageable pageable);
 }

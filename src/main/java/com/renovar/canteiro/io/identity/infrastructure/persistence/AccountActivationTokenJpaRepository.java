@@ -8,4 +8,6 @@ import java.util.UUID;
 interface AccountActivationTokenJpaRepository extends JpaRepository<AccountActivationTokenJpaEntity, UUID> {
 
     Optional<AccountActivationTokenJpaEntity> findByTokenHash(String tokenHash);
+
+    Optional<AccountActivationTokenJpaEntity> findByUserId(UUID userId);
 }

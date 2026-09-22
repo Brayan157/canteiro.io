@@ -88,6 +88,7 @@ class InitialCompanyOwnerAccessProvisionerTest {
 
         assertEquals(companyId, roleCaptor.getValue().getCompanyId());
         assertEquals(InitialCompanyOwnerAccessProvisioner.ROLE_NAME, roleCaptor.getValue().getName());
+        assertEquals(true, roleCaptor.getValue().isSystemProtected());
         assertEquals(Set.of(customersCreate.getId(), usersManage.getId()), rolePermissionCaptor.getAllValues().stream()
                 .map(RolePermission::getPermissionId)
                 .collect(java.util.stream.Collectors.toSet()));

@@ -12,6 +12,7 @@ public final class RefreshToken {
     private final UUID userId;
     private final String tokenHash;
     private final Instant expiresAt;
+    private final boolean rememberAccess;
     private Instant revokedAt;
     private UUID replacedByTokenId;
     private final Instant createdAt;
@@ -22,6 +23,7 @@ public final class RefreshToken {
             UUID userId,
             String tokenHash,
             Instant expiresAt,
+            boolean rememberAccess,
             Instant revokedAt,
             UUID replacedByTokenId,
             Instant createdAt,
@@ -31,14 +33,15 @@ public final class RefreshToken {
         this.userId = userId;
         this.tokenHash = tokenHash;
         this.expiresAt = expiresAt;
+        this.rememberAccess = rememberAccess;
         this.revokedAt = revokedAt;
         this.replacedByTokenId = replacedByTokenId;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
     }
 
-    public static RefreshToken create(UUID userId, String tokenHash, Instant expiresAt) {
-        return new RefreshToken(null, userId, tokenHash, expiresAt, null, null, null, null);
+    public static RefreshToken create(UUID userId, String tokenHash, Instant expiresAt, boolean rememberAccess) {
+        return new RefreshToken(null, userId, tokenHash, expiresAt, rememberAccess, null, null, null, null);
     }
 
     public static RefreshToken rehydrate(
@@ -46,12 +49,23 @@ public final class RefreshToken {
             UUID userId,
             String tokenHash,
             Instant expiresAt,
+            boolean rememberAccess,
             Instant revokedAt,
             UUID replacedByTokenId,
             Instant createdAt,
             Instant updatedAt
     ) {
-        return new RefreshToken(id, userId, tokenHash, expiresAt, revokedAt, replacedByTokenId, createdAt, updatedAt);
+        return new RefreshToken(
+                id,
+                userId,
+                tokenHash,
+                expiresAt,
+                rememberAccess,
+                revokedAt,
+                replacedByTokenId,
+                createdAt,
+                updatedAt
+        );
     }
 
     public boolean isUsableAt(Instant currentInstant) {

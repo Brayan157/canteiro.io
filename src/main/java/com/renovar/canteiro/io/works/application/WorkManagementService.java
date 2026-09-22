@@ -23,6 +23,8 @@ import com.renovar.canteiro.io.works.domain.WorkRepository;
 import com.renovar.canteiro.io.works.domain.WorkStatus;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
@@ -75,6 +77,33 @@ public class WorkManagementService {
                 .orElseThrow(() -> new TenantResourceNotFoundException("Work"));
     }
 
+    @Transactional(readOnly = true)
+    public Page<Work> findAll(WorkFilter filter, Pageable pageable) {
+        accessAuthorizationService.requirePermission(AccessModule.WORKS, AccessAction.READ);
+        return workRepository.findByCompanyId(tenantContextHolder.requireCurrentTenant().companyId(), filter, pageable);
+    }
+
+    @Transactional
+    public WorkChangeResult update(UUID workId, UpdateWorkCommand command) {
+        UUID companyId = tenantContextHolder.requireCurrentTenant().companyId();
+        Work current = workRepository.findByIdAndCompanyId(workId, companyId)
+                .orElseThrow(() -> new TenantResourceNotFoundException("Work"));
+        ChangeAuthorizationMode mode = accessAuthorizationService.requireChangeAuthorization(AccessModule.WORKS, ChangeOperation.UPDATE);
+        Work proposed = current.updateProfile(command.name(), command.reference(), command.executionLocationType(),
+                command.executionAddress(), command.status(), command.startedOn(), command.expectedCompletionOn(), command.completedOn());
+        if (mode == ChangeAuthorizationMode.REQUEST_APPROVAL) {
+            ChangeRequest request = changeRequestService.create(new CreateChangeRequestCommand(AuditModule.WORKS,
+                    ChangeRequestOperation.UPDATE, "Work", current.getId(), 0,
+                    new ChangeRequestSnapshot(new AuditPayload(auditData(current)), new AuditPayload(proposal(command))),
+                    command.justification()));
+            return new WorkChangeResult(null, request, mode);
+        }
+        Work saved = workRepository.save(proposed);
+        auditEventRecorder.recordDirectAction(AuditModule.WORKS, AuditAction.UPDATE, "Work", saved.getId(),
+                auditData(current), auditData(saved), Map.of("origin", "direct"));
+        return new WorkChangeResult(saved, null, mode);
+    }
+
     @Transactional
     public void applyApprovedCreation(ChangeRequest changeRequest) {
         CreateWorkCommand command = fromProposal(changeRequest.getSnapshot().proposedData().values());
@@ -84,6 +113,17 @@ public class WorkManagementService {
                 AuditModule.WORKS, AuditAction.CREATE, "Work", work.getId(), null, auditData(work),
                 Map.of("origin", "approved-change-request", "changeRequestId", changeRequest.getId().toString())
         );
+    }
+
+    @Transactional
+    public void applyApprovedUpdate(ChangeRequest changeRequest) {
+        Work current = workRepository.findByIdAndCompanyId(changeRequest.getEntityId(), changeRequest.getCompanyId())
+                .orElseThrow(() -> new TenantResourceNotFoundException("Work"));
+        UpdateWorkCommand command = updateFromProposal(changeRequest.getSnapshot().proposedData().values());
+        Work saved = workRepository.save(current.updateProfile(command.name(), command.reference(), command.executionLocationType(),
+                command.executionAddress(), command.status(), command.startedOn(), command.expectedCompletionOn(), command.completedOn()));
+        auditEventRecorder.recordDirectAction(AuditModule.WORKS, AuditAction.UPDATE, "Work", saved.getId(),
+                auditData(current), auditData(saved), Map.of("origin", "approved-change-request", "changeRequestId", changeRequest.getId().toString()));
     }
 
     private void requireCurrentTenantCustomer(UUID customerId, UUID companyId) {
@@ -113,6 +153,17 @@ public class WorkManagementService {
         return proposal;
     }
 
+    private Map<String, Object> proposal(UpdateWorkCommand command) {
+        Map<String, Object> proposal = new HashMap<>();
+        proposal.put("name", command.name()); proposal.put("reference", command.reference());
+        proposal.put("executionLocationType", command.executionLocationType().name());
+        proposal.put("executionAddress", command.executionAddress()); proposal.put("status", command.status().name());
+        proposal.put("startedOn", dateValue(command.startedOn()));
+        proposal.put("expectedCompletionOn", dateValue(command.expectedCompletionOn()));
+        proposal.put("completedOn", dateValue(command.completedOn()));
+        return proposal;
+    }
+
     private CreateWorkCommand fromProposal(Map<String, Object> proposal) {
         return new CreateWorkCommand(
                 UUID.fromString((String) proposal.get("finalCustomerId")),
@@ -126,6 +177,13 @@ public class WorkManagementService {
                 date((String) proposal.get("completedOn")),
                 null
         );
+    }
+    private UpdateWorkCommand updateFromProposal(Map<String, Object> proposal) {
+        return new UpdateWorkCommand((String) proposal.get("name"), (String) proposal.get("reference"),
+                WorkExecutionLocationType.valueOf((String) proposal.get("executionLocationType")),
+                (String) proposal.get("executionAddress"), WorkStatus.valueOf((String) proposal.get("status")),
+                date((String) proposal.get("startedOn")), date((String) proposal.get("expectedCompletionOn")),
+                date((String) proposal.get("completedOn")), null);
     }
 
     private Map<String, Object> auditData(Work work) {

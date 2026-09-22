@@ -1,6 +1,6 @@
 package com.renovar.canteiro.io.access.api;
 
-import com.renovar.canteiro.io.access.api.response.EmployeeResponse;
+import com.renovar.canteiro.io.access.api.response.AccessUserResponse;
 import com.renovar.canteiro.io.access.api.response.PermissionResponse;
 import com.renovar.canteiro.io.access.api.response.RoleResponse;
 import com.renovar.canteiro.io.access.application.CompanyEmployee;
@@ -13,12 +13,13 @@ import java.util.Set;
 @Component
 public class CompanyAccessApiMapper {
 
-    public EmployeeResponse toResponse(CompanyEmployee employee) {
-        return new EmployeeResponse(
+    public AccessUserResponse toResponse(CompanyEmployee employee) {
+        return new AccessUserResponse(
                 employee.user().getId(),
                 employee.user().getEmail(),
                 employee.user().getStatus(),
                 employee.roleIds(),
+                employee.companyOwner(),
                 employee.user().getCreatedAt(),
                 employee.user().getUpdatedAt()
         );
@@ -30,6 +31,7 @@ public class CompanyAccessApiMapper {
                 role.getName(),
                 role.getDescription(),
                 role.isActive(),
+                role.isSystemProtected(),
                 permissionIds,
                 role.getCreatedAt(),
                 role.getUpdatedAt()

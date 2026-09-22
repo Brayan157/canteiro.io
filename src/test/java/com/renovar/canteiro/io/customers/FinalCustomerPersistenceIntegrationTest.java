@@ -4,6 +4,7 @@ import com.renovar.canteiro.io.AbstractPostgresIntegrationTest;
 import com.renovar.canteiro.io.customers.domain.FinalCustomer;
 import com.renovar.canteiro.io.customers.domain.FinalCustomerRepository;
 import com.renovar.canteiro.io.customers.domain.FinalCustomerType;
+import com.renovar.canteiro.io.customers.application.FinalCustomerFilter;
 import com.renovar.canteiro.io.platform.company.domain.Company;
 import com.renovar.canteiro.io.platform.company.domain.CompanyRepository;
 import org.junit.jupiter.api.Test;
@@ -13,6 +14,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 class FinalCustomerPersistenceIntegrationTest extends AbstractPostgresIntegrationTest {
 
@@ -51,6 +53,29 @@ class FinalCustomerPersistenceIntegrationTest extends AbstractPostgresIntegratio
         assertThrows(DataIntegrityViolationException.class, () -> finalCustomerRepository.save(FinalCustomer.create(
                 company.getId(), FinalCustomerType.INDIVIDUAL, "Ana Souza", "12345678901"
         )));
+    }
+
+    @Test
+    void filtersFinalCustomersByNameDocumentTypeAndStatusInsideTheirTenant() {
+        Company company = createCompany("40000000000100", "filter-customer@example.com");
+        Company otherCompany = createCompany("50000000000100", "filter-customer-other@example.com");
+        FinalCustomer matching = finalCustomerRepository.save(FinalCustomer.create(
+                company.getId(), FinalCustomerType.LEGAL, "Usina Horizonte", "12.345.678/0001-90"
+        ));
+        finalCustomerRepository.save(FinalCustomer.create(
+                company.getId(), FinalCustomerType.INDIVIDUAL, "Ana Oliveira", "529.982.247-25"
+        ));
+        finalCustomerRepository.save(FinalCustomer.create(
+                otherCompany.getId(), FinalCustomerType.LEGAL, "Usina Horizonte", "12.345.678/0001-90"
+        ));
+
+        var result = finalCustomerRepository.findByCompanyId(company.getId(),
+                new FinalCustomerFilter("horiz", "12.345.678/0001", FinalCustomerType.LEGAL, true),
+                org.springframework.data.domain.Pageable.unpaged());
+
+        assertEquals(1, result.getTotalElements());
+        assertEquals(matching.getId(), result.getContent().getFirst().getId());
+        assertFalse(result.getContent().stream().anyMatch(customer -> customer.getCompanyId().equals(otherCompany.getId())));
     }
 
     private Company createCompany(String document, String email) {

@@ -68,7 +68,11 @@ class PasswordResetIntegrationTest extends AbstractPostgresIntegrationTest {
     @Test
     void resetsPasswordConsumesTokenAndRevokesExistingSessions() {
         User user = createActiveUser("reset@example.com");
-        AuthenticationTokens session = authenticationService.login(new LoginCommand("reset@example.com", OLD_PASSWORD));
+        AuthenticationTokens session = authenticationService.login(new LoginCommand(
+                "reset@example.com",
+                OLD_PASSWORD,
+                false
+        ));
 
         passwordResetService.requestReset(new RequestPasswordResetCommand("reset@example.com"));
         String rawPasswordResetToken = passwordResetEmailSender.rawPasswordResetToken();

@@ -2,10 +2,12 @@ package com.renovar.canteiro.io.customers.infrastructure.persistence;
 
 import com.renovar.canteiro.io.customers.domain.FinalCustomer;
 import com.renovar.canteiro.io.customers.domain.FinalCustomerRepository;
+import com.renovar.canteiro.io.customers.application.FinalCustomerFilter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Repository;
+import org.springframework.data.jpa.domain.Specification;
 
 import java.util.Optional;
 import java.util.UUID;
@@ -43,8 +45,33 @@ public class JpaFinalCustomerRepository implements FinalCustomerRepository {
     }
 
     @Override
-    public Page<FinalCustomer> findByCompanyId(UUID companyId, Pageable pageable) {
-        return finalCustomerJpaRepository.findByCompanyId(companyId, pageable)
+    public Page<FinalCustomer> findByCompanyId(UUID companyId, FinalCustomerFilter filter, Pageable pageable) {
+        return finalCustomerJpaRepository.findAll(specification(companyId, filter), pageable)
                 .map(finalCustomerPersistenceMapper::toDomain);
+    }
+
+    private Specification<FinalCustomerJpaEntity> specification(UUID companyId, FinalCustomerFilter filter) {
+        return (root, query, criteriaBuilder) -> {
+            var predicate = criteriaBuilder.equal(root.get("companyId"), companyId);
+            if (filter.normalizedName() != null) {
+                predicate = criteriaBuilder.and(predicate, criteriaBuilder.like(
+                        criteriaBuilder.lower(root.get("name")), like(filter.normalizedName())));
+            }
+            if (filter.normalizedDocument() != null) {
+                predicate = criteriaBuilder.and(predicate,
+                        criteriaBuilder.like(root.get("document"), "%" + filter.normalizedDocument() + "%"));
+            }
+            if (filter.customerType() != null) {
+                predicate = criteriaBuilder.and(predicate, criteriaBuilder.equal(root.get("customerType"), filter.customerType()));
+            }
+            if (filter.active() != null) {
+                predicate = criteriaBuilder.and(predicate, criteriaBuilder.equal(root.get("active"), filter.active()));
+            }
+            return predicate;
+        };
+    }
+
+    private String like(String value) {
+        return "%" + value.toLowerCase(java.util.Locale.ROOT) + "%";
     }
 }

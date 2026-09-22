@@ -7,4 +7,9 @@ public interface ChangeRequestApprovalHandler {
     boolean supports(ChangeRequest changeRequest);
 
     void apply(ChangeRequest changeRequest);
+
+    default AppliedChangeRequestEntity applyAndDescribe(ChangeRequest changeRequest) {
+        apply(changeRequest);
+        return null;
+    }
 }

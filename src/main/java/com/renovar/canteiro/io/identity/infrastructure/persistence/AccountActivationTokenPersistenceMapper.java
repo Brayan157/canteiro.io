@@ -19,6 +19,10 @@ public class AccountActivationTokenPersistenceMapper {
     }
 
     public void updateJpaEntity(AccountActivationTokenJpaEntity entity, AccountActivationToken accountActivationToken) {
+        if (!entity.getTokenHash().equals(accountActivationToken.getTokenHash())
+                || !entity.getExpiresAt().equals(accountActivationToken.getExpiresAt())) {
+            entity.replace(accountActivationToken.getTokenHash(), accountActivationToken.getExpiresAt());
+        }
         if (accountActivationToken.getConsumedAt() != null) {
             entity.consume(accountActivationToken.getConsumedAt());
         }

@@ -16,12 +16,16 @@ class WorkChangeRequestApprovalHandler implements ChangeRequestApprovalHandler {
     @Override
     public boolean supports(ChangeRequest changeRequest) {
         return changeRequest.getModule() == AuditModule.WORKS
-                && changeRequest.getOperation() == ChangeRequestOperation.CREATE
+                && (changeRequest.getOperation() == ChangeRequestOperation.CREATE || changeRequest.getOperation() == ChangeRequestOperation.UPDATE)
                 && "Work".equals(changeRequest.getEntityType());
     }
 
     @Override
     public void apply(ChangeRequest changeRequest) {
-        workManagementService.applyApprovedCreation(changeRequest);
+        if (changeRequest.getOperation() == ChangeRequestOperation.CREATE) {
+            workManagementService.applyApprovedCreation(changeRequest);
+        } else {
+            workManagementService.applyApprovedUpdate(changeRequest);
+        }
     }
 }

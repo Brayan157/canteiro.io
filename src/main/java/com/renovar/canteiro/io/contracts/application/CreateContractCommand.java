@@ -7,6 +7,7 @@ import java.util.UUID;
 
 public record CreateContractCommand(
         UUID workId,
+        String contractIdentifier,
         String reference,
         String name,
         ContractStatus status,

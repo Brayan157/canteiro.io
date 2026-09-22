@@ -13,6 +13,7 @@ public final class Role {
     private String name;
     private String description;
     private boolean active;
+    private final boolean systemProtected;
     private final Instant createdAt;
     private final Instant updatedAt;
 
@@ -22,6 +23,7 @@ public final class Role {
             String name,
             String description,
             boolean active,
+            boolean systemProtected,
             Instant createdAt,
             Instant updatedAt
     ) {
@@ -30,12 +32,17 @@ public final class Role {
         this.name = requireName(name);
         this.description = description;
         this.active = active;
+        this.systemProtected = systemProtected;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
     }
 
     public static Role create(UUID companyId, String name, String description) {
-        return new Role(null, companyId, name, description, true, null, null);
+        return new Role(null, companyId, name, description, true, false, null, null);
+    }
+
+    public static Role createInitialOwnerRole(UUID companyId, String name, String description) {
+        return new Role(null, companyId, name, description, true, true, null, null);
     }
 
     public static Role rehydrate(
@@ -47,7 +54,20 @@ public final class Role {
             Instant createdAt,
             Instant updatedAt
     ) {
-        return new Role(id, companyId, name, description, active, createdAt, updatedAt);
+        return rehydrate(id, companyId, name, description, active, false, createdAt, updatedAt);
+    }
+
+    public static Role rehydrate(
+            UUID id,
+            UUID companyId,
+            String name,
+            String description,
+            boolean active,
+            boolean systemProtected,
+            Instant createdAt,
+            Instant updatedAt
+    ) {
+        return new Role(id, companyId, name, description, active, systemProtected, createdAt, updatedAt);
     }
 
     public void update(String name, String description) {

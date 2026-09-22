@@ -28,16 +28,21 @@ public class RoleJpaEntity extends BaseJpaEntity {
     @Column(name = "active", nullable = false)
     private boolean active;
 
-    public RoleJpaEntity(UUID companyId, String name, String description, boolean active) {
+    @Column(name = "system_protected", nullable = false)
+    private boolean systemProtected;
+
+    public RoleJpaEntity(UUID companyId, String name, String description, boolean active, boolean systemProtected) {
         this.companyId = companyId;
         this.name = name;
         this.description = description;
         this.active = active;
+        this.systemProtected = systemProtected;
     }
 
-    public void update(String name, String description, boolean active) {
+    public void update(String name, String description, boolean active, boolean systemProtected) {
         this.name = name;
         this.description = description;
         this.active = active;
+        this.systemProtected = systemProtected;
     }
 }

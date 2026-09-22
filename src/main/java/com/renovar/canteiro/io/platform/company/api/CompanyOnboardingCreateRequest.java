@@ -15,7 +15,6 @@ public record CompanyOnboardingCreateRequest(
         @NotBlank @Email String email,
         String phone,
         String address,
-        String logo,
         @NotBlank @Email String ownerEmail,
         @NotEmpty List<@NotNull UUID> planIds
 ) {

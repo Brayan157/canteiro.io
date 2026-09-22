@@ -36,16 +36,21 @@ public class ChangeRequestDecisionService {
 
     @Transactional
     public ChangeRequest approve(ApproveChangeRequestCommand command) {
+        return approveWithAppliedEntity(command).changeRequest();
+    }
+
+    @Transactional
+    public ChangeRequestDecisionResult approveWithAppliedEntity(ApproveChangeRequestCommand command) {
         ChangeRequest changeRequest = requirePendingRequest(command.changeRequestId());
         requireApprovalPermission(changeRequest.getModule(), AccessAction.APPROVE);
         var tenant = tenantContextHolder.requireCurrentTenant();
         preventSelfApproval(changeRequest, tenant.userId());
         Map<String, Object> beforeData = decisionAuditData(changeRequest);
         changeRequest.approve(tenant.userId(), clock.instant(), command.decisionReason());
-        applyApprovedChange(changeRequest);
+        AppliedChangeRequestEntity appliedEntity = applyApprovedChange(changeRequest);
         ChangeRequest decidedChangeRequest = changeRequestRepository.save(changeRequest);
         recordDecision(AuditAction.APPROVE, decidedChangeRequest, beforeData);
-        return decidedChangeRequest;
+        return new ChangeRequestDecisionResult(decidedChangeRequest, appliedEntity);
     }
 
     @Transactional
@@ -131,11 +136,12 @@ public class ChangeRequestDecisionService {
         );
     }
 
-    private void applyApprovedChange(ChangeRequest changeRequest) {
-        changeRequestApprovalHandlers.stream()
+    private AppliedChangeRequestEntity applyApprovedChange(ChangeRequest changeRequest) {
+        return changeRequestApprovalHandlers.stream()
                 .filter(handler -> handler.supports(changeRequest))
                 .findFirst()
-                .ifPresent(handler -> handler.apply(changeRequest));
+                .map(handler -> handler.applyAndDescribe(changeRequest))
+                .orElse(null);
     }
 
     private Map<String, Object> decisionAuditData(ChangeRequest changeRequest) {

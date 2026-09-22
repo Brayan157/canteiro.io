@@ -13,6 +13,10 @@ class FinalCustomerContactPersistenceMapper {
         );
     }
 
+    void updateJpaEntity(FinalCustomerContactJpaEntity entity, FinalCustomerContact contact) {
+        entity.update(contact.getName(), contact.getEmail(), contact.getPhone(), contact.isPrimaryContact(), contact.isActive());
+    }
+
     FinalCustomerContact toDomain(FinalCustomerContactJpaEntity entity) {
         return FinalCustomerContact.rehydrate(
                 entity.getId(), entity.getCompanyId(), entity.getFinalCustomerId(), entity.getName(), entity.getEmail(),

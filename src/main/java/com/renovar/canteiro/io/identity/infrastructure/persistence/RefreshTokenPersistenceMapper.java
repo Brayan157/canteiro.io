@@ -10,7 +10,8 @@ public class RefreshTokenPersistenceMapper {
         RefreshTokenJpaEntity entity = new RefreshTokenJpaEntity(
                 refreshToken.getUserId(),
                 refreshToken.getTokenHash(),
-                refreshToken.getExpiresAt()
+                refreshToken.getExpiresAt(),
+                refreshToken.isRememberAccess()
         );
         if (refreshToken.getRevokedAt() != null) {
             entity.revoke(refreshToken.getRevokedAt(), refreshToken.getReplacedByTokenId());
@@ -30,6 +31,7 @@ public class RefreshTokenPersistenceMapper {
                 entity.getUserId(),
                 entity.getTokenHash(),
                 entity.getExpiresAt(),
+                entity.isRememberAccess(),
                 entity.getRevokedAt(),
                 entity.getReplacedByTokenId(),
                 entity.getCreatedAt(),

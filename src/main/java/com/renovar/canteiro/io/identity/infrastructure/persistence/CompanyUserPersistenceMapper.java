@@ -7,7 +7,11 @@ import org.springframework.stereotype.Component;
 public class CompanyUserPersistenceMapper {
 
     public CompanyUserJpaEntity toJpaEntity(CompanyUser companyUser) {
-        return new CompanyUserJpaEntity(companyUser.getUserId(), companyUser.getCompanyId());
+        return new CompanyUserJpaEntity(
+                companyUser.getUserId(),
+                companyUser.getCompanyId(),
+                companyUser.isCompanyOwner()
+        );
     }
 
     public CompanyUser toDomain(CompanyUserJpaEntity entity) {
@@ -15,6 +19,7 @@ public class CompanyUserPersistenceMapper {
                 entity.getId(),
                 entity.getUserId(),
                 entity.getCompanyId(),
+                entity.isCompanyOwner(),
                 entity.getCreatedAt(),
                 entity.getUpdatedAt()
         );

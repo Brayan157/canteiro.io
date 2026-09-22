@@ -13,5 +13,6 @@ public enum AccessAction {
     SEND_REPORT,
     MANAGE_USERS,
     MANAGE_ROLES,
-    CANCEL_DIRECT
+    CANCEL_DIRECT,
+    VIEW_PAYMENT_DETAILS
 }

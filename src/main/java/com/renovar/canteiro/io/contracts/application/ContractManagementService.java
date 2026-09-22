@@ -8,6 +8,8 @@ import com.renovar.canteiro.io.access.domain.ChangeAuthorizationMode;
 import com.renovar.canteiro.io.access.domain.ChangeOperation;
 import com.renovar.canteiro.io.contracts.domain.Contract;
 import com.renovar.canteiro.io.contracts.domain.ContractRepository;
+import com.renovar.canteiro.io.contracts.domain.ContractService;
+import com.renovar.canteiro.io.contracts.domain.ContractServiceRepository;
 import com.renovar.canteiro.io.contracts.domain.ContractStatus;
 import com.renovar.canteiro.io.governance.application.AuditEventRecorder;
 import com.renovar.canteiro.io.governance.application.ChangeRequestService;
@@ -22,6 +24,8 @@ import com.renovar.canteiro.io.tenancy.application.TenantContextHolder;
 import com.renovar.canteiro.io.works.domain.WorkRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
@@ -37,6 +41,7 @@ public class ContractManagementService {
     private final AccessAuthorizationService accessAuthorizationService;
     private final WorkRepository workRepository;
     private final ContractRepository contractRepository;
+    private final ContractServiceRepository contractServiceRepository;
     private final ChangeRequestService changeRequestService;
     private final AuditEventRecorder auditEventRecorder;
 
@@ -75,6 +80,43 @@ public class ContractManagementService {
                 .orElseThrow(() -> new TenantResourceNotFoundException("Contract"));
     }
 
+    @Transactional(readOnly = true)
+    public Page<Contract> findAll(ContractFilter filter, Pageable pageable) {
+        accessAuthorizationService.requirePermission(AccessModule.CONTRACTS, AccessAction.READ);
+        return contractRepository.findByCompanyId(tenantContextHolder.requireCurrentTenant().companyId(), filter, pageable);
+    }
+
+    @Transactional
+    public ContractChangeResult update(UUID contractId, UpdateContractCommand command) {
+        UUID companyId = tenantContextHolder.requireCurrentTenant().companyId();
+        Contract current = contractRepository.findByIdAndCompanyId(contractId, companyId)
+                .orElseThrow(() -> new TenantResourceNotFoundException("Contract"));
+        ChangeAuthorizationMode mode = accessAuthorizationService.requireChangeAuthorization(
+                AccessModule.CONTRACTS, ChangeOperation.UPDATE);
+        Contract proposed = current.updateProfile(command.contractIdentifier(), command.reference(), command.name(), command.status(), command.startedOn(),
+                command.expectedCompletionOn(), command.completedOn());
+        if (mode == ChangeAuthorizationMode.REQUEST_APPROVAL) {
+            ChangeRequest request = changeRequestService.create(new CreateChangeRequestCommand(AuditModule.CONTRACTS,
+                    ChangeRequestOperation.UPDATE, "Contract", current.getId(), 0,
+                    new ChangeRequestSnapshot(new AuditPayload(auditData(current)), new AuditPayload(proposal(command))),
+                    command.justification()));
+            return new ContractChangeResult(null, request, mode);
+        }
+        Contract saved = contractRepository.save(proposed);
+        auditEventRecorder.recordDirectAction(AuditModule.CONTRACTS, AuditAction.UPDATE, "Contract", saved.getId(),
+                auditData(current), auditData(saved), Map.of("origin", "direct"));
+        return new ContractChangeResult(saved, null, mode);
+    }
+
+    @Transactional(readOnly = true)
+    public java.util.List<ContractService> findServices(UUID contractId) {
+        accessAuthorizationService.requirePermission(AccessModule.SERVICES, AccessAction.READ);
+        UUID companyId = tenantContextHolder.requireCurrentTenant().companyId();
+        contractRepository.findByIdAndCompanyId(contractId, companyId)
+                .orElseThrow(() -> new TenantResourceNotFoundException("Contract"));
+        return contractServiceRepository.findByContractIdAndCompanyId(contractId, companyId);
+    }
+
     @Transactional
     public void applyApprovedCreation(ChangeRequest changeRequest) {
         CreateContractCommand command = fromProposal(changeRequest.getSnapshot().proposedData().values());
@@ -86,6 +128,17 @@ public class ContractManagementService {
         );
     }
 
+    @Transactional
+    public void applyApprovedUpdate(ChangeRequest changeRequest) {
+        Contract current = contractRepository.findByIdAndCompanyId(changeRequest.getEntityId(), changeRequest.getCompanyId())
+                .orElseThrow(() -> new TenantResourceNotFoundException("Contract"));
+        UpdateContractCommand command = updateFromProposal(changeRequest.getSnapshot().proposedData().values());
+        Contract saved = contractRepository.save(current.updateProfile(command.contractIdentifier(), command.reference(), command.name(), command.status(),
+                command.startedOn(), command.expectedCompletionOn(), command.completedOn()));
+        auditEventRecorder.recordDirectAction(AuditModule.CONTRACTS, AuditAction.UPDATE, "Contract", saved.getId(),
+                auditData(current), auditData(saved), Map.of("origin", "approved-change-request", "changeRequestId", changeRequest.getId().toString()));
+    }
+
     private void requireCurrentTenantWork(UUID workId, UUID companyId) {
         if (workId == null || workRepository.findByIdAndCompanyId(workId, companyId).isEmpty()) {
             throw new TenantResourceNotFoundException("Work");
@@ -94,7 +147,7 @@ public class ContractManagementService {
 
     private Contract persist(UUID companyId, CreateContractCommand command) {
         return contractRepository.save(Contract.create(
-                companyId, command.workId(), command.reference(), command.name(), command.status(), command.startedOn(),
+                companyId, command.workId(), command.contractIdentifier(), command.reference(), command.name(), command.status(), command.startedOn(),
                 command.expectedCompletionOn(), command.completedOn()
         ));
     }
@@ -102,6 +155,7 @@ public class ContractManagementService {
     private Map<String, Object> proposal(CreateContractCommand command) {
         Map<String, Object> proposal = new HashMap<>();
         proposal.put("workId", command.workId().toString());
+        proposal.put("contractIdentifier", command.contractIdentifier());
         proposal.put("reference", command.reference());
         proposal.put("name", command.name());
         proposal.put("status", command.status().name());
@@ -111,9 +165,20 @@ public class ContractManagementService {
         return proposal;
     }
 
+    private Map<String, Object> proposal(UpdateContractCommand command) {
+        Map<String, Object> proposal = new HashMap<>();
+        proposal.put("contractIdentifier", command.contractIdentifier());
+        proposal.put("reference", command.reference()); proposal.put("name", command.name());
+        proposal.put("status", command.status().name()); proposal.put("startedOn", dateValue(command.startedOn()));
+        proposal.put("expectedCompletionOn", dateValue(command.expectedCompletionOn()));
+        proposal.put("completedOn", dateValue(command.completedOn()));
+        return proposal;
+    }
+
     private CreateContractCommand fromProposal(Map<String, Object> proposal) {
         return new CreateContractCommand(
                 UUID.fromString((String) proposal.get("workId")),
+                (String) proposal.get("contractIdentifier"),
                 (String) proposal.get("reference"),
                 (String) proposal.get("name"),
                 ContractStatus.valueOf((String) proposal.get("status")),
@@ -124,9 +189,19 @@ public class ContractManagementService {
         );
     }
 
+    private UpdateContractCommand updateFromProposal(Map<String, Object> proposal) {
+        return new UpdateContractCommand((String) proposal.get("contractIdentifier"), (String) proposal.get("reference"), (String) proposal.get("name"),
+                ContractStatus.valueOf((String) proposal.get("status")), date((String) proposal.get("startedOn")),
+                date((String) proposal.get("expectedCompletionOn")), date((String) proposal.get("completedOn")), null);
+    }
+
     private Map<String, Object> auditData(Contract contract) {
-        return Map.of("workId", contract.getWorkId().toString(), "name", contract.getName(),
-                "status", contract.getStatus().name());
+        Map<String, Object> values = new HashMap<>();
+        values.put("workId", contract.getWorkId().toString());
+        values.put("contractIdentifier", contract.getContractIdentifier());
+        values.put("name", contract.getName());
+        values.put("status", contract.getStatus().name());
+        return values;
     }
 
     private String dateValue(LocalDate value) {

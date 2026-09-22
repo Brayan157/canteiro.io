@@ -2,6 +2,7 @@ package com.renovar.canteiro.io.customers.domain;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import com.renovar.canteiro.io.customers.application.FinalCustomerFilter;
 
 import java.util.Optional;
 import java.util.UUID;
@@ -14,5 +15,9 @@ public interface FinalCustomerRepository {
 
     Optional<FinalCustomer> findByCompanyIdAndDocument(UUID companyId, String document);
 
-    Page<FinalCustomer> findByCompanyId(UUID companyId, Pageable pageable);
+    Page<FinalCustomer> findByCompanyId(UUID companyId, FinalCustomerFilter filter, Pageable pageable);
+
+    default Page<FinalCustomer> findByCompanyId(UUID companyId, Pageable pageable) {
+        return findByCompanyId(companyId, new FinalCustomerFilter(null, null, null, null), pageable);
+    }
 }

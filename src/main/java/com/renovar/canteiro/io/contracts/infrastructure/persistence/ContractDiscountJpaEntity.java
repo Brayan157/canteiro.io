@@ -39,4 +39,9 @@ class ContractDiscountJpaEntity extends BaseJpaEntity {
         this.discountType = discountType;
         this.discountValue = discountValue;
     }
+
+    void update(DiscountType discountType, BigDecimal discountValue) {
+        this.discountType = discountType;
+        this.discountValue = discountValue;
+    }
 }

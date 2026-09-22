@@ -14,15 +14,17 @@ import com.renovar.canteiro.io.measurements.domain.MeasurementItem;
 import com.renovar.canteiro.io.measurements.domain.MeasurementItemRepository;
 import com.renovar.canteiro.io.measurements.domain.MeasurementRepository;
 import com.renovar.canteiro.io.measurements.domain.MeasurementVersion;
-import com.renovar.canteiro.io.measurements.domain.MeasurementVersionAmountCalculator;
-import com.renovar.canteiro.io.measurements.domain.MeasurementVersionAmounts;
 import com.renovar.canteiro.io.measurements.domain.MeasurementVersionRepository;
 import com.renovar.canteiro.io.tenancy.application.TenantContextHolder;
+import com.renovar.canteiro.io.tenancy.domain.TenantContext;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.MDC;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -38,8 +40,9 @@ public class GenerateMeasurementSpreadsheetService {
     private final MeasurementDiscountRepository measurementDiscountRepository;
     private final MeasurementSpreadsheetGenerator spreadsheetGenerator;
     private final AuditEventRecorder auditEventRecorder;
+    private final TransactionTemplate transactionTemplate;
 
-    @Transactional
+    @Transactional(readOnly = true)
     public GeneratedMeasurementSpreadsheet generate(UUID measurementId, UUID measurementVersionId) {
         var tenant = tenantContextHolder.requireCurrentTenant();
         authorizationService.requirePermission(AccessModule.MEASUREMENTS, AccessAction.EXPORT);
@@ -52,24 +55,47 @@ public class GenerateMeasurementSpreadsheetService {
             throw new TenantResourceNotFoundException("Measurement version");
         }
 
-        List<MeasurementItem> items = measurementItemRepository
-                .findByMeasurementVersionIdAndCompanyId(version.getId(), tenant.companyId());
         MeasurementDiscount discount = measurementDiscountRepository
                 .findByMeasurementVersionIdAndCompanyId(version.getId(), tenant.companyId())
                 .orElse(null);
-        MeasurementVersionAmounts amounts = MeasurementVersionAmountCalculator.calculate(items, discount);
-        byte[] content = spreadsheetGenerator.generate(new MeasurementSpreadsheetData(
-                measurement, version, items, discount, amounts
-        ));
-
         String filename = "measurement-" + measurement.getId() + "-v" + version.getVersionNumber() + ".xlsx";
-        auditEventRecorder.recordDirectAction(AuditModule.MEASUREMENTS, AuditAction.EXPORT,
-                "MeasurementVersion", version.getId(), null,
-                Map.of("measurementId", measurement.getId().toString(),
-                        "versionNumber", version.getVersionNumber(),
-                        "itemCount", items.size(),
-                        "netAmount", amounts.netAmount()),
-                Map.of("format", "XLSX", "filename", filename));
-        return new GeneratedMeasurementSpreadsheet(filename, content);
+        String correlationId = MDC.get("X-Correlation-Id");
+        MeasurementExportData data = new MeasurementExportData(measurement, version, discount);
+        return new GeneratedMeasurementSpreadsheet(filename, output -> write(tenant, correlationId, data, output, filename));
+    }
+
+    private void write(TenantContext tenant, String correlationId, MeasurementExportData data,
+                       java.io.OutputStream output, String filename) throws java.io.IOException {
+        tenantContextHolder.setCurrentTenant(tenant);
+        if (correlationId != null) {
+            MDC.put("X-Correlation-Id", correlationId);
+        }
+        try {
+            MeasurementExportResult result = spreadsheetGenerator.write(data, pagedItems(tenant, data.version().getId()), output);
+            transactionTemplate.executeWithoutResult(status -> auditEventRecorder.recordDirectAction(
+                    AuditModule.MEASUREMENTS, AuditAction.EXPORT, "MeasurementVersion", data.version().getId(), null,
+                    Map.of("measurementId", data.measurement().getId().toString(),
+                            "versionNumber", data.version().getVersionNumber(), "itemCount", result.itemCount(),
+                            "netAmount", result.amounts().netAmount()),
+                    Map.of("format", "XLSX", "filename", filename, "streamed", true)
+            ));
+        } finally {
+            tenantContextHolder.clear();
+            MDC.remove("X-Correlation-Id");
+        }
+    }
+
+    private MeasurementItemSource pagedItems(TenantContext tenant, UUID versionId) {
+        return consumer -> {
+            int pageNumber = 0;
+            org.springframework.data.domain.Page<MeasurementItem> page;
+            do {
+                page = measurementItemRepository.findByMeasurementVersionIdAndCompanyId(versionId, tenant.companyId(),
+                        PageRequest.of(pageNumber++, 250, Sort.by(Sort.Order.asc("itemNumber"), Sort.Order.asc("id"))));
+                for (MeasurementItem item : page) {
+                    consumer.accept(item);
+                }
+            } while (page.hasNext());
+        };
     }
 }

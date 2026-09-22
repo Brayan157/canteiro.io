@@ -1,5 +1,6 @@
 package com.renovar.canteiro.io.employees.application;
 
+import com.renovar.canteiro.io.governance.application.AppliedChangeRequestEntity;
 import com.renovar.canteiro.io.governance.application.ChangeRequestApprovalHandler;
 import com.renovar.canteiro.io.governance.domain.AuditModule;
 import com.renovar.canteiro.io.governance.domain.ChangeRequest;
@@ -22,5 +23,11 @@ class EmployeeChangeRequestApprovalHandler implements ChangeRequestApprovalHandl
     @Override
     public void apply(ChangeRequest request) {
         employeeManagementService.applyApprovedCreation(request);
+    }
+
+    @Override
+    public AppliedChangeRequestEntity applyAndDescribe(ChangeRequest request) {
+        var employee = employeeManagementService.applyApprovedCreation(request);
+        return new AppliedChangeRequestEntity("Employee", employee.getId(), employee.getFullName());
     }
 }

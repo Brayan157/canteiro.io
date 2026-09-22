@@ -5,7 +5,7 @@ import com.renovar.canteiro.io.access.api.request.CreateRoleRequest;
 import com.renovar.canteiro.io.access.api.request.ReplaceRolePermissionsRequest;
 import com.renovar.canteiro.io.access.api.request.ReplaceUserRolesRequest;
 import com.renovar.canteiro.io.access.api.request.UpdateRoleRequest;
-import com.renovar.canteiro.io.access.api.response.EmployeeResponse;
+import com.renovar.canteiro.io.access.api.response.AccessUserResponse;
 import com.renovar.canteiro.io.access.api.response.ChangeAuthorizationResponse;
 import com.renovar.canteiro.io.access.api.response.PermissionResponse;
 import com.renovar.canteiro.io.access.api.response.RoleResponse;
@@ -57,7 +57,7 @@ public class CompanyAccessController {
     @PostMapping({"/users", "/employees"})
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(summary = "Creates a company system user and sends an activation email")
-    public EmployeeResponse createEmployee(@Valid @RequestBody CreateCompanyEmployeeRequest request) {
+    public AccessUserResponse createEmployee(@Valid @RequestBody CreateCompanyEmployeeRequest request) {
         return companyAccessApiMapper.toResponse(
                 companyAccessManagementService.createEmployee(new CreateCompanyEmployeeCommand(request.email()))
         );
@@ -65,7 +65,7 @@ public class CompanyAccessController {
 
     @GetMapping({"/users", "/employees"})
     @Operation(summary = "Lists company system users from the authenticated company")
-    public PageResponse<EmployeeResponse> findEmployees(
+    public PageResponse<AccessUserResponse> findEmployees(
             @RequestParam(required = false) Integer page,
             @RequestParam(required = false) Integer size,
             @RequestParam(required = false) List<String> sort
@@ -78,14 +78,14 @@ public class CompanyAccessController {
 
     @PatchMapping({"/users/{userId}/deactivate", "/employees/{userId}/deactivate"})
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    @Operation(summary = "Deactivates an employee without removing its history")
+    @Operation(summary = "Deactivates an employee without removing its history; the initial company owner is protected")
     public void deactivateEmployee(@PathVariable UUID userId) {
         companyAccessManagementService.deactivateEmployee(userId);
     }
 
     @PutMapping({"/users/{userId}/roles", "/employees/{userId}/roles"})
-    @Operation(summary = "Replaces the active roles assigned to an employee")
-    public EmployeeResponse replaceEmployeeRoles(
+    @Operation(summary = "Replaces the active roles assigned to an employee; the initial company owner is protected")
+    public AccessUserResponse replaceEmployeeRoles(
             @PathVariable UUID userId,
             @Valid @RequestBody ReplaceUserRolesRequest request
     ) {
@@ -114,7 +114,7 @@ public class CompanyAccessController {
     }
 
     @PutMapping("/roles/{roleId}")
-    @Operation(summary = "Updates a company role")
+    @Operation(summary = "Updates a company role; the protected initial owner role cannot be changed")
     public RoleResponse updateRole(@PathVariable UUID roleId, @Valid @RequestBody UpdateRoleRequest request) {
         return toRoleResponse(companyAccessManagementService.updateRole(
                 roleId,
@@ -124,13 +124,13 @@ public class CompanyAccessController {
 
     @PatchMapping("/roles/{roleId}/deactivate")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    @Operation(summary = "Deactivates a role without removing its history")
+    @Operation(summary = "Deactivates a role without removing its history; the protected initial owner role cannot be deactivated")
     public void deactivateRole(@PathVariable UUID roleId) {
         companyAccessManagementService.deactivateRole(roleId);
     }
 
     @PutMapping("/roles/{roleId}/permissions")
-    @Operation(summary = "Replaces the controlled catalog permissions assigned to a role")
+    @Operation(summary = "Replaces controlled catalog permissions assigned to a role; the protected initial owner role cannot be changed")
     public RoleResponse replaceRolePermissions(
             @PathVariable UUID roleId,
             @Valid @RequestBody ReplaceRolePermissionsRequest request

@@ -21,15 +21,20 @@ public class SetContractDiscountUseCase {
     private final ContractRepository contractRepository;
     private final ContractDiscountRepository contractDiscountRepository;
     private final ContractServiceRepository contractServiceRepository;
+    private final ApprovedContractBillingAmountProvider approvedContractBillingAmountProvider;
 
     @Transactional
     public ContractDiscount set(UUID companyId, UUID contractId, DiscountType discountType, BigDecimal discountValue) {
-        contractRepository.findByIdAndCompanyId(contractId, companyId)
+        contractRepository.findByIdAndCompanyIdWithBillingLock(contractId, companyId)
                 .orElseThrow(() -> new TenantResourceNotFoundException("Contract"));
         ContractDiscount discount = ContractDiscount.create(companyId, contractId, discountType, discountValue);
-        ContractNetAmountCalculator.calculate(
+        var proposedAmount = ContractNetAmountCalculator.calculate(
                 contractServiceRepository.findByContractIdAndCompanyId(contractId, companyId), discount
         );
+        BigDecimal approvedAmount = approvedContractBillingAmountProvider.approvedNetAmount(companyId, contractId);
+        if (proposedAmount.netAmount().compareTo(approvedAmount) < 0) {
+            throw new IllegalStateException("Contract net amount must not be lower than its approved billing amount");
+        }
         return contractDiscountRepository.save(discount);
     }
 }

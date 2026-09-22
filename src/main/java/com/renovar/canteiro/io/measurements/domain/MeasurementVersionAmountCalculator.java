@@ -14,6 +14,15 @@ public final class MeasurementVersionAmountCalculator {
                 .map(MeasurementItem::getTotalAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add)
                 .setScale(2, RoundingMode.HALF_UP);
+        return calculate(grossAmount, discount);
+    }
+
+    /**
+     * Applies the version discount to a gross amount already accumulated from a
+     * paged or streamed source, without requiring every item in memory.
+     */
+    public static MeasurementVersionAmounts calculate(BigDecimal grossAmount, MeasurementDiscount discount) {
+        grossAmount = grossAmount.setScale(2, RoundingMode.HALF_UP);
         BigDecimal discountAmount = calculateDiscountAmount(grossAmount, discount);
         return new MeasurementVersionAmounts(grossAmount, discountAmount,
                 grossAmount.subtract(discountAmount).setScale(2, RoundingMode.HALF_UP));

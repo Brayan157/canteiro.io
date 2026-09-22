@@ -1,15 +1,23 @@
 package com.renovar.canteiro.io.platform.catalog.api.request;
 
-import jakarta.validation.constraints.DecimalMin;
-import jakarta.validation.constraints.Digits;
+import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
 
 public record CreateCatalogPriceRequest(
-        @NotNull @DecimalMin("0.00") @Digits(integer = 17, fraction = 2) BigDecimal amount,
+        @NotBlank
+        @Pattern(regexp = "^(?:0|[1-9]\\d*)\\.\\d{2}$")
+        @Schema(type = "string", format = "decimal", example = "99.90", pattern = "^(?:0|[1-9]\\d*)\\.\\d{2}$")
+        String amount,
         @NotNull LocalDate validFrom,
         LocalDate validUntil
 ) {
+
+    public BigDecimal amountAsBigDecimal() {
+        return new BigDecimal(amount);
+    }
 }

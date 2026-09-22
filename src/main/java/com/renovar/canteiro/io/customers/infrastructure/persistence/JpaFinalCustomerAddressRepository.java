@@ -6,6 +6,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Repository
@@ -17,6 +18,12 @@ public class JpaFinalCustomerAddressRepository implements FinalCustomerAddressRe
 
     @Override
     public FinalCustomerAddress save(FinalCustomerAddress address) {
+        if (address.getId() != null) {
+            FinalCustomerAddressJpaEntity entity = finalCustomerAddressJpaRepository.findById(address.getId())
+                    .orElseThrow(() -> new IllegalStateException("Final customer address must exist before it can be updated"));
+            finalCustomerAddressPersistenceMapper.updateJpaEntity(entity, address);
+            return finalCustomerAddressPersistenceMapper.toDomain(finalCustomerAddressJpaRepository.save(entity));
+        }
         return finalCustomerAddressPersistenceMapper.toDomain(
                 finalCustomerAddressJpaRepository.save(finalCustomerAddressPersistenceMapper.toJpaEntity(address))
         );
@@ -27,5 +34,11 @@ public class JpaFinalCustomerAddressRepository implements FinalCustomerAddressRe
         return finalCustomerAddressJpaRepository.findByFinalCustomerIdAndCompanyId(finalCustomerId, companyId).stream()
                 .map(finalCustomerAddressPersistenceMapper::toDomain)
                 .toList();
+    }
+
+    @Override
+    public Optional<FinalCustomerAddress> findByIdAndFinalCustomerIdAndCompanyId(UUID id, UUID finalCustomerId, UUID companyId) {
+        return finalCustomerAddressJpaRepository.findByIdAndFinalCustomerIdAndCompanyId(id, finalCustomerId, companyId)
+                .map(finalCustomerAddressPersistenceMapper::toDomain);
     }
 }

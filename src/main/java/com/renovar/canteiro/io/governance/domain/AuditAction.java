@@ -11,5 +11,6 @@ public enum AuditAction {
     LOGOUT,
     EXPORT,
     SEND_REPORT,
+    VIEW_SENSITIVE,
     SUPPORT_ACTION
 }
