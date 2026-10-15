@@ -35,6 +35,9 @@ public class SetContractDiscountUseCase {
         if (proposedAmount.netAmount().compareTo(approvedAmount) < 0) {
             throw new IllegalStateException("Contract net amount must not be lower than its approved billing amount");
         }
+        if (proposedAmount.contractDiscountAmount().compareTo(approvedContractBillingAmountProvider.approvedDiscountAmount(companyId, contractId)) < 0) {
+            throw new IllegalStateException("Contract discount must cover its active negative billing allocations");
+        }
         return contractDiscountRepository.save(discount);
     }
 }

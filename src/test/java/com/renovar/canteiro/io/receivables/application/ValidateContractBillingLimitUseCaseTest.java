@@ -60,10 +60,24 @@ class ValidateContractBillingLimitUseCaseTest {
     }
 
     @Test
+    void rejectsBillingACancelledServiceEvenWhenAnotherServiceLeavesContractCapacity() {
+        var cancelled = contractService("100.00").updateProfile("Cancelled", null,
+                ContractServiceStatus.CANCELLED, BigDecimal.ONE, new BigDecimal("100.00"));
+        when(contractServiceRepository.findByContractIdAndCompanyId(contractId, companyId)).thenReturn(List.of(cancelled));
+        when(calculateContractBillingBalanceUseCase.calculate(companyId, contractId))
+                .thenReturn(new ContractBillingBalance(new BigDecimal("200.00"), BigDecimal.ZERO.setScale(2),
+                        new BigDecimal("200.00"), BigDecimal.ZERO.setScale(2), new BigDecimal("200.00")));
+        org.mockito.Mockito.lenient().when(calculateContractNetAmountUseCase.calculate(companyId, contractId))
+                .thenReturn(new ContractNetAmount(new BigDecimal("200.00"), BigDecimal.ZERO.setScale(2), new BigDecimal("200.00")));
+        assertThrows(IllegalStateException.class, () -> serviceUnderTest.requireAvailableForActivation(
+                companyId, contractId, List.of(serviceAllocation("1.00"))));
+    }
+
+    @Test
     void rejectsAllocationsThatExceedTheReferencedServiceNetAmount() {
         when(calculateContractBillingBalanceUseCase.calculate(companyId, contractId))
                 .thenReturn(new ContractBillingBalance(new BigDecimal("200.00"), BigDecimal.ZERO.setScale(2),
-                        new BigDecimal("200.00")));
+                        new BigDecimal("200.00"), BigDecimal.ZERO.setScale(2), new BigDecimal("200.00")));
 
         assertThrows(BillingLimitExceededException.class, () -> serviceUnderTest.requireAvailableForActivation(
                 companyId, contractId, List.of(serviceAllocation("101.00"))
@@ -74,7 +88,7 @@ class ValidateContractBillingLimitUseCaseTest {
     void rejectsNegativeAllocationsWithoutContractDiscountBacking() {
         when(calculateContractBillingBalanceUseCase.calculate(companyId, contractId))
                 .thenReturn(new ContractBillingBalance(new BigDecimal("100.00"), BigDecimal.ZERO.setScale(2),
-                        new BigDecimal("100.00")));
+                        new BigDecimal("100.00"), BigDecimal.ZERO.setScale(2), new BigDecimal("100.00")));
         when(calculateContractNetAmountUseCase.calculate(companyId, contractId))
                 .thenReturn(new ContractNetAmount(new BigDecimal("100.00"), BigDecimal.ZERO.setScale(2),
                         new BigDecimal("100.00")));
@@ -87,8 +101,8 @@ class ValidateContractBillingLimitUseCaseTest {
     @Test
     void acceptsServiceAndNegativeAdjustmentWithinTheirCanonicalLimits() {
         when(calculateContractBillingBalanceUseCase.calculate(companyId, contractId))
-                .thenReturn(new ContractBillingBalance(new BigDecimal("90.00"), BigDecimal.ZERO.setScale(2),
-                        new BigDecimal("90.00")));
+                .thenReturn(new ContractBillingBalance(new BigDecimal("100.00"), new BigDecimal("10.00"),
+                        new BigDecimal("90.00"), BigDecimal.ZERO.setScale(2), new BigDecimal("90.00")));
         when(calculateContractNetAmountUseCase.calculate(companyId, contractId))
                 .thenReturn(new ContractNetAmount(new BigDecimal("100.00"), new BigDecimal("10.00"),
                         new BigDecimal("90.00")));

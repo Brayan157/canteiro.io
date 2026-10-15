@@ -50,6 +50,18 @@ class InvoiceRegistrationServiceTest {
     @Mock private AuditEventRecorder auditEventRecorder;
 
     @Test
+    void rejectsAnAllocationCancelledBeforeTheContractLockIsAcquired() {
+        Fixture fixture = fixture(BigDecimal.ZERO);
+        BillingAllocation current = billingAllocationRepository.findByContractIdAndCompanyId(fixture.contractId(), fixture.companyId()).getFirst();
+        when(contractRepository.findByIdAndCompanyIdWithBillingLock(fixture.contractId(), fixture.companyId())).thenAnswer(invocation -> {
+            when(billingAllocationRepository.findByContractIdAndCompanyId(fixture.contractId(), fixture.companyId())).thenReturn(List.of(current.cancel()));
+            return contractRepository.findByIdAndCompanyId(fixture.contractId(), fixture.companyId());
+        });
+        assertThrows(IllegalStateException.class, () -> fixture.service().register(command(fixture.contractId(), fixture.allocationId(), "20.00")));
+        org.mockito.Mockito.verify(invoiceRepository, org.mockito.Mockito.never()).save(any());
+    }
+
+    @Test
     void registersAnInvoiceFromAnActiveAllocationOfTheSameContract() {
         Fixture fixture = fixture(new BigDecimal("0.00"));
         InvoiceRegistrationResult result = fixture.service().register(command(fixture.contractId(), fixture.allocationId(), "80.00"));
@@ -92,7 +104,8 @@ class InvoiceRegistrationServiceTest {
         Fixture fixture = fixture(new BigDecimal("0.00"));
         when(calculateContractBillingBalanceUseCase.calculate(fixture.companyId(), fixture.contractId()))
                 .thenReturn(new ContractBillingBalance(
-                        new BigDecimal("90.00"), new BigDecimal("90.00"), BigDecimal.ZERO.setScale(2)));
+                        new BigDecimal("90.00"), BigDecimal.ZERO.setScale(2), new BigDecimal("90.00"),
+                        new BigDecimal("90.00"), BigDecimal.ZERO.setScale(2)));
 
         assertThrows(BillingLimitExceededException.class, () -> fixture.service().register(
                 command(fixture.contractId(), fixture.allocationId(), "100.00")
@@ -121,14 +134,15 @@ class InvoiceRegistrationServiceTest {
         when(contractRepository.findByIdAndCompanyId(contractId, companyId)).thenReturn(Optional.of(contract));
         when(contractRepository.findByIdAndCompanyIdWithBillingLock(contractId, companyId)).thenReturn(Optional.of(contract));
         when(billingAllocationRepository.findByContractIdAndCompanyId(contractId, companyId)).thenReturn(List.of(allocation));
-        when(billingAllocationRepository.findByIdAndCompanyId(allocationId, companyId)).thenReturn(Optional.of(allocation));
-        when(invoiceItemRepository.registeredAmountByBillingAllocationIdAndCompanyId(allocationId, companyId))
+        lenient().when(billingAllocationRepository.findByIdAndCompanyId(allocationId, companyId)).thenReturn(Optional.of(allocation));
+        lenient().when(invoiceItemRepository.registeredAmountByBillingAllocationIdAndCompanyId(allocationId, companyId))
                 .thenReturn(registeredAmounts[0], java.util.Arrays.copyOfRange(registeredAmounts, 1, registeredAmounts.length));
         lenient().when(invoiceItemRepository.registeredAmountByContractIdAndCompanyId(contractId, companyId))
                 .thenReturn(registeredAmounts[0], java.util.Arrays.copyOfRange(registeredAmounts, 1, registeredAmounts.length));
         lenient().when(calculateContractBillingBalanceUseCase.calculate(companyId, contractId))
                 .thenReturn(new ContractBillingBalance(
-                        new BigDecimal("100.00"), new BigDecimal("100.00"), BigDecimal.ZERO.setScale(2)));
+                        new BigDecimal("100.00"), BigDecimal.ZERO.setScale(2), new BigDecimal("100.00"),
+                        new BigDecimal("100.00"), BigDecimal.ZERO.setScale(2)));
         lenient().when(invoiceRepository.save(any())).thenAnswer(invocation -> {
             Invoice input = invocation.getArgument(0);
             return Invoice.rehydrate(invoiceId, input.getCompanyId(), input.getContractId(), input.getNumber(),

@@ -39,17 +39,28 @@ public class AccessAuthorizationService {
 
     @Transactional(readOnly = true)
     public ChangeAuthorizationMode requireChangeAuthorization(AccessModule module, ChangeOperation operation) {
+        return changeAuthorizationIfAllowed(module, operation)
+                .orElseThrow(() -> new AccessDeniedException("The authenticated user does not have the required permission"));
+    }
+
+    @Transactional(readOnly = true)
+    public java.util.Optional<ChangeAuthorizationMode> changeAuthorizationIfAllowed(AccessModule module, ChangeOperation operation) {
         Set<AccessAction> grantedActions = activeActionsForCurrentTenant(module);
         AccessAction directAction = directActionFor(operation);
         AccessAction requestAction = requestActionFor(operation);
         if (grantedActions.contains(directAction)
                 || grantedActions.contains(requestAction) && grantedActions.contains(AccessAction.APPROVE)) {
-            return ChangeAuthorizationMode.DIRECT;
+            return java.util.Optional.of(ChangeAuthorizationMode.DIRECT);
         }
         if (grantedActions.contains(requestAction)) {
-            return ChangeAuthorizationMode.REQUEST_APPROVAL;
+            return java.util.Optional.of(ChangeAuthorizationMode.REQUEST_APPROVAL);
         }
-        throw new AccessDeniedException("The authenticated user does not have the required permission");
+        return java.util.Optional.empty();
+    }
+
+    @Transactional(readOnly = true)
+    public boolean hasPermission(AccessModule module, AccessAction action) {
+        return activeActionsForCurrentTenant(module).contains(action);
     }
 
     private Set<AccessAction> activeActionsForCurrentTenant(AccessModule module) {

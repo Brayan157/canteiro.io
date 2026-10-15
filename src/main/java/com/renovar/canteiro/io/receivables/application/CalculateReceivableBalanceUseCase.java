@@ -18,6 +18,7 @@ public class CalculateReceivableBalanceUseCase {
     private final ReceivableRepository receivableRepository;
     private final ReceivableSettlementRepository receivableSettlementRepository;
     private final TaxObligationRepository taxObligationRepository;
+    private final com.renovar.canteiro.io.receivables.domain.ReceivableOriginRepository originRepository;
 
     public ReceivableBalance calculate(UUID companyId, UUID receivableId) {
         Receivable receivable = receivableRepository.findByIdAndCompanyId(receivableId, companyId)
@@ -26,7 +27,8 @@ public class CalculateReceivableBalanceUseCase {
                 receivableId,
                 receivable.getOriginalAmount(),
                 taxObligationRepository.registeredWithheldAmountByReceivableIdAndCompanyId(receivableId, companyId),
-                receivableSettlementRepository.confirmedAmountByReceivableIdAndCompanyId(receivableId, companyId)
+                receivableSettlementRepository.confirmedAmountByReceivableIdAndCompanyId(receivableId, companyId),
+                originRepository.effectiveCredits(companyId,receivableId)
         );
     }
 }

@@ -182,6 +182,7 @@ public class EmployeeController {
     @GetMapping("/{employeeId}/photo")
     @Operation(summary = "Downloads the employee identification photo from the authenticated company")
     @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Employee identification photo", content = @Content(mediaType = "image/png")),
             @ApiResponse(responseCode = "403", ref = "#/components/responses/ProblemDetail"),
             @ApiResponse(responseCode = "404", ref = "#/components/responses/ProblemDetail")
     })
@@ -219,6 +220,7 @@ public class EmployeeController {
     @GetMapping("/{employeeId}/addresses")
     @Operation(summary = "Lists employee addresses in the authenticated company")
     @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Employee addresses", content = @Content(schema = @Schema(implementation = EmployeeAddressResponse.class))),
             @ApiResponse(responseCode = "403", ref = "#/components/responses/ProblemDetail"),
             @ApiResponse(responseCode = "404", ref = "#/components/responses/ProblemDetail")
     })
@@ -278,6 +280,7 @@ public class EmployeeController {
     @GetMapping("/{employeeId}/payment-accounts")
     @Operation(summary = "Lists masked employee payment account references without initiating a payment")
     @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Masked employee payment references", content = @Content(schema = @Schema(implementation = EmployeePaymentAccountResponse.class))),
             @ApiResponse(responseCode = "403", ref = "#/components/responses/ProblemDetail"),
             @ApiResponse(responseCode = "404", ref = "#/components/responses/ProblemDetail")
     })

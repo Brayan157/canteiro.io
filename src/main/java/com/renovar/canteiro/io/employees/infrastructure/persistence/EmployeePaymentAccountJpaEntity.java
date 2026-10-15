@@ -3,7 +3,11 @@ package com.renovar.canteiro.io.employees.infrastructure.persistence;
 import com.renovar.canteiro.io.employees.domain.EmployeeBankAccountType;
 import com.renovar.canteiro.io.employees.domain.EmployeePixKeyType;
 import com.renovar.canteiro.io.shared.infrastructure.persistence.jpa.BaseJpaEntity;
-import jakarta.persistence.*;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Table;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -11,6 +15,9 @@ import java.util.UUID;
 
 @Getter @Entity @Table(name = "employee_payment_account") @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class EmployeePaymentAccountJpaEntity extends BaseJpaEntity {
+    public static final String LEGACY_JWT_ENCRYPTION_KEY_VERSION = "LEGACY_JWT";
+    public static final String PAYMENT_DATA_ENCRYPTION_KEY_VERSION = "PAYMENT_DATA_KEY";
+
     @Column(name="company_id", nullable=false) private UUID companyId;
     @Column(name="employee_id", nullable=false) private UUID employeeId;
     @Column(name="bank_name") private String bankName;
@@ -25,6 +32,7 @@ public class EmployeePaymentAccountJpaEntity extends BaseJpaEntity {
     @Column(name="pix_key_masked") private String pixKeyMasked;
     @Column(name="pix_receiver_name_ciphertext") private String pixReceiverNameCiphertext;
     @Column(name="pix_receiver_city_ciphertext") private String pixReceiverCityCiphertext;
+    @Column(name="encryption_key_version", nullable=false, length=30) private String encryptionKeyVersion;
     @Column(nullable=false) private boolean active;
     public EmployeePaymentAccountJpaEntity(UUID companyId, UUID employeeId, String bankName, String bankCode, String branch,
             EmployeeBankAccountType accountType, String accountNumberCiphertext, String accountNumberMasked,
@@ -36,6 +44,7 @@ public class EmployeePaymentAccountJpaEntity extends BaseJpaEntity {
         this.accountCheckDigitCiphertext=accountCheckDigitCiphertext;
         this.pixKeyType=pixKeyType; this.pixKeyCiphertext=pixKeyCiphertext; this.pixKeyMasked=pixKeyMasked;
         this.pixReceiverNameCiphertext=pixReceiverNameCiphertext; this.pixReceiverCityCiphertext=pixReceiverCityCiphertext;
+        this.encryptionKeyVersion=PAYMENT_DATA_ENCRYPTION_KEY_VERSION;
         this.active=true;
     }
     public void update(String bankName, String bankCode, String branch, EmployeeBankAccountType accountType,
@@ -47,6 +56,15 @@ public class EmployeePaymentAccountJpaEntity extends BaseJpaEntity {
         this.accountCheckDigitCiphertext=accountCheckDigitCiphertext;
         this.pixKeyType=pixKeyType; this.pixKeyCiphertext=pixKeyCiphertext; this.pixKeyMasked=pixKeyMasked;
         this.pixReceiverNameCiphertext=pixReceiverNameCiphertext; this.pixReceiverCityCiphertext=pixReceiverCityCiphertext;
+    }
+    public void recipher(String accountNumberCiphertext, String accountCheckDigitCiphertext, String pixKeyCiphertext,
+                         String pixReceiverNameCiphertext, String pixReceiverCityCiphertext) {
+        this.accountNumberCiphertext=accountNumberCiphertext;
+        this.accountCheckDigitCiphertext=accountCheckDigitCiphertext;
+        this.pixKeyCiphertext=pixKeyCiphertext;
+        this.pixReceiverNameCiphertext=pixReceiverNameCiphertext;
+        this.pixReceiverCityCiphertext=pixReceiverCityCiphertext;
+        this.encryptionKeyVersion=PAYMENT_DATA_ENCRYPTION_KEY_VERSION;
     }
     public void deactivate() { this.active=false; }
 }

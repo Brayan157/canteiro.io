@@ -33,15 +33,20 @@ class ContractDiscountJpaEntity extends BaseJpaEntity {
     @Column(name = "discount_value", nullable = false, precision = 19, scale = 4)
     private BigDecimal discountValue;
 
+    @Column(name = "active", nullable = false)
+    private boolean active;
+
     ContractDiscountJpaEntity(UUID companyId, UUID contractId, DiscountType discountType, BigDecimal discountValue) {
         this.companyId = companyId;
         this.contractId = contractId;
         this.discountType = discountType;
         this.discountValue = discountValue;
+        this.active = true;
     }
 
-    void update(DiscountType discountType, BigDecimal discountValue) {
+    void update(DiscountType discountType, BigDecimal discountValue, boolean active) {
         this.discountType = discountType;
         this.discountValue = discountValue;
+        this.active = active;
     }
 }

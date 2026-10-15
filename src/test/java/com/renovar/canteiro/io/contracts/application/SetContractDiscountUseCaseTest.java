@@ -25,6 +25,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.lenient;
 
 @ExtendWith(MockitoExtension.class)
 class SetContractDiscountUseCaseTest {
@@ -33,6 +34,16 @@ class SetContractDiscountUseCaseTest {
     @Mock private ContractDiscountRepository contractDiscountRepository;
     @Mock private ContractServiceRepository contractServiceRepository;
     @Mock private ApprovedContractBillingAmountProvider approvedContractBillingAmountProvider;
+
+    @Test
+    void blocksReducingDiscountBelowAnAlreadyAllocatedNegativeAdjustment() {
+        Fixture fixture = fixture(new BigDecimal("80.00"));
+        when(approvedContractBillingAmountProvider.approvedDiscountAmount(fixture.companyId(), fixture.contractId()))
+                .thenReturn(new BigDecimal("20.00"));
+        assertThrows(IllegalStateException.class, () -> fixture.service().set(
+                fixture.companyId(), fixture.contractId(), DiscountType.FIXED, new BigDecimal("10.00")));
+        verify(contractDiscountRepository, never()).save(any());
+    }
 
     @Test
     void blocksDiscountThatWouldReduceTheContractBelowApprovedBilling() {
@@ -68,6 +79,7 @@ class SetContractDiscountUseCaseTest {
                 .thenReturn(Optional.of(contract));
         when(contractServiceRepository.findByContractIdAndCompanyId(contractId, companyId)).thenReturn(List.of(service));
         when(approvedContractBillingAmountProvider.approvedNetAmount(companyId, contractId)).thenReturn(approvedAmount);
+        lenient().when(approvedContractBillingAmountProvider.approvedDiscountAmount(companyId, contractId)).thenReturn(BigDecimal.ZERO);
         return new Fixture(companyId, contractId, new SetContractDiscountUseCase(
                 contractRepository, contractDiscountRepository, contractServiceRepository,
                 approvedContractBillingAmountProvider

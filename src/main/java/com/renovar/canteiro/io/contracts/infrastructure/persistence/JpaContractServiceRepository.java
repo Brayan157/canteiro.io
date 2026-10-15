@@ -23,14 +23,14 @@ public class JpaContractServiceRepository implements ContractServiceRepository {
                     contractService.getSourceServiceTemplateId(), contractService.getName(), contractService.getDescription(),
                     contractService.getStatus(), contractService.getQuantity(), contractService.getUnitPrice(),
                     contractService.getGrossAmount(), contractService.getDiscountType(), contractService.getDiscountValue(),
-                    contractService.getDiscountAmount(), contractService.getNetAmount());
+                    contractService.getDiscountAmount(), contractService.getNetAmount(), contractService.getMeasurementCompositionAmount());
         } else {
             entity = contractServiceJpaRepository.findByIdAndCompanyId(contractService.getId(), contractService.getCompanyId())
                     .orElseThrow(() -> new IllegalArgumentException("Contract service does not exist"));
             entity.update(contractService.getName(), contractService.getDescription(), contractService.getStatus(),
                     contractService.getQuantity(), contractService.getUnitPrice(), contractService.getGrossAmount(),
                     contractService.getDiscountType(), contractService.getDiscountValue(), contractService.getDiscountAmount(),
-                    contractService.getNetAmount());
+                    contractService.getNetAmount(), contractService.getMeasurementCompositionAmount());
         }
         return toDomain(contractServiceJpaRepository.save(entity));
     }
@@ -51,7 +51,7 @@ public class JpaContractServiceRepository implements ContractServiceRepository {
         return ContractService.rehydrate(entity.getId(), entity.getCompanyId(), entity.getContractId(),
                 entity.getServiceTemplateId(), entity.getName(), entity.getDescription(), entity.getStatus(),
                 entity.getQuantity(), entity.getUnitPrice(), entity.getGrossAmount(), entity.getDiscountType(),
-                entity.getDiscountValue(), entity.getDiscountAmount(), entity.getNetAmount(), entity.getCreatedAt(),
-                entity.getUpdatedAt());
+                entity.getDiscountValue(), entity.getDiscountAmount(), entity.getNetAmount(), entity.getMeasurementCompositionAmount(),
+                entity.getCreatedAt(), entity.getUpdatedAt());
     }
 }

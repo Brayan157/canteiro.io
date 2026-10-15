@@ -71,8 +71,8 @@ public class GetBillingControlUseCase {
                     .filter(line -> service.getId().equals(line.allocation().getContractServiceId()))
                     .map(line -> line.invoiceBalance().registeredInvoiceAmount()).reduce(BigDecimal.ZERO, BigDecimal::add)
                     .setScale(2);
-            return new BillingServiceControl(service.getId(), service.getName(), service.getNetAmount(), activeAllocated,
-                    service.getNetAmount().subtract(activeAllocated).setScale(2), issued);
+            return new BillingServiceControl(service.getId(), service.getName(), service.getEffectiveNetAmount(), activeAllocated,
+                    service.getEffectiveNetAmount().subtract(activeAllocated).setScale(2), issued);
         }).toList();
         return new ContractBillingControl(contract,
                 calculateContractBillingBalanceUseCase.calculate(companyId, contractId), services, allocations);

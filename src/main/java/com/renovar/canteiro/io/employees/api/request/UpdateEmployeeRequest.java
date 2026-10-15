@@ -1,8 +1,15 @@
 package com.renovar.canteiro.io.employees.api.request;
 
-import com.renovar.canteiro.io.employees.domain.*;
+import com.renovar.canteiro.io.employees.domain.EmployeeCompensationFrequency;
+import com.renovar.canteiro.io.employees.domain.EmployeeDocumentType;
+import com.renovar.canteiro.io.employees.domain.EmployeeEmploymentType;
+import com.renovar.canteiro.io.employees.domain.EmployeeEthnicity;
+import com.renovar.canteiro.io.employees.domain.EmployeeGender;
 import io.swagger.v3.oas.annotations.media.Schema;
-import jakarta.validation.constraints.*;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 import java.time.LocalDate;
 
 public record UpdateEmployeeRequest(@NotBlank @Size(max=255) String fullName, @Size(max=255) String preferredName,

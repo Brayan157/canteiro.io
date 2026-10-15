@@ -14,5 +14,7 @@ public interface BillingAllocationRepository {
 
     List<BillingAllocation> findByContractIdAndCompanyId(UUID contractId, UUID companyId);
 
+    List<BillingAllocation> findByMeasurementContractCompositionIdAndCompanyId(UUID measurementContractCompositionId, UUID companyId);
+
     BillingAllocation updateStatus(BillingAllocation billingAllocation);
 }

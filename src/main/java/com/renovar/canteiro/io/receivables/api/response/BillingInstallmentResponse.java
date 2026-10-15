@@ -14,6 +14,7 @@ public record BillingInstallmentResponse(
         LocalDate issuedOn,
         LocalDate dueOn,
         BillingInstallmentStatus status,
-        List<BillingAllocationResponse> allocations
+        List<BillingAllocationResponse> allocations,
+        com.renovar.canteiro.io.shared.domain.CurrencyCode currency
 ) {
 }

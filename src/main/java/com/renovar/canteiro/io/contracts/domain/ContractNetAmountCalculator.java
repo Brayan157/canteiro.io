@@ -17,7 +17,7 @@ public final class ContractNetAmountCalculator {
                                               BigDecimal measurementAdjustmentAmount) {
         BigDecimal subtotal = services.stream()
                 .filter(service -> service.getStatus() != ContractServiceStatus.CANCELLED)
-                .map(ContractService::getNetAmount)
+                .map(ContractService::getEffectiveNetAmount)
                 .reduce(BigDecimal.ZERO.setScale(2), BigDecimal::add)
                 .setScale(2, RoundingMode.HALF_UP);
         BigDecimal discountAmount = calculateDiscountAmount(subtotal, contractDiscount)

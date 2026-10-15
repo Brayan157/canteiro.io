@@ -13,6 +13,21 @@ plugins {
 group = "com.renovar"
 version = "0.0.1-SNAPSHOT"
 
+// Lets local validation avoid a OneDrive-locked default build directory without
+// changing the normal output location used by developers and CI. A local,
+// ignored gradle.properties may use LOCAL_APP_DATA to place generated classes
+// outside OneDrive on Windows.
+providers.gradleProperty("buildOutputDir").orNull?.let { configuredOutputDirectory ->
+	val outputDirectory = if (configuredOutputDirectory == "LOCAL_APP_DATA") {
+		val localAppData = System.getenv("LOCALAPPDATA")
+			?: error("LOCALAPPDATA must be available when buildOutputDir=LOCAL_APP_DATA")
+		File(localAppData, "CanteiroIO/build")
+	} else {
+		file(configuredOutputDirectory)
+	}
+	layout.buildDirectory.set(outputDirectory)
+}
+
 java {
 	toolchain {
 		languageVersion = JavaLanguageVersion.of(21)

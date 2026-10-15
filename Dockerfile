@@ -11,7 +11,8 @@ RUN gradle --no-daemon bootJar -x test
 FROM eclipse-temurin:21-jre
 
 WORKDIR /app
-RUN addgroup --system canteiro && adduser --system --ingroup canteiro canteiro
+RUN addgroup --system canteiro && adduser --system --ingroup canteiro canteiro \
+    && install -d -o canteiro -g canteiro -m 0700 /app/var/storage
 COPY --from=build /workspace/build/libs/*.jar app.jar
 
 USER canteiro

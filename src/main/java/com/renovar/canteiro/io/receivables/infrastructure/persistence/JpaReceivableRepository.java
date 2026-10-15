@@ -13,6 +13,7 @@ import java.util.UUID;
 public class JpaReceivableRepository implements ReceivableRepository {
 
     private final ReceivableJpaRepository receivableJpaRepository;
+    @jakarta.persistence.PersistenceContext private jakarta.persistence.EntityManager entityManager;
 
     @Override
     public Receivable save(Receivable receivable) {
@@ -30,7 +31,10 @@ public class JpaReceivableRepository implements ReceivableRepository {
 
     @Override
     public Optional<Receivable> findByIdAndCompanyIdWithSettlementLock(UUID id, UUID companyId) {
-        return receivableJpaRepository.findByIdAndCompanyIdWithSettlementLock(id, companyId).map(this::toDomain);
+        return receivableJpaRepository.findByIdAndCompanyIdWithSettlementLock(id, companyId).map(entity->{
+            entityManager.refresh(entity,jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
+            return toDomain(entity);
+        });
     }
 
     @Override
@@ -43,8 +47,21 @@ public class JpaReceivableRepository implements ReceivableRepository {
 
     @Override
     public Optional<Receivable> findByBillingInstallmentIdAndCompanyId(UUID billingInstallmentId, UUID companyId) {
-        return receivableJpaRepository.findByBillingInstallmentIdAndCompanyId(billingInstallmentId, companyId)
+        return receivableJpaRepository.findByBillingInstallmentIdAndCompanyIdAndRenegotiationSourceReceivableIdIsNull(billingInstallmentId, companyId)
                 .map(this::toDomain);
+    }
+
+    @Override public Receivable saveRenegotiated(Receivable r,UUID sourceId) {
+        ReceivableJpaEntity e=new ReceivableJpaEntity(r.getCompanyId(),r.getContractId(),r.getBillingInstallmentId(),r.getFinancialGroupId(),
+            r.getReference(),r.getDescription(),r.getIssuedOn(),r.getDueOn(),r.getOriginalAmount(),r.getStatus());
+        e.linkRenegotiationOrigin(sourceId);
+        return toDomain(receivableJpaRepository.saveAndFlush(e));
+    }
+    @Override public java.util.List<Receivable> findAllByBillingInstallmentIdAndCompanyId(UUID installment,UUID company) {
+        return receivableJpaRepository.findAllByBillingInstallmentIdAndCompanyId(installment,company).stream().map(this::toDomain).toList();
+    }
+    @Override public java.util.List<Receivable> findRenegotiatedChildren(UUID source,UUID company) {
+        return receivableJpaRepository.findByRenegotiationSourceReceivableIdAndCompanyId(source,company).stream().map(this::toDomain).toList();
     }
 
     private Receivable toDomain(ReceivableJpaEntity entity) {

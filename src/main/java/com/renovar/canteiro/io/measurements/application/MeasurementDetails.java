@@ -5,14 +5,17 @@ import com.renovar.canteiro.io.measurements.domain.MeasurementDiscount;
 import com.renovar.canteiro.io.measurements.domain.MeasurementItem;
 import com.renovar.canteiro.io.measurements.domain.MeasurementVersion;
 import com.renovar.canteiro.io.measurements.domain.MeasurementVersionAmounts;
+import com.renovar.canteiro.io.measurements.domain.MeasurementServiceSummary;
 
 import java.util.List;
 
 public record MeasurementDetails(
         Measurement measurement,
         MeasurementVersion latestVersion,
+        MeasurementVersion correctionRequestSource,
         List<MeasurementItem> items,
         MeasurementDiscount discount,
-        MeasurementVersionAmounts amounts
+        MeasurementVersionAmounts amounts,
+        List<MeasurementServiceSummary> services
 ) {
 }

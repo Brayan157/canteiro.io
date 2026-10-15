@@ -19,7 +19,7 @@ public class JpaBillingAllocationRepository implements BillingAllocationReposito
     public BillingAllocation save(BillingAllocation billingAllocation) {
         return toDomain(billingAllocationJpaRepository.save(new BillingAllocationJpaEntity(
                 billingAllocation.getCompanyId(), billingAllocation.getBillingInstallmentId(), billingAllocation.getContractId(),
-                billingAllocation.getContractServiceId(), billingAllocation.getType(), billingAllocation.getAllocatedAmount(),
+                billingAllocation.getContractServiceId(), billingAllocation.getMeasurementContractCompositionId(), billingAllocation.getType(), billingAllocation.getAllocatedAmount(),
                 billingAllocation.getStatus()
         )));
     }
@@ -44,6 +44,13 @@ public class JpaBillingAllocationRepository implements BillingAllocationReposito
     }
 
     @Override
+    public List<BillingAllocation> findByMeasurementContractCompositionIdAndCompanyId(UUID compositionId, UUID companyId) {
+        return billingAllocationJpaRepository.findByMeasurementContractCompositionIdAndCompanyId(compositionId, companyId).stream()
+                .map(this::toDomain)
+                .toList();
+    }
+
+    @Override
     public BillingAllocation updateStatus(BillingAllocation allocation) {
         BillingAllocationJpaEntity entity = billingAllocationJpaRepository
                 .findByIdAndCompanyId(allocation.getId(), allocation.getCompanyId()).orElseThrow();
@@ -54,7 +61,7 @@ public class JpaBillingAllocationRepository implements BillingAllocationReposito
     private BillingAllocation toDomain(BillingAllocationJpaEntity entity) {
         return BillingAllocation.rehydrate(
                 entity.getId(), entity.getCompanyId(), entity.getBillingInstallmentId(), entity.getContractId(),
-                entity.getContractServiceId(), entity.getType(), entity.getAllocatedAmount(), entity.getStatus(), entity.getCreatedAt(),
+                entity.getContractServiceId(), entity.getMeasurementContractCompositionId(), entity.getType(), entity.getAllocatedAmount(), entity.getStatus(), entity.getCreatedAt(),
                 entity.getUpdatedAt()
         );
     }

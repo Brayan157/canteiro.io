@@ -10,11 +10,18 @@ public final class MeasurementVersionAmountCalculator {
     }
 
     public static MeasurementVersionAmounts calculate(List<MeasurementItem> items, MeasurementDiscount discount) {
+        BigDecimal totalWeightKg = items.stream()
+                .filter(MeasurementItem::isActive)
+                .map(MeasurementItem::getTotalWeightKg)
+                .filter(java.util.Objects::nonNull)
+                .reduce(BigDecimal.ZERO, BigDecimal::add)
+                .setScale(4, RoundingMode.HALF_UP);
         BigDecimal grossAmount = items.stream()
+                .filter(MeasurementItem::isActive)
                 .map(MeasurementItem::getTotalAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add)
                 .setScale(2, RoundingMode.HALF_UP);
-        return calculate(grossAmount, discount);
+        return calculate(totalWeightKg, grossAmount, discount);
     }
 
     /**
@@ -22,9 +29,14 @@ public final class MeasurementVersionAmountCalculator {
      * paged or streamed source, without requiring every item in memory.
      */
     public static MeasurementVersionAmounts calculate(BigDecimal grossAmount, MeasurementDiscount discount) {
+        return calculate(BigDecimal.ZERO.setScale(4), grossAmount, discount);
+    }
+
+    public static MeasurementVersionAmounts calculate(BigDecimal totalWeightKg, BigDecimal grossAmount,
+                                                        MeasurementDiscount discount) {
         grossAmount = grossAmount.setScale(2, RoundingMode.HALF_UP);
         BigDecimal discountAmount = calculateDiscountAmount(grossAmount, discount);
-        return new MeasurementVersionAmounts(grossAmount, discountAmount,
+        return new MeasurementVersionAmounts(totalWeightKg.setScale(4, RoundingMode.HALF_UP), grossAmount, discountAmount,
                 grossAmount.subtract(discountAmount).setScale(2, RoundingMode.HALF_UP));
     }
 

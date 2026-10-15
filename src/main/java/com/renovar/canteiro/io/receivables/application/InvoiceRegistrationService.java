@@ -60,11 +60,11 @@ public class InvoiceRegistrationService {
     public InvoiceRegistrationResult register(CreateRegisteredInvoiceCommand command) {
         UUID companyId = tenantContextHolder.requireCurrentTenant().companyId();
         validateHeaderAndContract(command, companyId, false);
-        List<ResolvedInvoiceItem> items = resolveAndValidateItems(command, companyId, false);
         ChangeAuthorizationMode mode = accessAuthorizationService.requireChangeAuthorization(
                 AccessModule.INVOICES, ChangeOperation.CREATE
         );
         if (mode == ChangeAuthorizationMode.REQUEST_APPROVAL) {
+            resolveAndValidateItems(command, companyId, false);
             ChangeRequest changeRequest = changeRequestService.create(new CreateChangeRequestCommand(
                     AuditModule.INVOICES,
                     ChangeRequestOperation.CREATE,
@@ -76,7 +76,7 @@ public class InvoiceRegistrationService {
             ));
             return new InvoiceRegistrationResult(null, List.of(), changeRequest, mode);
         }
-        Registration registration = persistRegistered(companyId, command, items);
+        Registration registration = persistRegistered(companyId, command);
         recordRegistration(registration, "direct", null);
         return new InvoiceRegistrationResult(registration.invoice(), registration.items(), null, mode);
     }
@@ -85,17 +85,16 @@ public class InvoiceRegistrationService {
     public void applyApprovedRegistration(ChangeRequest changeRequest) {
         CreateRegisteredInvoiceCommand command = fromProposal(changeRequest.getSnapshot().proposedData().values());
         validateHeaderAndContract(command, changeRequest.getCompanyId(), false);
-        Registration registration = persistRegistered(changeRequest.getCompanyId(), command, null);
+        Registration registration = persistRegistered(changeRequest.getCompanyId(), command);
         recordRegistration(registration, "approved-change-request", changeRequest.getId());
     }
 
-    private Registration persistRegistered(UUID companyId, CreateRegisteredInvoiceCommand command,
-                                           List<ResolvedInvoiceItem> validatedItems) {
+    private Registration persistRegistered(UUID companyId, CreateRegisteredInvoiceCommand command) {
         contractRepository.findByIdAndCompanyIdWithBillingLock(command.contractId(), companyId)
                 .orElseThrow(() -> new TenantResourceNotFoundException("Contract"));
-        List<ResolvedInvoiceItem> items = validatedItems == null
-                ? resolveAndValidateItems(command, companyId, true)
-                : validateCapacity(validatedItems, companyId);
+        // Resolve status, chain and capacity only after acquiring the billing aggregate lock.
+        // A pre-lock allocation snapshot can become cancelled while waiting for another writer.
+        List<ResolvedInvoiceItem> items = resolveAndValidateItems(command, companyId, true);
         BigDecimal totalAmount = sum(items.stream().map(ResolvedInvoiceItem::allocatedAmount).toList());
         requireContractInvoiceCapacity(companyId, command.contractId(), totalAmount);
         Invoice invoice = invoiceRepository.save(Invoice.register(

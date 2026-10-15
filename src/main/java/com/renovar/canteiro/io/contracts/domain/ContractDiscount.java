@@ -15,27 +15,36 @@ public final class ContractDiscount {
     private final UUID contractId;
     private final DiscountType discountType;
     private final BigDecimal discountValue;
+    private final boolean active;
     private final Instant createdAt;
     private final Instant updatedAt;
 
-    private ContractDiscount(UUID id, UUID companyId, UUID contractId, DiscountType discountType, BigDecimal discountValue,
+    private ContractDiscount(UUID id, UUID companyId, UUID contractId, DiscountType discountType, BigDecimal discountValue, boolean active,
                              Instant createdAt, Instant updatedAt) {
         this.id = id;
         this.companyId = require(companyId, "Contract discount company is required");
         this.contractId = require(contractId, "Contract discount contract is required");
         this.discountType = require(discountType, "Contract discount type is required");
         this.discountValue = requireDiscountValue(discountType, discountValue);
+        this.active = active;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
     }
 
     public static ContractDiscount create(UUID companyId, UUID contractId, DiscountType discountType, BigDecimal discountValue) {
-        return new ContractDiscount(null, companyId, contractId, discountType, discountValue, null, null);
+        return new ContractDiscount(null, companyId, contractId, discountType, discountValue, true, null, null);
     }
 
     public static ContractDiscount rehydrate(UUID id, UUID companyId, UUID contractId, DiscountType discountType,
-                                             BigDecimal discountValue, Instant createdAt, Instant updatedAt) {
-        return new ContractDiscount(id, companyId, contractId, discountType, discountValue, createdAt, updatedAt);
+                                             BigDecimal discountValue, boolean active, Instant createdAt, Instant updatedAt) {
+        return new ContractDiscount(id, companyId, contractId, discountType, discountValue, active, createdAt, updatedAt);
+    }
+
+    public ContractDiscount reverse() {
+        if (!active) {
+            throw new IllegalStateException("Contract discount is already reversed");
+        }
+        return new ContractDiscount(id, companyId, contractId, discountType, discountValue, false, createdAt, updatedAt);
     }
 
     private static BigDecimal requireDiscountValue(DiscountType type, BigDecimal value) {

@@ -8,6 +8,10 @@ import com.renovar.canteiro.io.receivables.application.TaxObligationCreationResu
 import com.renovar.canteiro.io.receivables.application.TaxObligationService;
 import com.renovar.canteiro.io.receivables.domain.TaxObligation;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -26,11 +30,20 @@ import java.util.UUID;
 @RequiredArgsConstructor
 @Tag(name = "Tax obligations")
 public class TaxObligationController {
+    private final com.renovar.canteiro.io.receivables.application.FinancialCurrencyService currencies;
 
     private final TaxObligationService taxObligationService;
 
     @PostMapping
     @Operation(summary = "Records a payable, withheld, or informational invoice tax")
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "Official operation result", content = @Content(schema = @Schema(implementation = TaxObligationCreationResponse.class))),
+            @ApiResponse(responseCode = "202", description = "Awaiting approval; no official financial change", content = @Content(schema = @Schema(implementation = TaxObligationCreationResponse.class))),
+            @ApiResponse(responseCode = "400", ref = "#/components/responses/ProblemDetail"),
+            @ApiResponse(responseCode = "403", ref = "#/components/responses/ProblemDetail"),
+            @ApiResponse(responseCode = "404", ref = "#/components/responses/ProblemDetail"),
+            @ApiResponse(responseCode = "409", ref = "#/components/responses/ProblemDetail")
+    })
     public ResponseEntity<TaxObligationCreationResponse> create(
             @PathVariable UUID invoiceId,
             @Valid @RequestBody CreateTaxObligationRequest request
@@ -53,7 +66,7 @@ public class TaxObligationController {
         return new TaxObligationResponse(
                 taxObligation.getId(), taxObligation.getInvoiceId(), taxObligation.getContractId(),
                 taxObligation.getReceivableId(), taxObligation.getName(), taxObligation.getDescription(),
-                taxObligation.getDueOn(), taxObligation.getAmount(), taxObligation.getTreatment(), taxObligation.getStatus()
+                taxObligation.getDueOn(), taxObligation.getAmount(), taxObligation.getTreatment(), taxObligation.getStatus(), currencies.forContract(taxObligation.getContractId())
         );
     }
 }

@@ -16,7 +16,22 @@ import com.renovar.canteiro.io.governance.domain.ChangeRequest;
 import com.renovar.canteiro.io.governance.domain.ChangeRequestOperation;
 import com.renovar.canteiro.io.governance.domain.ChangeRequestSnapshot;
 import com.renovar.canteiro.io.payables.domain.PayableRepository;
-import com.renovar.canteiro.io.receivables.domain.*;
+import com.renovar.canteiro.io.receivables.domain.BillingAllocation;
+import com.renovar.canteiro.io.receivables.domain.BillingAllocationRepository;
+import com.renovar.canteiro.io.receivables.domain.BillingInstallment;
+import com.renovar.canteiro.io.receivables.domain.BillingInstallmentRepository;
+import com.renovar.canteiro.io.receivables.domain.Invoice;
+import com.renovar.canteiro.io.receivables.domain.InvoiceItem;
+import com.renovar.canteiro.io.receivables.domain.InvoiceItemRepository;
+import com.renovar.canteiro.io.receivables.domain.InvoiceRepository;
+import com.renovar.canteiro.io.receivables.domain.Receivable;
+import com.renovar.canteiro.io.receivables.domain.ReceivableBalance;
+import com.renovar.canteiro.io.receivables.domain.ReceivableRepository;
+import com.renovar.canteiro.io.receivables.domain.ReceivableSettlement;
+import com.renovar.canteiro.io.receivables.domain.ReceivableSettlementRepository;
+import com.renovar.canteiro.io.receivables.domain.ReceivableStatus;
+import com.renovar.canteiro.io.receivables.domain.TaxObligation;
+import com.renovar.canteiro.io.receivables.domain.TaxObligationRepository;
 import com.renovar.canteiro.io.tenancy.application.TenantContextHolder;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -46,6 +61,7 @@ public class FinancialCancellationService {
     private final ChangeRequestService changeRequestService;
     private final AuditEventRecorder auditEventRecorder;
     private final Clock clock;
+    private final ReceivableSettlementAttributionService attribution;
 
     @Transactional
     public FinancialCancellationResult cancelInstallment(UUID installmentId, CancelFinancialRecordCommand command) {
@@ -127,6 +143,7 @@ public class FinancialCancellationService {
         Receivable receivable = receivableRepository.findByBillingInstallmentIdAndCompanyId(installmentId, companyId)
                 .orElseThrow(() -> new TenantResourceNotFoundException("Receivable"));
         receivable = receivableRepository.findByIdAndCompanyIdWithSettlementLock(receivable.getId(), companyId).orElseThrow();
+        if(receivable.getStatus()==ReceivableStatus.RENEGOTIATED)throw new IllegalStateException("Reverse the active renegotiation before cancelling billing");
         if (settlementRepository.confirmedAmountByReceivableIdAndCompanyId(receivable.getId(), companyId).signum() != 0) {
             throw new IllegalStateException("Billing installment settlements must be reversed first");
         }
@@ -152,6 +169,9 @@ public class FinancialCancellationService {
         contractRepository.findByIdAndCompanyIdWithBillingLock(invoice.getContractId(), companyId)
                 .orElseThrow(() -> new TenantResourceNotFoundException("Contract"));
         for (TaxObligation tax : taxObligationRepository.findByInvoiceIdAndCompanyId(invoiceId, companyId)) {
+            if(tax.getReceivableId()!=null&&receivableRepository.findByIdAndCompanyId(tax.getReceivableId(),companyId)
+                .filter(r->r.getStatus()==ReceivableStatus.RENEGOTIATED).isPresent())
+                throw new IllegalStateException("Reverse the title renegotiation before changing its withholding");
             payableRepository.findByTaxObligationIdAndCompanyId(tax.getId(), companyId)
                     .ifPresent(payable -> {
                         payableRepository.updateStatus(payable.cancel());
@@ -188,6 +208,8 @@ public class FinancialCancellationService {
                                                                   String reason, String origin, UUID changeRequestId) {
         Receivable receivable = receivableRepository.findByIdAndCompanyIdWithSettlementLock(receivableId, companyId)
                 .orElseThrow(() -> new TenantResourceNotFoundException("Receivable"));
+        if(receivable.getStatus()==ReceivableStatus.RENEGOTIATED||receivable.getStatus()==ReceivableStatus.CANCELLED)
+            throw new IllegalStateException("Reopen the original title before reversing its receipt");
         ReceivableSettlement original = settlementRepository.findByIdAndCompanyId(settlementId, companyId)
                 .filter(value -> value.getReceivableId().equals(receivableId))
                 .orElseThrow(() -> new TenantResourceNotFoundException("Receivable settlement"));
@@ -196,6 +218,7 @@ public class FinancialCancellationService {
         }
         ReceivableSettlement reversal = settlementRepository.save(ReceivableSettlement.reverse(
                 original, LocalDate.now(clock), reason));
+        attribution.attribute(reversal);
         ReceivableBalance balance = calculateReceivableBalanceUseCase.calculate(companyId, receivableId);
         Receivable updated = receivableRepository.updateStatus(receivable.withStatus(balance.statusOn(receivable, LocalDate.now(clock))));
         auditEventRecorder.recordDirectAction(AuditModule.RECEIVABLES, AuditAction.CANCEL, "ReceivableSettlement",

@@ -22,20 +22,20 @@ public class JpaContractDiscountRepository implements ContractDiscountRepository
                         contractDiscount.getCompanyId(), contractDiscount.getContractId(),
                         contractDiscount.getDiscountType(), contractDiscount.getDiscountValue()
                 ));
-        entity.update(contractDiscount.getDiscountType(), contractDiscount.getDiscountValue());
+        entity.update(contractDiscount.getDiscountType(), contractDiscount.getDiscountValue(), contractDiscount.isActive());
         entity = contractDiscountJpaRepository.save(entity);
         return toDomain(entity);
     }
 
     @Override
-    public Optional<ContractDiscount> findByContractIdAndCompanyId(UUID contractId, UUID companyId) {
-        return contractDiscountJpaRepository.findByContractIdAndCompanyId(contractId, companyId).map(this::toDomain);
+    public Optional<ContractDiscount> findActiveByContractIdAndCompanyId(UUID contractId, UUID companyId) {
+        return contractDiscountJpaRepository.findByContractIdAndCompanyIdAndActiveTrue(contractId, companyId).map(this::toDomain);
     }
 
     private ContractDiscount toDomain(ContractDiscountJpaEntity entity) {
         return ContractDiscount.rehydrate(
                 entity.getId(), entity.getCompanyId(), entity.getContractId(), entity.getDiscountType(),
-                entity.getDiscountValue(), entity.getCreatedAt(), entity.getUpdatedAt()
+                entity.getDiscountValue(), entity.isActive(), entity.getCreatedAt(), entity.getUpdatedAt()
         );
     }
 }

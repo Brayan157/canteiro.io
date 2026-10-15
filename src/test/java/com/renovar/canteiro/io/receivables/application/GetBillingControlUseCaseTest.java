@@ -47,7 +47,8 @@ class GetBillingControlUseCaseTest {
         when(tenantContextHolder.requireCurrentTenant()).thenReturn(new TenantContext(UUID.randomUUID(), companyId));
         when(contractRepository.findBillingControl(any(), any(), any())).thenReturn(new PageImpl<>(List.of(contract)));
         when(balanceUseCase.calculate(companyId, contract.getId())).thenReturn(new ContractBillingBalance(
-                new BigDecimal("100.00"), new BigDecimal("40.00"), new BigDecimal("60.00")));
+                new BigDecimal("120.00"), new BigDecimal("20.00"), new BigDecimal("100.00"),
+                new BigDecimal("40.00"), new BigDecimal("60.00")));
 
         var result = service().find(new ContractBillingControlFilter(null, ContractStatus.ACTIVE, "electric"),
                 PageRequest.of(0, 20));

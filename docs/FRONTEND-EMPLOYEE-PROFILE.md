@@ -2,6 +2,8 @@
 
 Base: `/api/v1/company/employees`. O tenant é sempre derivado do JWT.
 
+> Planejamento futuro: vínculos de experiência/readmissão, aviso prévio, cursos, exames, documentos privados e alertas estão especificados em [FRONTEND-EMPLOYEE-LIFECYCLE-PLANNED.md](FRONTEND-EMPLOYEE-LIFECYCLE-PLANNED.md). Eles ainda não fazem parte do OpenAPI atual nem devem ser integrados antes da publicação da Fase 10.
+
 ## Alteração de contrato: documento do funcionário
 
 `EmployeeResponse` não possui mais `documentNumberMasked`. O backend agora devolve o documento completo e normalizado em `documentNumber`. Atualize o tipo/mapeador do frontend e as telas de listagem e detalhe para usarem `employee.documentNumber`.

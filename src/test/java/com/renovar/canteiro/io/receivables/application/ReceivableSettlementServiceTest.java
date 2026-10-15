@@ -108,10 +108,12 @@ class ReceivableSettlementServiceTest {
         });
         lenient().when(receivableRepository.updateStatus(any())).thenAnswer(invocation -> invocation.getArgument(0));
         Clock clock = Clock.fixed(currentDate.atStartOfDay().toInstant(ZoneOffset.UTC), ZoneOffset.UTC);
+        var financialOrigins=org.mockito.Mockito.mock(com.renovar.canteiro.io.receivables.domain.ReceivableOriginRepository.class);
+        org.mockito.Mockito.lenient().when(financialOrigins.effectiveCredits(org.mockito.ArgumentMatchers.any(),org.mockito.ArgumentMatchers.any())).thenReturn(BigDecimal.ZERO);
         return new Fixture(receivableId, new ReceivableSettlementService(
                 tenantContextHolder, accessAuthorizationService, receivableRepository, receivableSettlementRepository,
-                new CalculateReceivableBalanceUseCase(receivableRepository, receivableSettlementRepository, taxObligationRepository),
-                changeRequestService, auditEventRecorder, clock
+                new CalculateReceivableBalanceUseCase(receivableRepository, receivableSettlementRepository, taxObligationRepository,financialOrigins),
+                changeRequestService, auditEventRecorder, clock, financialOrigins, org.mockito.Mockito.mock(ReceivableSettlementAttributionService.class)
         ));
     }
 

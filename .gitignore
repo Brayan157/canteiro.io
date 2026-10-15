@@ -1,6 +1,7 @@
 HELP.md
 .gradle
 .gradle-user-home/
+gradle.properties
 build/
 !gradle/wrapper/gradle-wrapper.jar
 !**/src/main/**/build/
@@ -41,3 +42,10 @@ out/
 .env
 .env.*
 !.env.example
+
+# Local validation artifacts and private storage
+/tmp/
+/output/
+/outputs/
+/build-*.log
+/var/storage/

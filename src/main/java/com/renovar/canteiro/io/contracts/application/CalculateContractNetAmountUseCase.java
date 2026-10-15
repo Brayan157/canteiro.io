@@ -27,7 +27,7 @@ public class CalculateContractNetAmountUseCase {
                 .orElseThrow(() -> new TenantResourceNotFoundException("Contract"));
         return ContractNetAmountCalculator.calculate(
                 contractServiceRepository.findByContractIdAndCompanyId(contractId, companyId),
-                contractDiscountRepository.findByContractIdAndCompanyId(contractId, companyId).orElse(null),
+                contractDiscountRepository.findActiveByContractIdAndCompanyId(contractId, companyId).orElse(null),
                 measurementAdjustmentAmountProvider.approvedAmount(companyId, contractId)
         );
     }

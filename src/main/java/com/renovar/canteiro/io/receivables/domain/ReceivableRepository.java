@@ -14,4 +14,7 @@ public interface ReceivableRepository {
     Receivable updateStatus(Receivable receivable);
 
     Optional<Receivable> findByBillingInstallmentIdAndCompanyId(UUID billingInstallmentId, UUID companyId);
+    Receivable saveRenegotiated(Receivable receivable, UUID sourceReceivableId);
+    java.util.List<Receivable> findAllByBillingInstallmentIdAndCompanyId(UUID installmentId, UUID companyId);
+    java.util.List<Receivable> findRenegotiatedChildren(UUID sourceReceivableId, UUID companyId);
 }

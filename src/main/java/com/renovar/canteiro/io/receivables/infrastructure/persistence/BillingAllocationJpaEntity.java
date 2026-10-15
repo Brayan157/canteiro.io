@@ -33,6 +33,9 @@ class BillingAllocationJpaEntity extends BaseJpaEntity {
     @Column(name = "contract_service_id", updatable = false)
     private UUID contractServiceId;
 
+    @Column(name = "measurement_contract_composition_id", updatable = false)
+    private UUID measurementContractCompositionId;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "allocation_type", nullable = false, length = 30)
     private BillingAllocationType type;
@@ -45,11 +48,13 @@ class BillingAllocationJpaEntity extends BaseJpaEntity {
     private BillingAllocationStatus status;
 
     BillingAllocationJpaEntity(UUID companyId, UUID billingInstallmentId, UUID contractId, UUID contractServiceId,
+                               UUID measurementContractCompositionId,
                                BillingAllocationType type, BigDecimal allocatedAmount, BillingAllocationStatus status) {
         this.companyId = companyId;
         this.billingInstallmentId = billingInstallmentId;
         this.contractId = contractId;
         this.contractServiceId = contractServiceId;
+        this.measurementContractCompositionId = measurementContractCompositionId;
         this.type = type;
         this.allocatedAmount = allocatedAmount;
         this.status = status;

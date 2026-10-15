@@ -1,6 +1,7 @@
 package com.renovar.canteiro.io.measurements.domain;
 
 import java.util.Optional;
+import java.util.List;
 import java.util.UUID;
 
 public interface MeasurementVersionRepository {
@@ -12,4 +13,6 @@ public interface MeasurementVersionRepository {
     Optional<MeasurementVersion> findWithLockByIdAndCompanyId(UUID id, UUID companyId);
 
     Optional<MeasurementVersion> findLatestByMeasurementIdAndCompanyId(UUID measurementId, UUID companyId);
+
+    List<MeasurementVersion> findByMeasurementIdAndCompanyIdOrderByVersionNumberDesc(UUID measurementId, UUID companyId);
 }

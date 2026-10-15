@@ -38,4 +38,22 @@ class JpaContractDiscountRepositoryTest {
         assertEquals(new BigDecimal("10.0000"), updated.getDiscountValue());
         verify(jpaRepository).save(existing);
     }
+
+    @Test
+    void reversesTheExistingDiscountLogicallyWithoutRemovingItsRow() {
+        UUID companyId = UUID.randomUUID();
+        UUID contractId = UUID.randomUUID();
+        ContractDiscountJpaEntity existing = new ContractDiscountJpaEntity(
+                companyId, contractId, DiscountType.FIXED, new BigDecimal("50.00"));
+        when(jpaRepository.findByContractIdAndCompanyId(contractId, companyId)).thenReturn(Optional.of(existing));
+        when(jpaRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        JpaContractDiscountRepository repository = new JpaContractDiscountRepository(jpaRepository);
+
+        ContractDiscount reversed = repository.save(ContractDiscount.create(
+                companyId, contractId, DiscountType.FIXED, new BigDecimal("50.00")).reverse());
+
+        assertEquals(false, reversed.isActive());
+        assertEquals(false, existing.isActive());
+        verify(jpaRepository).save(existing);
+    }
 }

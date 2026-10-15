@@ -9,6 +9,7 @@ import java.util.UUID;
 public interface ChangeRequestRepository {
 
     ChangeRequest save(ChangeRequest changeRequest);
+    java.util.List<ChangeRequest> findPendingByEntity(UUID companyId,String entityType,UUID entityId);
 
     Optional<ChangeRequest> findByIdAndCompanyId(UUID changeRequestId, UUID companyId);
 

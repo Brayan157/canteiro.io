@@ -6,6 +6,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -16,6 +18,7 @@ public class JpaMeasurementVersionRepository implements MeasurementVersionReposi
     private final MeasurementVersionJpaRepository measurementVersionJpaRepository;
 
     @Override
+    @org.springframework.transaction.annotation.Transactional
     public MeasurementVersion save(MeasurementVersion measurementVersion) {
         if (measurementVersion.getId() == null) {
             MeasurementVersionJpaEntity entity = new MeasurementVersionJpaEntity(
@@ -25,15 +28,24 @@ public class JpaMeasurementVersionRepository implements MeasurementVersionReposi
             );
             return toDomain(measurementVersionJpaRepository.save(entity));
         }
-        int updated = measurementVersionJpaRepository.updateLifecycleIfCurrent(measurementVersion.getId(),
-                measurementVersion.getCompanyId(), measurementVersion.getLockVersion(), measurementVersion.getStatus(),
-                measurementVersion.getExternalAcceptanceOn(), measurementVersion.getExternalAcceptanceNotes());
-        if (updated != 1) {
+        MeasurementVersionJpaEntity existing = measurementVersionJpaRepository
+                .findWithLockByIdAndCompanyId(measurementVersion.getId(), measurementVersion.getCompanyId())
+                .orElseThrow(() -> new IllegalArgumentException("Measurement version does not exist"));
+        if (existing.getLockVersion() != measurementVersion.getLockVersion()) {
             throw new ObjectOptimisticLockingFailureException(MeasurementVersionJpaEntity.class, measurementVersion.getId());
         }
-        return measurementVersionJpaRepository.findByIdAndCompanyId(measurementVersion.getId(), measurementVersion.getCompanyId())
-                .map(this::toDomain)
-                .orElseThrow(() -> new IllegalArgumentException("Measurement version does not exist"));
+        if(existing.getStatus()==measurementVersion.getStatus()
+            &&java.util.Objects.equals(existing.getExternalAcceptanceOn(),measurementVersion.getExternalAcceptanceOn())
+            &&java.util.Objects.equals(existing.getExternalAcceptanceNotes(),measurementVersion.getExternalAcceptanceNotes())
+            &&existing.getCorrectionItemIds().equals(new LinkedHashSet<>(measurementVersion.getCorrectionItemIds()))) {
+            int updated=measurementVersionJpaRepository.updateLifecycleIfCurrent(existing.getId(),existing.getCompanyId(),
+                existing.getLockVersion(),existing.getStatus(),existing.getExternalAcceptanceOn(),existing.getExternalAcceptanceNotes());
+            if(updated!=1)throw new ObjectOptimisticLockingFailureException(MeasurementVersionJpaEntity.class,measurementVersion.getId());
+            return toDomain(measurementVersionJpaRepository.findByIdAndCompanyId(measurementVersion.getId(),measurementVersion.getCompanyId()).orElseThrow());
+        }
+        existing.updateLifecycle(measurementVersion.getStatus(), measurementVersion.getExternalAcceptanceOn(),
+                measurementVersion.getExternalAcceptanceNotes(), new LinkedHashSet<>(measurementVersion.getCorrectionItemIds()));
+        return toDomain(measurementVersionJpaRepository.saveAndFlush(existing));
     }
 
     @Override
@@ -53,11 +65,19 @@ public class JpaMeasurementVersionRepository implements MeasurementVersionReposi
         ).map(this::toDomain);
     }
 
+    @Override
+    public List<MeasurementVersion> findByMeasurementIdAndCompanyIdOrderByVersionNumberDesc(UUID measurementId,
+                                                                                              UUID companyId) {
+        return measurementVersionJpaRepository.findByMeasurementIdAndCompanyIdOrderByVersionNumberDesc(measurementId,
+                companyId).stream().map(this::toDomain).toList();
+    }
+
     private MeasurementVersion toDomain(MeasurementVersionJpaEntity entity) {
         return MeasurementVersion.rehydrate(
                 entity.getId(), entity.getCompanyId(), entity.getMeasurementId(), entity.getVersionNumber(),
                 entity.getPreviousVersionId(), entity.getStatus(), entity.getLockVersion(), entity.getExternalAcceptanceOn(),
-                entity.getExternalAcceptanceNotes(), entity.getCreatedAt(), entity.getUpdatedAt()
+                entity.getExternalAcceptanceNotes(), entity.getCorrectionItemIds().stream().toList(),
+                entity.getCreatedAt(), entity.getUpdatedAt()
         );
     }
 }

@@ -13,4 +13,6 @@ interface BillingAllocationJpaRepository extends JpaRepository<BillingAllocation
     List<BillingAllocationJpaEntity> findByBillingInstallmentIdAndCompanyId(UUID billingInstallmentId, UUID companyId);
 
     List<BillingAllocationJpaEntity> findByContractIdAndCompanyId(UUID contractId, UUID companyId);
+
+    List<BillingAllocationJpaEntity> findByMeasurementContractCompositionIdAndCompanyId(UUID measurementContractCompositionId, UUID companyId);
 }

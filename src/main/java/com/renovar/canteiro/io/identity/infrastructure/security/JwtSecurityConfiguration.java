@@ -90,7 +90,7 @@ public class JwtSecurityConfiguration {
         configuration.setAllowedOrigins(apiCorsProperties.allowedOrigins());
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("Accept", "Authorization", "Content-Type", "X-Correlation-Id"));
-        configuration.setExposedHeaders(List.of("X-Correlation-Id"));
+        configuration.setExposedHeaders(List.of("X-Correlation-Id", "Content-Disposition"));
         configuration.setAllowCredentials(true);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();

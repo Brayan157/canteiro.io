@@ -16,6 +16,10 @@ import com.renovar.canteiro.io.receivables.application.FinancialCancellationServ
 import com.renovar.canteiro.io.receivables.domain.Invoice;
 import com.renovar.canteiro.io.receivables.domain.InvoiceItem;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -35,12 +39,21 @@ import java.util.UUID;
 @RequiredArgsConstructor
 @Tag(name = "Invoices")
 public class InvoiceController {
+    private final com.renovar.canteiro.io.receivables.application.FinancialCurrencyService currencies;
 
     private final InvoiceRegistrationService invoiceRegistrationService;
     private final FinancialCancellationService financialCancellationService;
 
     @PostMapping("/{invoiceId}/cancellation")
     @Operation(summary = "Cancels an invoice, its items and tax effects atomically")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Official operation result", content = @Content(schema = @Schema(implementation = FinancialCancellationResponse.class))),
+            @ApiResponse(responseCode = "202", description = "Awaiting approval; no official financial change", content = @Content(schema = @Schema(implementation = FinancialCancellationResponse.class))),
+            @ApiResponse(responseCode = "400", ref = "#/components/responses/ProblemDetail"),
+            @ApiResponse(responseCode = "403", ref = "#/components/responses/ProblemDetail"),
+            @ApiResponse(responseCode = "404", ref = "#/components/responses/ProblemDetail"),
+            @ApiResponse(responseCode = "409", ref = "#/components/responses/ProblemDetail")
+    })
     public ResponseEntity<FinancialCancellationResponse> cancel(@PathVariable UUID invoiceId,
                                                                  @Valid @RequestBody CancelFinancialRecordRequest request) {
         var result = financialCancellationService.cancelInvoice(invoiceId,
@@ -52,6 +65,14 @@ public class InvoiceController {
 
     @PostMapping
     @Operation(summary = "Registers an invoice for one contract using compatible billing allocations")
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "Official operation result", content = @Content(schema = @Schema(implementation = InvoiceRegistrationResponse.class))),
+            @ApiResponse(responseCode = "202", description = "Awaiting approval; no official financial change", content = @Content(schema = @Schema(implementation = InvoiceRegistrationResponse.class))),
+            @ApiResponse(responseCode = "400", ref = "#/components/responses/ProblemDetail"),
+            @ApiResponse(responseCode = "403", ref = "#/components/responses/ProblemDetail"),
+            @ApiResponse(responseCode = "404", ref = "#/components/responses/ProblemDetail"),
+            @ApiResponse(responseCode = "409", ref = "#/components/responses/ProblemDetail")
+    })
     public ResponseEntity<InvoiceRegistrationResponse> register(
             @Valid @RequestBody CreateRegisteredInvoiceRequest request
     ) {
@@ -81,7 +102,7 @@ public class InvoiceController {
                 .map(item -> new InvoiceItemResponse(
                         item.getId(), item.getBillingAllocationId(), item.getContractServiceId(), item.getDescription(),
                         item.getAllocatedAmount(), item.getStatus()
-                )).toList()
+                )).toList(), currencies.forContract(invoice.getContractId())
         );
     }
 }

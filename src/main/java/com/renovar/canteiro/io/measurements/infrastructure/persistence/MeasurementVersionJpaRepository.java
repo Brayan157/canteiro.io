@@ -13,6 +13,7 @@ import com.renovar.canteiro.io.measurements.domain.MeasurementVersionStatus;
 import java.time.LocalDate;
 
 import java.util.Optional;
+import java.util.List;
 import java.util.UUID;
 
 interface MeasurementVersionJpaRepository extends JpaRepository<MeasurementVersionJpaEntity, UUID> {
@@ -35,6 +36,10 @@ interface MeasurementVersionJpaRepository extends JpaRepository<MeasurementVersi
                                  @Param("externalAcceptanceNotes") String externalAcceptanceNotes);
 
     Optional<MeasurementVersionJpaEntity> findTopByMeasurementIdAndCompanyIdOrderByVersionNumberDesc(
+            UUID measurementId, UUID companyId
+    );
+
+    List<MeasurementVersionJpaEntity> findByMeasurementIdAndCompanyIdOrderByVersionNumberDesc(
             UUID measurementId, UUID companyId
     );
 }

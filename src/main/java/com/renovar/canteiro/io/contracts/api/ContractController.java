@@ -2,6 +2,7 @@ package com.renovar.canteiro.io.contracts.api;
 
 import com.renovar.canteiro.io.contracts.api.request.CreateContractRequest;
 import com.renovar.canteiro.io.contracts.api.request.SetContractDiscountRequest;
+import com.renovar.canteiro.io.contracts.api.request.ReverseDiscountRequest;
 import com.renovar.canteiro.io.contracts.api.request.UpsertContractServiceRequest;
 import com.renovar.canteiro.io.contracts.api.request.UpdateContractRequest;
 import com.renovar.canteiro.io.contracts.api.response.ContractChangeResponse;
@@ -101,8 +102,8 @@ public class ContractController {
     })
     public ResponseEntity<ContractChangeResponse> create(@Valid @RequestBody CreateContractRequest request) {
         var result = contractManagementService.create(new CreateContractCommand(
-                request.workId(), request.contractIdentifier(), request.reference(), request.name(), request.status(), request.startedOn(),
-                request.expectedCompletionOn(), request.completedOn(), request.justification()
+                request.workId(), request.contractIdentifier(), request.pricingMode(), request.reference(), request.name(), request.status(), request.startedOn(),
+                request.expectedCompletionOn(), request.completedOn(), request.justification(), request.currency()
         ));
         ContractResponse contract = result.contract() == null ? null : toResponse(result.contract());
         return ResponseEntity.status(result.contract() == null ? HttpStatus.ACCEPTED : HttpStatus.CREATED)
@@ -128,6 +129,7 @@ public class ContractController {
     @Operation(summary = "Updates a contract while preserving its work relationship")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Contract updated", content = @Content(schema = @Schema(implementation = ContractChangeResponse.class))),
+            @ApiResponse(responseCode = "409", ref = "#/components/responses/ProblemDetail"),
             @ApiResponse(responseCode = "202", description = "Contract update submitted for approval", content = @Content(schema = @Schema(implementation = ContractChangeResponse.class))),
             @ApiResponse(responseCode = "400", ref = "#/components/responses/ProblemDetail"),
             @ApiResponse(responseCode = "403", ref = "#/components/responses/ProblemDetail"),
@@ -136,7 +138,7 @@ public class ContractController {
     public ResponseEntity<ContractChangeResponse> update(@PathVariable UUID contractId,
                                                           @Valid @RequestBody UpdateContractRequest request) {
         var result = contractManagementService.update(contractId, new UpdateContractCommand(request.contractIdentifier(), request.reference(), request.name(),
-                request.status(), request.startedOn(), request.expectedCompletionOn(), request.completedOn(), request.justification()));
+                request.status(), request.startedOn(), request.expectedCompletionOn(), request.completedOn(), request.justification(), request.currency()));
         ContractResponse contract = result.contract() == null ? null : toResponse(result.contract());
         return ResponseEntity.status(contract == null ? HttpStatus.ACCEPTED : HttpStatus.OK).body(new ContractChangeResponse(contract,
                 result.changeRequest() == null ? null : result.changeRequest().getId(), result.mode()));
@@ -201,6 +203,21 @@ public class ContractController {
                 decimal(request.discountValue()), request.justification()), HttpStatus.OK);
     }
 
+    @PostMapping("/{contractId}/services/{serviceId}/discount/reversal")
+    @Operation(summary = "Reverses the active service discount without deleting its audit history")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Service discount reversed", content = @Content(schema = @Schema(implementation = ContractServiceChangeResponse.class))),
+            @ApiResponse(responseCode = "202", description = "Service discount reversal submitted for approval", content = @Content(schema = @Schema(implementation = ContractServiceChangeResponse.class))),
+            @ApiResponse(responseCode = "400", ref = "#/components/responses/ProblemDetail"),
+            @ApiResponse(responseCode = "403", ref = "#/components/responses/ProblemDetail"),
+            @ApiResponse(responseCode = "404", ref = "#/components/responses/ProblemDetail"),
+            @ApiResponse(responseCode = "409", ref = "#/components/responses/ProblemDetail")
+    })
+    public ResponseEntity<ContractServiceChangeResponse> reverseServiceDiscount(@PathVariable UUID contractId, @PathVariable UUID serviceId,
+                                                                                  @Valid @RequestBody ReverseDiscountRequest request) {
+        return serviceResponse(contractServiceManagementService.reverseServiceDiscount(contractId, serviceId, request.justification()), HttpStatus.OK);
+    }
+
     @PutMapping("/{contractId}/discount")
     @Operation(summary = "Applies or changes the contract-level adjustment without altering its services")
     @ApiResponses({
@@ -215,6 +232,21 @@ public class ContractController {
                                                                                @Valid @RequestBody SetContractDiscountRequest request) {
         return serviceResponse(contractServiceManagementService.setContractDiscount(contractId, request.discountType(),
                 decimal(request.discountValue()), request.justification()), HttpStatus.OK);
+    }
+
+    @PostMapping("/{contractId}/discount/reversal")
+    @Operation(summary = "Reverses the active contract adjustment without physical deletion")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Contract discount reversed", content = @Content(schema = @Schema(implementation = ContractServiceChangeResponse.class))),
+            @ApiResponse(responseCode = "202", description = "Contract discount reversal submitted for approval", content = @Content(schema = @Schema(implementation = ContractServiceChangeResponse.class))),
+            @ApiResponse(responseCode = "400", ref = "#/components/responses/ProblemDetail"),
+            @ApiResponse(responseCode = "403", ref = "#/components/responses/ProblemDetail"),
+            @ApiResponse(responseCode = "404", ref = "#/components/responses/ProblemDetail"),
+            @ApiResponse(responseCode = "409", ref = "#/components/responses/ProblemDetail")
+    })
+    public ResponseEntity<ContractServiceChangeResponse> reverseContractDiscount(@PathVariable UUID contractId,
+                                                                                   @Valid @RequestBody ReverseDiscountRequest request) {
+        return serviceResponse(contractServiceManagementService.reverseContractDiscount(contractId, request.justification()), HttpStatus.OK);
     }
 
     private ResponseEntity<ContractServiceChangeResponse> serviceResponse(ContractServiceChangeResult result, HttpStatus directStatus) {
@@ -235,7 +267,8 @@ public class ContractController {
         return new ContractServiceResponse(service.getId(), service.getContractId(), service.getSourceServiceTemplateId(), service.getName(),
                 service.getDescription(), service.getStatus(), quantity(service.getQuantity()), money(service.getUnitPrice()), money(service.getGrossAmount()),
                 service.getDiscountType(), service.getDiscountValue() == null ? null : decimalString(service.getDiscountValue(), 4),
-                money(service.getDiscountAmount()), money(service.getNetAmount()));
+                money(service.getDiscountAmount()), money(service.getNetAmount()), money(service.getMeasurementCompositionAmount()),
+                money(service.getEffectiveNetAmount()));
     }
 
     private BigDecimal decimal(String value) { return new BigDecimal(value); }
@@ -245,8 +278,8 @@ public class ContractController {
 
     private ContractResponse toResponse(Contract contract) {
         return new ContractResponse(
-                contract.getId(), contract.getWorkId(), contract.getContractIdentifier(), contract.getReference(), contract.getName(), contract.getStatus(),
-                contract.getStartedOn(), contract.getExpectedCompletionOn(), contract.getCompletedOn()
+                contract.getId(), contract.getWorkId(), contract.getContractIdentifier(), contract.getPricingMode(), contract.getReference(), contract.getName(), contract.getStatus(),
+                contract.getStartedOn(), contract.getExpectedCompletionOn(), contract.getCompletedOn(), contract.getCurrency()
         );
     }
 }

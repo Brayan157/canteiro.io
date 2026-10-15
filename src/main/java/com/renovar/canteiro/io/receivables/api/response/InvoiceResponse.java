@@ -1,6 +1,9 @@
 package com.renovar.canteiro.io.receivables.api.response;
 
 import com.renovar.canteiro.io.receivables.domain.InvoiceStatus;
+import com.renovar.canteiro.io.shared.api.json.CanonicalMoneySerializer;
+import io.swagger.v3.oas.annotations.media.Schema;
+import tools.jackson.databind.annotation.JsonSerialize;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -14,8 +17,10 @@ public record InvoiceResponse(
         String series,
         String accessKey,
         LocalDate issuedOn,
-        BigDecimal totalAmount,
+        @JsonSerialize(using = CanonicalMoneySerializer.class)
+        @Schema(type = "string", format = "decimal", pattern = "^-?(0|[1-9][0-9]*)\\.[0-9]{2}$", example = "100.00") BigDecimal totalAmount,
         InvoiceStatus status,
-        List<InvoiceItemResponse> items
+        List<InvoiceItemResponse> items,
+        com.renovar.canteiro.io.shared.domain.CurrencyCode currency
 ) {
 }

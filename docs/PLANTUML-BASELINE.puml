@@ -127,6 +127,8 @@ class Contract {
   +companyId: UUID
   +workId: UUID
   +status
+  +pricingMode: FIXED|MEASUREMENT_BASED
+  +currency: BRL|USD|EUR {immutable}
   +netValue()
   +billableBalance()
 }
@@ -146,23 +148,93 @@ class ContractService {
 
 class Measurement {
   +id: UUID
-  +workId: UUID
-  +contractId: UUID?
+  +workId: UUID [0..1]
+  +contractId: UUID [0..1]
+  +title: String
+  +currency: BRL|USD|EUR {immutable}
+  +reference: String?
   +status
 }
 
 class MeasurementVersion {
   +id: UUID
+  +versionNumber
+  +previousVersionId: UUID?
   +status
   +headerDiscount
 }
 
 class MeasurementItem {
   +id: UUID
+  +sourceItemId: UUID?
   +billingType
   +formula
   +totalKg
   +totalValue
+}
+
+class MeasurementContinuousService <<persistido>> {
+  +id: UUID
+  +measurementId: UUID
+  +companyId: UUID
+  +serviceTitle
+  +contractServiceId: UUID?
+  +destinationAction: CREATE_NEW_SERVICE|ADD_TO_EXISTING_SERVICE
+  +lockVersion
+}
+
+class MeasurementItemRecognition <<ledger imutável>> {
+  +measurementItemId: UUID
+  +rootItemId: UUID
+  +continuousServiceId: UUID
+  +versionNumber
+  +grossAmount
+  +netAmount
+  +active
+}
+
+  class MeasurementContinuousServiceRetirement <<ledger imutável>> {
+    +continuousServiceId: UUID
+    +measurementId: UUID
+    +companyId: UUID
+    +sourceMigration: 78
+    +originCreatedAt
+    +retiredAt
+    +reason: V78_ORPHANED_COPY_GROUP
+  }
+
+class MeasurementService <<grupo aceito por versão>> {
+  +id: UUID
+  +measurementVersionId: UUID
+  +serviceTitle
+}
+
+class MeasurementContractComposition {
+  +id: UUID
+  +measurementServiceId: UUID
+  +contractServiceId: UUID
+  +originType
+  +grossAmount
+  +netAmount
+}
+
+class MeasurementCompositionAdjustment <<reversão imutável>> {
+  +compositionId: UUID
+  +correctiveVersionId: UUID
+  +netAmount: negativo
+  +reason
+}
+
+class MeasurementAccumulatedView <<projeção implementada>> {
+  +acceptedItems: somente leitura
+  +currentRevisionItems: origem/status/editabilidade
+  +acceptedTotals
+  +pendingTotals
+  +financialAvailability
+  +acceptedAmount
+  +receivedAmount
+  +remainingToReceive
+  +asOf: Instant UTC
 }
 
 class BillingInstallment {
@@ -174,6 +246,7 @@ class BillingInstallment {
 
 class BillingAllocation {
   +id: UUID
+  +measurementContractCompositionId: UUID?
   +kind: SERVICE|CONTRACT_DISCOUNT
   +netAmount
 }
@@ -234,14 +307,25 @@ Work "1" --> "0..*" Contract : possui
 Contract "1" --> "0..*" ContractService : contém
 ServiceTemplate "1" ..> "0..*" ContractService : copia para
 
-Work "1" --> "0..*" Measurement : possui
+Work "0..1" --> "0..*" Measurement : vínculo posterior auditado
 Measurement "1" --> "1..*" MeasurementVersion : versiona
-MeasurementVersion "1" --> "1..*" MeasurementItem : contém
-MeasurementItem "0..1" ..> "0..1" ContractService : gera uma vez\napós aceite
+MeasurementVersion "1" --> "0..*" MeasurementItem : contém avanço
+Measurement "1" --> "0..*" MeasurementContinuousService : mantém entre meses
+MeasurementContinuousService "1" --> "0..*" MeasurementItem : identidade contínua
+MeasurementContinuousService "0..*" --> "0..1" ContractService : destino persistido/auditado por ID
+MeasurementContinuousService "1" --> "0..*" MeasurementItemRecognition : posições aceitas por raiz
+MeasurementContinuousService "1" --> "0..1" MeasurementContinuousServiceRetirement : sobra comprovada, sem exclusão física
+MeasurementVersion "1" --> "0..*" MeasurementService : grupo congelado
+MeasurementContinuousService "1" --> "0..*" MeasurementService : continua entre avanços
+MeasurementService "1" --> "0..1" MeasurementContractComposition : compõe uma única vez
+MeasurementContractComposition "0..*" --> "1" ContractService : incremento aceito
+MeasurementContractComposition "1" --> "0..*" MeasurementCompositionAdjustment : reversão/substituição
+Measurement ..> MeasurementAccumulatedView : mesma grade e relatório
 
 Contract "1" --> "0..*" BillingInstallment : fatura
 BillingInstallment "1" --> "1..*" BillingAllocation : aloca
 BillingAllocation "0..*" --> "0..1" ContractService : serviço
+BillingAllocation "0..*" --> "0..1" MeasurementContractComposition : origem de medição
 Contract "1" --> "0..*" Invoice : possui
 Invoice "1" --> "1..*" InvoiceItem : contém
 InvoiceItem "0..*" --> "1" BillingAllocation : documenta
@@ -277,6 +361,38 @@ note bottom of BillingAllocation
   NF e contas a receber não
   consomem saldo uma segunda vez.
 end note
+
+note bottom of MeasurementAccumulatedView
+  Requisitos SDD D-40 a D-43; não declara API disponível.
+  Aceitos anteriores + avanço atual no corpo principal.
+  Somente DRAFT atual editável; preços aceitos congelados.
+  Resolve cópias corretivas antes dos totais.
+  Falta receber inclui aceito ainda não faturado.
+  Sem contrato/permissão: financeiro indisponível.
+end note
+
+note bottom of MeasurementContinuousService
+  Preparar destino não altera contrato.
+  Aceite/vínculo coordena somente incremento autorizado.
+  Permissão de medição não concede SERVICES.
+  Em 202, proposta não altera o oficial.
+end note
+
+class ReceivableSettlementAllocation <<ledger imutável>> {
+  +settlementId: UUID
+  +billingAllocationId: UUID
+  +companyId: UUID
+  +amount: baixa ou estorno
+}
+class ReceivableCredit <<ledger imutável>> {
+  +receivableId: UUID
+  +amount
+  +reversalOfCreditId: UUID?
+}
+ReceivableSettlementAllocation --> BillingAllocation : origem preservada
+ReceivableSettlementAllocation --> ReceivableSettlement : parcelas exatas
+ReceivableCredit --> Receivable : crédito sem baixa fictícia
+Receivable --> Receivable : origem da renegociação
 
 note bottom of Payable
   WORK: workId obrigatório;

@@ -27,6 +27,8 @@ import com.renovar.canteiro.io.measurements.domain.MeasurementRepository;
 import com.renovar.canteiro.io.measurements.domain.MeasurementStatus;
 import com.renovar.canteiro.io.measurements.domain.MeasurementVersion;
 import com.renovar.canteiro.io.measurements.domain.MeasurementVersionAmountCalculator;
+import com.renovar.canteiro.io.measurements.domain.MeasurementVersionAmounts;
+import com.renovar.canteiro.io.measurements.domain.MeasurementServiceSummaryCalculator;
 import com.renovar.canteiro.io.measurements.domain.MeasurementVersionRepository;
 import com.renovar.canteiro.io.measurements.domain.MeasurementVersionStatus;
 import com.renovar.canteiro.io.shared.api.error.ApiException;
@@ -35,11 +37,14 @@ import com.renovar.canteiro.io.tenancy.application.TenantContextHolder;
 import com.renovar.canteiro.io.works.domain.WorkRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -59,10 +64,13 @@ public class MeasurementManagementService {
     private final MeasurementDiscountRepository measurementDiscountRepository;
     private final ChangeRequestService changeRequestService;
     private final AuditEventRecorder auditEventRecorder;
+    private final MeasurementContinuousServiceManagementService continuousServices;
+    private final com.renovar.canteiro.io.measurements.domain.MeasurementContinuityRepository continuity;
 
     @Transactional
     public MeasurementCreationResult create(CreateMeasurementCommand command) {
         UUID companyId = tenantContextHolder.requireCurrentTenant().companyId();
+        command = command.withCurrency(resolveCurrency(companyId, command));
         validateMeasurementContext(companyId, command);
         ChangeAuthorizationMode mode = accessAuthorizationService.requireChangeAuthorization(
                 AccessModule.MEASUREMENTS, ChangeOperation.CREATE
@@ -85,6 +93,8 @@ public class MeasurementManagementService {
     @Transactional
     public MeasurementItemChangeResult addItem(CreateMeasurementItemCommand command) {
         UUID companyId = tenantContextHolder.requireCurrentTenant().companyId();
+        continuity.lockMeasurement(companyId, command.measurementId());
+        continuousServices.validateItemService(companyId, command.measurementId(), command.continuousServiceId());
         validateDraftVersion(companyId, command.measurementId(), command.measurementVersionId());
         createItem(companyId, command);
         rejectDuplicateItemNumber(companyId, command);
@@ -114,12 +124,72 @@ public class MeasurementManagementService {
         MeasurementVersion version = measurementVersionRepository
                 .findLatestByMeasurementIdAndCompanyId(measurementId, companyId)
                 .orElseThrow(() -> new TenantResourceNotFoundException("Measurement version"));
+        MeasurementVersionDetails details = versionDetails(companyId, measurement, version);
+        return new MeasurementDetails(measurement, version, details.correctionRequestSource(), details.items(),
+                details.discount(), details.amounts(), details.services());
+    }
+
+    @Transactional(readOnly = true)
+    public List<MeasurementVersionHistory> findVersionHistory(UUID measurementId) {
+        accessAuthorizationService.requirePermission(AccessModule.MEASUREMENTS, AccessAction.READ);
+        UUID companyId = tenantContextHolder.requireCurrentTenant().companyId();
+        Measurement measurement = requireMeasurement(companyId, measurementId);
+        return measurementVersionRepository.findByMeasurementIdAndCompanyIdOrderByVersionNumberDesc(measurementId, companyId)
+                .stream()
+                .map(version -> new MeasurementVersionHistory(version, versionAmounts(companyId, version), measurement.getCurrency()))
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public MeasurementVersionDetails findVersion(UUID measurementId, UUID measurementVersionId) {
+        accessAuthorizationService.requirePermission(AccessModule.MEASUREMENTS, AccessAction.READ);
+        UUID companyId = tenantContextHolder.requireCurrentTenant().companyId();
+        Measurement measurement = requireMeasurement(companyId, measurementId);
+        MeasurementVersion version = measurementVersionRepository.findByIdAndCompanyId(measurementVersionId, companyId)
+                .filter(candidate -> measurementId.equals(candidate.getMeasurementId()))
+                .orElseThrow(() -> new TenantResourceNotFoundException("Measurement version"));
+        return versionDetails(companyId, measurement, version);
+    }
+
+    private MeasurementVersionDetails versionDetails(UUID companyId, Measurement measurement, MeasurementVersion version) {
+        // The ordinary detail/grid is operational, not a historical timeline.
+        // Deactivated lines remain stored for audit and corrective revisions, but must not
+        // be shown or included in any official aggregate returned to the client.
         List<MeasurementItem> items = measurementItemRepository
-                .findByMeasurementVersionIdAndCompanyId(version.getId(), companyId);
+                .findByMeasurementVersionIdAndCompanyId(version.getId(), companyId).stream()
+                .filter(MeasurementItem::isActive)
+                .toList();
         MeasurementDiscount discount = measurementDiscountRepository
                 .findByMeasurementVersionIdAndCompanyId(version.getId(), companyId).orElse(null);
-        return new MeasurementDetails(measurement, version, items, discount,
-                MeasurementVersionAmountCalculator.calculate(items, discount));
+        MeasurementVersion correctionRequestSource = correctionRequestSource(version, companyId);
+        return new MeasurementVersionDetails(measurement, version, correctionRequestSource, items, discount,
+                MeasurementVersionAmountCalculator.calculate(items, discount),
+                MeasurementServiceSummaryCalculator.calculate(items));
+    }
+
+    private MeasurementVersionAmounts versionAmounts(UUID companyId, MeasurementVersion version) {
+        List<MeasurementItem> items = measurementItemRepository
+                .findByMeasurementVersionIdAndCompanyId(version.getId(), companyId).stream()
+                .filter(MeasurementItem::isActive)
+                .toList();
+        MeasurementDiscount discount = measurementDiscountRepository
+                .findByMeasurementVersionIdAndCompanyId(version.getId(), companyId).orElse(null);
+        return MeasurementVersionAmountCalculator.calculate(items, discount);
+    }
+
+    private MeasurementVersion correctionRequestSource(MeasurementVersion version, UUID companyId) {
+        if (version.getStatus() == MeasurementVersionStatus.REJECTED) return version;
+        if (version.getPreviousVersionId() == null) return null;
+        return measurementVersionRepository.findByIdAndCompanyId(version.getPreviousVersionId(), companyId)
+                .filter(previous -> previous.getStatus() == MeasurementVersionStatus.REJECTED)
+                .orElse(null);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<Measurement> findAll(MeasurementFilter filter, Pageable pageable) {
+        accessAuthorizationService.requirePermission(AccessModule.MEASUREMENTS, AccessAction.READ);
+        UUID companyId = tenantContextHolder.requireCurrentTenant().companyId();
+        return measurementRepository.findByCompanyId(companyId, filter, pageable);
     }
 
     @Transactional(readOnly = true)
@@ -153,7 +223,7 @@ public class MeasurementManagementService {
                                                           ChangeAuthorizationMode mode) {
         validateMeasurementContext(companyId, command);
         Measurement measurement = measurementRepository.save(Measurement.create(companyId, command.workId(),
-                command.contractId(), command.reference(), command.description(), command.measuredOn()));
+                command.contractId(), command.title(), command.reference(), command.description(), command.measuredOn(), resolveCurrency(companyId, command)));
         MeasurementVersion version = measurementVersionRepository.save(
                 MeasurementVersion.create(companyId, measurement.getId(), 1));
         auditEventRecorder.recordDirectAction(AuditModule.MEASUREMENTS, AuditAction.CREATE, "Measurement",
@@ -164,17 +234,38 @@ public class MeasurementManagementService {
     private MeasurementItemChangeResult persistItem(UUID companyId, CreateMeasurementItemCommand command,
                                                      String origin, UUID changeRequestId,
                                                      ChangeAuthorizationMode mode) {
+        continuity.lockMeasurement(companyId, command.measurementId());
+        continuousServices.validateItemService(companyId, command.measurementId(), command.continuousServiceId());
         validateDraftVersion(companyId, command.measurementId(), command.measurementVersionId());
         rejectDuplicateItemNumber(companyId, command);
         MeasurementItem item = measurementItemRepository.save(createItem(companyId, command));
+        continuousServices.bindNewItem(companyId, command.measurementId(), command.measurementVersionId(), item.getId(), command.continuousServiceId());
+        measurementVersionRepository.save(measurementVersionRepository.findByIdAndCompanyId(command.measurementVersionId(),companyId).orElseThrow());
         auditEventRecorder.recordDirectAction(AuditModule.MEASUREMENTS, AuditAction.CREATE, "MeasurementItem",
                 item.getId(), null, itemAuditData(item), metadata(origin, changeRequestId));
         return new MeasurementItemChangeResult(item, null, mode);
     }
 
+    private com.renovar.canteiro.io.shared.domain.CurrencyCode resolveCurrency(UUID companyId, CreateMeasurementCommand command) {
+        if (command == null) throw new IllegalArgumentException("Measurement creation command is required");
+        if (command.contractId() == null) return com.renovar.canteiro.io.shared.domain.CurrencyCode.defaultIfAbsent(command.currency());
+        Contract contract = contractRepository.findByIdAndCompanyId(command.contractId(), companyId)
+                .orElseThrow(() -> new TenantResourceNotFoundException("Contract"));
+        if (command.currency() != null) contract.getCurrency().requireSame(command.currency());
+        return contract.getCurrency();
+    }
+
     private void validateMeasurementContext(UUID companyId, CreateMeasurementCommand command) {
-        if (command == null || command.workId() == null
-                || workRepository.findByIdAndCompanyId(command.workId(), companyId).isEmpty()) {
+        if (command == null) {
+            throw new IllegalArgumentException("Measurement creation command is required");
+        }
+        if (command.workId() == null) {
+            if (command.contractId() != null) {
+                throw new IllegalArgumentException("Measurement contract requires workId");
+            }
+            return;
+        }
+        if (workRepository.findByIdAndCompanyId(command.workId(), companyId).isEmpty()) {
             throw new TenantResourceNotFoundException("Work");
         }
         if (command.contractId() == null) {
@@ -198,6 +289,10 @@ public class MeasurementManagementService {
             throw new ApiException(HttpStatus.CONFLICT, ErrorCode.BUSINESS_RULE_VIOLATION,
                     "Measurement items can only be changed while the current version is draft");
         }
+        if (!measurementVersionRepository.findLatestByMeasurementIdAndCompanyId(measurementId, companyId)
+                .map(latest -> latest.getId().equals(versionId)).orElse(false)) {
+            throw new ApiException(HttpStatus.CONFLICT, ErrorCode.BUSINESS_RULE_VIOLATION, "Only the current DRAFT version is editable");
+        }
     }
 
     private Measurement requireMeasurement(UUID companyId, UUID measurementId) {
@@ -208,7 +303,7 @@ public class MeasurementManagementService {
     private void rejectDuplicateItemNumber(UUID companyId, CreateMeasurementItemCommand command) {
         boolean duplicate = measurementItemRepository
                 .findByMeasurementVersionIdAndCompanyId(command.measurementVersionId(), companyId).stream()
-                .anyMatch(item -> item.getItemNumber() == command.itemNumber());
+                .anyMatch(item -> item.isActive() && item.getItemNumber() == command.itemNumber());
         if (duplicate) {
             throw new ApiException(HttpStatus.CONFLICT, ErrorCode.BUSINESS_RULE_VIOLATION,
                     "Measurement item number is already in use in this version");
@@ -219,26 +314,58 @@ public class MeasurementManagementService {
         if (command == null || command.chargeType() == null) {
             throw new IllegalArgumentException("Measurement item charge type is required");
         }
-        return switch (command.chargeType()) {
+        LocalDate measuredOn = resolveMeasuredOn(companyId, command);
+        MeasurementItem item = switch (command.chargeType()) {
             case SQUARE_METER -> MeasurementItem.createSquareMeter(companyId, command.measurementVersionId(),
-                    command.itemNumber(), command.activity(), command.description(), command.areaSquareMeters(),
-                    command.unitPrice());
+                    command.itemNumber(), command.serviceTitle(), command.activity(), command.description(), measuredOn,
+                    command.areaSquareMeters(), command.unitPrice());
             case LINEAR_METER -> MeasurementItem.createLinearMeter(companyId, command.measurementVersionId(),
-                    command.itemNumber(), command.activity(), command.description(), command.linearMeters(),
-                    command.unitPrice());
+                    command.itemNumber(), command.serviceTitle(), command.activity(), command.description(), measuredOn,
+                    command.linearMeters(), command.unitPrice());
             case KILOGRAM_PER_SQUARE_METER -> MeasurementItem.createKilogramPerSquareMeter(companyId,
-                    command.measurementVersionId(), command.itemNumber(), command.activity(), command.description(),
-                    command.kilogramsPerSquareMeter(), command.areaSquareMeters(), command.unitPrice());
+                    command.measurementVersionId(), command.itemNumber(), command.serviceTitle(), command.activity(),
+                    command.description(), measuredOn, command.kilogramsPerSquareMeter(), command.areaSquareMeters(),
+                    command.unitPrice());
             case KILOGRAM_PER_LINEAR_METER -> MeasurementItem.createKilogramPerLinearMeter(companyId,
-                    command.measurementVersionId(), command.itemNumber(), command.activity(), command.description(),
-                    command.kilogramsPerLinearMeter(), command.linearMeters(), command.unitPrice());
+                    command.measurementVersionId(), command.itemNumber(), command.serviceTitle(), command.activity(),
+                    command.description(), measuredOn, command.kilogramsPerLinearMeter(), command.linearMeters(),
+                    command.unitPrice());
+            case UNIT -> MeasurementItem.createUnit(companyId, command.measurementVersionId(), command.itemNumber(),
+                    command.serviceTitle(), command.activity(), command.description(), measuredOn,
+                    command.unitQuantity(), command.unitPrice());
         };
+        if (command.chargeType() != MeasurementChargeType.UNIT) {
+            item = item.withOperationalUnitQuantity(command.unitQuantity());
+        }
+        validatePreview("previewTotalWeightKg", command.previewTotalWeightKg(),
+                item.getTotalWeightKg() == null ? BigDecimal.ZERO : item.getTotalWeightKg(), 4);
+        validatePreview("previewTotalAmount", command.previewTotalAmount(), item.getTotalAmount(), 2);
+        return item;
+    }
+
+    private void validatePreview(String field, BigDecimal preview, BigDecimal officialValue, int scale) {
+        if (preview != null && preview.setScale(scale).compareTo(officialValue.setScale(scale)) != 0) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, ErrorCode.BUSINESS_RULE_VIOLATION,
+                    field + " does not match the official backend calculation");
+        }
+    }
+
+    private LocalDate resolveMeasuredOn(UUID companyId, CreateMeasurementItemCommand command) {
+        if (command.measuredOn() != null) {
+            return command.measuredOn();
+        }
+        Measurement measurement = requireMeasurement(companyId, command.measurementId());
+        return measurement.getMeasuredOn() != null
+                ? measurement.getMeasuredOn()
+                : measurement.getCreatedAt().atZone(ZoneOffset.UTC).toLocalDate();
     }
 
     private Map<String, Object> measurementProposal(CreateMeasurementCommand command) {
         Map<String, Object> values = new HashMap<>();
-        values.put("workId", command.workId().toString());
+        values.put("workId", uuidValue(command.workId()));
         values.put("contractId", uuidValue(command.contractId()));
+        values.put("title", command.title());
+        values.put("currency", command.currency().name());
         values.put("reference", command.reference());
         values.put("description", command.description());
         values.put("measuredOn", dateValue(command.measuredOn()));
@@ -247,40 +374,52 @@ public class MeasurementManagementService {
 
     private Map<String, Object> itemProposal(CreateMeasurementItemCommand command) {
         Map<String, Object> values = new HashMap<>();
+        values.put("continuousServiceId", command.continuousServiceId()==null?null:command.continuousServiceId().toString());
         values.put("measurementId", command.measurementId().toString());
         values.put("measurementVersionId", command.measurementVersionId().toString());
         values.put("itemNumber", command.itemNumber());
+        values.put("serviceTitle", command.serviceTitle());
         values.put("activity", command.activity());
         values.put("description", command.description());
+        values.put("measuredOn", dateValue(command.measuredOn()));
         values.put("chargeType", command.chargeType().name());
         values.put("areaSquareMeters", decimalValue(command.areaSquareMeters()));
         values.put("linearMeters", decimalValue(command.linearMeters()));
         values.put("kilogramsPerSquareMeter", decimalValue(command.kilogramsPerSquareMeter()));
         values.put("kilogramsPerLinearMeter", decimalValue(command.kilogramsPerLinearMeter()));
+        values.put("unitQuantity", decimalValue(command.unitQuantity()));
         values.put("unitPrice", decimalValue(command.unitPrice()));
+        values.put("previewTotalWeightKg", decimalValue(command.previewTotalWeightKg()));
+        values.put("previewTotalAmount", decimalValue(command.previewTotalAmount()));
         return values;
     }
 
     private CreateMeasurementCommand measurementFromProposal(Map<String, Object> values) {
-        return new CreateMeasurementCommand(UUID.fromString((String) values.get("workId")),
-                uuid((String) values.get("contractId")), (String) values.get("reference"),
-                (String) values.get("description"), date((String) values.get("measuredOn")), null);
+        return new CreateMeasurementCommand(uuid((String) values.get("workId")),
+                uuid((String) values.get("contractId")), title(values), (String) values.get("reference"),
+                (String) values.get("description"), date((String) values.get("measuredOn")), null,
+                com.renovar.canteiro.io.shared.domain.CurrencyCode.valueOf((String) values.getOrDefault("currency", "BRL")));
     }
 
     private CreateMeasurementItemCommand itemFromProposal(Map<String, Object> values) {
         return new CreateMeasurementItemCommand(UUID.fromString((String) values.get("measurementId")),
                 UUID.fromString((String) values.get("measurementVersionId")),
-                ((Number) values.get("itemNumber")).intValue(), (String) values.get("activity"),
-                (String) values.get("description"), MeasurementChargeType.valueOf((String) values.get("chargeType")),
+                ((Number) values.get("itemNumber")).intValue(), serviceTitle(values), (String) values.get("activity"),
+                (String) values.get("description"), date((String) values.get("measuredOn")),
+                MeasurementChargeType.valueOf((String) values.get("chargeType")),
                 decimal((String) values.get("areaSquareMeters")), decimal((String) values.get("linearMeters")),
                 decimal((String) values.get("kilogramsPerSquareMeter")),
-                decimal((String) values.get("kilogramsPerLinearMeter")), decimal((String) values.get("unitPrice")), null);
+                decimal((String) values.get("kilogramsPerLinearMeter")), decimal((String) values.get("unitQuantity")), decimal((String) values.get("unitPrice")),
+                decimal((String) values.get("previewTotalWeightKg")),
+                decimal((String) values.get("previewTotalAmount")), null, uuid((String)values.get("continuousServiceId")));
     }
 
     private Map<String, Object> measurementAuditData(Measurement measurement, MeasurementVersion version) {
         Map<String, Object> values = new HashMap<>();
-        values.put("workId", measurement.getWorkId().toString());
+        values.put("workId", uuidValue(measurement.getWorkId()));
         values.put("contractId", uuidValue(measurement.getContractId()));
+        values.put("title", measurement.getTitle());
+        values.put("currency", measurement.getCurrency().name());
         values.put("reference", measurement.getReference());
         values.put("description", measurement.getDescription());
         values.put("measuredOn", dateValue(measurement.getMeasuredOn()));
@@ -294,8 +433,10 @@ public class MeasurementManagementService {
         Map<String, Object> values = new HashMap<>();
         values.put("measurementVersionId", item.getMeasurementVersionId().toString());
         values.put("itemNumber", item.getItemNumber());
+        values.put("serviceTitle", item.getServiceTitle());
         values.put("activity", item.getActivity());
         values.put("description", item.getDescription());
+        values.put("measuredOn", dateValue(item.getMeasuredOn()));
         values.put("chargeType", item.getChargeType().name());
         values.put("totalWeightKg", decimalValue(item.getTotalWeightKg()));
         values.put("totalAmount", decimalValue(item.getTotalAmount()));
@@ -313,6 +454,25 @@ public class MeasurementManagementService {
 
     private UUID uuid(String value) {
         return value == null ? null : UUID.fromString(value);
+    }
+
+    private String title(Map<String, Object> values) {
+        return safeTitle(values.get("title"), values.get("reference"), values.get("description"));
+    }
+
+    private String serviceTitle(Map<String, Object> values) {
+        Object value = values.get("serviceTitle");
+        return value instanceof String text && !text.isBlank() ? text : (String) values.get("activity");
+    }
+
+    private String safeTitle(Object... candidates) {
+        for (Object candidate : candidates) {
+            if (candidate instanceof String text && !text.isBlank()) {
+                String normalized = text.trim();
+                return normalized.length() <= 200 ? normalized : normalized.substring(0, 200);
+            }
+        }
+        return "Medição sem título";
     }
 
     private String dateValue(LocalDate value) {

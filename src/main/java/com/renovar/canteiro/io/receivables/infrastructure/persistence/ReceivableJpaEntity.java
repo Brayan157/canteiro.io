@@ -31,6 +31,11 @@ class ReceivableJpaEntity extends BaseJpaEntity {
     @Column(name = "billing_installment_id", nullable = false, updatable = false)
     private UUID billingInstallmentId;
 
+    @Column(name = "renegotiation_source_receivable_id", updatable = false)
+    private UUID renegotiationSourceReceivableId;
+
+    void linkRenegotiationOrigin(UUID source) { this.renegotiationSourceReceivableId=source; }
+
     @Column(name = "financial_group_id", nullable = false, updatable = false)
     private UUID financialGroupId;
 

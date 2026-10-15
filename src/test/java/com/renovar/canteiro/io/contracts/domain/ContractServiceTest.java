@@ -43,4 +43,16 @@ class ContractServiceTest {
         assertEquals(new BigDecimal("25.00"), service.getDiscountAmount());
         assertEquals(new BigDecimal("175.00"), service.getNetAmount());
     }
+
+    @Test
+    void preservesNegotiatedValueWhileAddingAcceptedMeasurementComposition() {
+        ContractService negotiated = ContractService.create(UUID.randomUUID(), UUID.randomUUID(), "Assembly", null,
+                ContractServiceStatus.ACTIVE, new BigDecimal("2.0000"), new BigDecimal("100.00"));
+
+        ContractService composed = negotiated.withAddedMeasurementComposition(new BigDecimal("75.50"));
+
+        assertEquals(new BigDecimal("200.00"), composed.getNetAmount());
+        assertEquals(new BigDecimal("75.50"), composed.getMeasurementCompositionAmount());
+        assertEquals(new BigDecimal("275.50"), composed.getEffectiveNetAmount());
+    }
 }

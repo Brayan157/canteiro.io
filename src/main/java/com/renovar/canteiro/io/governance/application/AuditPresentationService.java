@@ -1,7 +1,10 @@
 package com.renovar.canteiro.io.governance.application;
 
 import com.renovar.canteiro.io.employees.domain.EmployeeRepository;
-import com.renovar.canteiro.io.governance.domain.*;
+import com.renovar.canteiro.io.governance.domain.AuditAction;
+import com.renovar.canteiro.io.governance.domain.AuditActorType;
+import com.renovar.canteiro.io.governance.domain.AuditEvent;
+import com.renovar.canteiro.io.governance.domain.AuditPresentation;
 import com.renovar.canteiro.io.identity.domain.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;

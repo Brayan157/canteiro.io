@@ -29,6 +29,18 @@ public class ChangeRequestService {
     private final ChangeRequestRepository changeRequestRepository;
     private final AuditEventRecorder auditEventRecorder;
 
+    /** Caller must hold the aggregate write lock; only identical pending proposals are reused. */
+    @Transactional
+    public ChangeRequest createIdempotent(CreateChangeRequestCommand command) {
+        requireRequestAuthorization(command);
+        var tenant=tenantContextHolder.requireCurrentTenant();
+        return changeRequestRepository.findPendingByEntity(tenant.companyId(),command.entityType(),command.entityId()).stream()
+            .filter(r->r.getRequesterUserId().equals(tenant.userId())&&r.getOperation()==command.operation()
+                &&r.getEntityVersion()==command.entityVersion()
+                &&r.getSnapshot().proposedData().values().equals(command.snapshot().proposedData().values()))
+            .findFirst().orElseGet(()->create(command));
+    }
+
     @Transactional
     public ChangeRequest create(CreateChangeRequestCommand command) {
         requireRequestAuthorization(command);

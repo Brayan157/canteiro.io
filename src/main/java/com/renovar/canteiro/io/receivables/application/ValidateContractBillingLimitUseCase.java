@@ -6,6 +6,7 @@ import com.renovar.canteiro.io.contracts.domain.ContractNetAmount;
 import com.renovar.canteiro.io.contracts.domain.ContractRepository;
 import com.renovar.canteiro.io.contracts.domain.ContractService;
 import com.renovar.canteiro.io.contracts.domain.ContractServiceRepository;
+import com.renovar.canteiro.io.contracts.domain.ContractServiceStatus;
 import com.renovar.canteiro.io.receivables.domain.BillingAllocation;
 import com.renovar.canteiro.io.receivables.domain.BillingAllocationRepository;
 import com.renovar.canteiro.io.receivables.domain.BillingAllocationStatus;
@@ -69,9 +70,12 @@ public class ValidateContractBillingLimitUseCase {
             if (service == null) {
                 throw new TenantResourceNotFoundException("Contract service");
             }
+            if (service.getStatus() == ContractServiceStatus.CANCELLED) {
+                throw new IllegalStateException("Cancelled contract services cannot receive billing allocations");
+            }
             BigDecimal resultingAmount = activeByService.getOrDefault(proposed.getKey(), BigDecimal.ZERO)
                     .add(proposed.getValue()).setScale(2, RoundingMode.HALF_UP);
-            if (resultingAmount.compareTo(service.getNetAmount()) > 0) {
+            if (resultingAmount.compareTo(service.getEffectiveNetAmount()) > 0) {
                 throw new BillingLimitExceededException("Service billing allocation exceeds the service net amount");
             }
         }

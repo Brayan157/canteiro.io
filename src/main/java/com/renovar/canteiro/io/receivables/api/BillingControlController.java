@@ -55,18 +55,19 @@ public class BillingControlController {
         ContractBillingControl control = getBillingControlUseCase.get(contractId);
         return new ContractBillingControlResponse(control.contract().getId(), control.contract().getWorkId(),
                 control.contract().getReference(), control.contract().getName(), control.contract().getStatus(),
+                canonicalMoney(control.balance().serviceSubtotal()), canonicalMoney(control.balance().contractDiscountAmount()),
                 canonicalMoney(control.balance().contractNetAmount()), canonicalMoney(control.balance().activeAllocatedAmount()),
                 canonicalMoney(control.balance().availableAmount()),
                 control.services().stream().map(service -> new BillingServiceControlResponse(service.contractServiceId(),
                         service.serviceName(), canonicalMoney(service.serviceNetAmount()), canonicalMoney(service.activeAllocatedAmount()),
                         canonicalMoney(service.availableAmount()), canonicalMoney(service.issuedInInvoicesAmount()))).toList(),
-                control.allocations().stream().map(this::allocation).toList());
+                control.allocations().stream().map(this::allocation).toList(), control.contract().getCurrency());
     }
 
     private BillingControlSummaryResponse summary(BillingControlSummary value) {
         return new BillingControlSummaryResponse(value.contract().getId(), value.contract().getWorkId(),
                 value.contract().getReference(), value.contract().getName(), value.contract().getStatus(),
-                value.balance().contractNetAmount(), value.balance().activeAllocatedAmount(), value.balance().availableAmount());
+                value.balance().contractNetAmount(), value.balance().activeAllocatedAmount(), value.balance().availableAmount(), value.contract().getCurrency());
     }
 
     private BillingAllocationControlResponse allocation(BillingAllocationControl value) {
