@@ -4,317 +4,166 @@ import com.renovar.canteiro.io.measurements.application.MeasurementExportData;
 import com.renovar.canteiro.io.measurements.application.MeasurementExportResult;
 import com.renovar.canteiro.io.measurements.application.MeasurementItemSource;
 import com.renovar.canteiro.io.measurements.application.MeasurementSpreadsheetGenerator;
-import com.renovar.canteiro.io.measurements.domain.MeasurementChargeType;
-import com.renovar.canteiro.io.measurements.domain.MeasurementDiscountType;
 import com.renovar.canteiro.io.measurements.domain.MeasurementItem;
 import com.renovar.canteiro.io.measurements.domain.MeasurementVersionAmountCalculator;
-import org.apache.poi.ss.usermodel.BorderStyle;
+import com.renovar.canteiro.io.measurements.infrastructure.branding.MeasurementCompanyBrandingImage;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.CellStyle;
+import org.apache.poi.ss.usermodel.ClientAnchor;
 import org.apache.poi.ss.usermodel.FillPatternType;
+import org.apache.poi.ss.usermodel.Font;
 import org.apache.poi.ss.usermodel.HorizontalAlignment;
 import org.apache.poi.ss.usermodel.IndexedColors;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.ss.usermodel.SheetVisibility;
 import org.apache.poi.ss.usermodel.VerticalAlignment;
 import org.apache.poi.ss.usermodel.Workbook;
+import org.apache.poi.ss.util.CellRangeAddress;
 import org.apache.poi.xssf.streaming.SXSSFWorkbook;
 import org.springframework.stereotype.Component;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.math.BigDecimal;
-import java.time.LocalDate;
+import java.util.Objects;
 
+import static com.renovar.canteiro.io.measurements.infrastructure.reporting.MeasurementReportPresentation.money;
+import static com.renovar.canteiro.io.measurements.infrastructure.reporting.MeasurementReportPresentation.quantity;
+import static com.renovar.canteiro.io.measurements.infrastructure.reporting.MeasurementReportPresentation.measure;
+import static com.renovar.canteiro.io.measurements.infrastructure.reporting.MeasurementReportPresentation.factor;
+import static com.renovar.canteiro.io.measurements.infrastructure.reporting.MeasurementReportPresentation.status;
+import static com.renovar.canteiro.io.measurements.infrastructure.reporting.MeasurementReportPresentation.date;
+
+/** Ten presentation columns plus stable, hidden, lossless import columns. */
 @Component
 public class ApachePoiMeasurementSpreadsheetGenerator implements MeasurementSpreadsheetGenerator {
-
-    private static final String CURRENCY_FORMAT = "R$ #,##0.00";
-    private static final String QUANTITY_FORMAT = "#,##0.0000";
-    private static final int ROW_WINDOW = 100;
-
     @Override
-    public MeasurementExportResult write(MeasurementExportData data, MeasurementItemSource items, OutputStream output)
-            throws IOException {
-        SXSSFWorkbook workbook = new SXSSFWorkbook(ROW_WINDOW);
+    public MeasurementExportResult write(MeasurementExportData data, MeasurementItemSource items, OutputStream output) throws IOException {
+        SXSSFWorkbook workbook = new SXSSFWorkbook(100);
         try (workbook) {
             workbook.setCompressTempFiles(true);
             Sheet sheet = workbook.createSheet("Medição");
             sheet.setDisplayGridlines(false);
-
-            Styles styles = Styles.create(workbook);
-            writeHeader(sheet, data, styles);
-            int itemHeaderRow = 8;
-            writeItemHeader(sheet, itemHeaderRow, styles);
-            int firstItemRow = itemHeaderRow + 1;
-            ItemSummary summary = writeItems(sheet, firstItemRow, items, styles);
-            writeTotals(sheet, firstItemRow, summary.itemCount(), data.discount(), styles);
-            configureColumns(sheet);
-            sheet.createFreezePane(0, firstItemRow);
-            workbook.setForceFormulaRecalculation(true);
-            workbook.write(output);
-            output.flush();
-            return new MeasurementExportResult(summary.itemCount(),
-                    MeasurementVersionAmountCalculator.calculate(summary.grossAmount(), data.discount()));
-        } finally {
-            // SXSSF uses temporary files for flushed rows; dispose removes them deterministically.
-            // Close alone is not sufficient on all supported Apache POI versions.
-            workbook.dispose();
-        }
-    }
-
-    private void writeHeader(Sheet sheet, MeasurementExportData data, Styles styles) {
-        sheet.addMergedRegion(new org.apache.poi.ss.util.CellRangeAddress(0, 0, 0, 11));
-        Row titleRow = sheet.createRow(0);
-        Cell title = titleRow.createCell(0);
-        title.setCellValue("Medição " + display(data.measurement().getReference(), displayId(data.measurement().getId())));
-        title.setCellStyle(styles.title());
-        titleRow.setHeightInPoints(28);
-
-        writeLabelValue(sheet, 2, 0, "Obra", data.measurement().getWorkId().toString(), styles);
-        writeLabelValue(sheet, 2, 3, "Contrato", displayId(data.measurement().getContractId()), styles);
-        writeLabelValue(sheet, 2, 6, "Data da medição", data.measurement().getMeasuredOn(), styles);
-        writeLabelValue(sheet, 2, 9, "Status", data.version().getStatus().name(), styles);
-        writeLabelValue(sheet, 4, 0, "Versão", data.version().getVersionNumber(), styles);
-        writeLabelValue(sheet, 4, 3, "Aceite externo", data.version().getExternalAcceptanceOn(), styles);
-        writeLabelValue(sheet, 4, 6, "Observações", display(data.version().getExternalAcceptanceNotes(), "-"), styles);
-        writeLabelValue(sheet, 4, 9, "Desconto", discountDescription(data), styles);
-    }
-
-    private void writeLabelValue(Sheet sheet, int rowNumber, int column, String label, Object value, Styles styles) {
-        Row row = row(sheet, rowNumber);
-        Cell labelCell = row.createCell(column);
-        labelCell.setCellValue(label);
-        labelCell.setCellStyle(styles.label());
-        Cell valueCell = row.createCell(column + 1);
-        if (value instanceof LocalDate localDate) {
-            valueCell.setCellValue(localDate);
-            valueCell.setCellStyle(styles.date());
-        } else if (value instanceof Integer integer) {
-            valueCell.setCellValue(integer);
-            valueCell.setCellStyle(styles.value());
-        } else {
-            valueCell.setCellValue(value == null ? "-" : value.toString());
-            valueCell.setCellStyle(styles.value());
-        }
-    }
-
-    private void writeItemHeader(Sheet sheet, int rowNumber, Styles styles) {
-        String[] headers = {"Nº", "Atividade", "Descrição", "Tipo", "Área (m²)", "Metragem (m)",
-                "Kg/m²", "Kg/m", "Preço unit. (R$)", "Peso total (kg)", "Valor total (R$)", "Fórmula"};
-        Row row = sheet.createRow(rowNumber);
-        for (int column = 0; column < headers.length; column++) {
-            Cell cell = row.createCell(column);
-            cell.setCellValue(headers[column]);
-            cell.setCellStyle(styles.tableHeader());
-        }
-        row.setHeightInPoints(28);
-    }
-
-    private ItemSummary writeItems(Sheet sheet, int firstRow, MeasurementItemSource items, Styles styles) throws IOException {
-        ItemSummary summary = new ItemSummary();
-        items.consume(item -> {
-            int rowNumber = firstRow + summary.itemCount();
-            Row row = sheet.createRow(rowNumber);
-            writeNumber(row, 0, BigDecimal.valueOf(item.getItemNumber()), styles.integer());
-            writeText(row, 1, item.getActivity(), styles.text());
-            writeText(row, 2, item.getDescription(), styles.text());
-            writeText(row, 3, chargeTypeLabel(item.getChargeType()), styles.text());
-            writeNumber(row, 4, item.getAreaSquareMeters(), styles.quantity());
-            writeNumber(row, 5, item.getLinearMeters(), styles.quantity());
-            writeNumber(row, 6, item.getKilogramsPerSquareMeter(), styles.quantity());
-            writeNumber(row, 7, item.getKilogramsPerLinearMeter(), styles.quantity());
-            writeNumber(row, 8, item.getUnitPrice(), styles.currency());
-            writeWeightFormula(row, item.getChargeType(), rowNumber + 1, styles.quantity());
-            writeAmountFormula(row, item.getChargeType(), rowNumber + 1, styles.currency());
-            writeText(row, 11, item.getCalculationFormula(), styles.formula());
-            summary.add(item);
-        });
-        return summary;
-    }
-
-    private void writeWeightFormula(Row row, MeasurementChargeType chargeType, int excelRow, CellStyle style) {
-        Cell cell = row.createCell(9);
-        if (chargeType == MeasurementChargeType.KILOGRAM_PER_SQUARE_METER) {
-            cell.setCellFormula("E" + excelRow + "*G" + excelRow);
-        } else if (chargeType == MeasurementChargeType.KILOGRAM_PER_LINEAR_METER) {
-            cell.setCellFormula("F" + excelRow + "*H" + excelRow);
-        }
-        cell.setCellStyle(style);
-    }
-
-    private void writeAmountFormula(Row row, MeasurementChargeType chargeType, int excelRow, CellStyle style) {
-        Cell cell = row.createCell(10);
-        String quantityColumn = switch (chargeType) {
-            case SQUARE_METER -> "E";
-            case LINEAR_METER -> "F";
-            case KILOGRAM_PER_SQUARE_METER, KILOGRAM_PER_LINEAR_METER -> "J";
-        };
-        cell.setCellFormula(quantityColumn + excelRow + "*I" + excelRow);
-        cell.setCellStyle(style);
-    }
-
-    private void writeTotals(Sheet sheet, int firstItemRow, int itemCount,
-                             com.renovar.canteiro.io.measurements.domain.MeasurementDiscount discount, Styles styles) {
-        int grossRow = firstItemRow + itemCount + 1;
-        int discountRow = grossRow + 1;
-        int netRow = grossRow + 2;
-        int firstExcelRow = firstItemRow + 1;
-        int lastExcelRow = firstItemRow + itemCount;
-
-        writeTotalLabel(sheet, grossRow, "Total bruto", styles.total());
-        Cell grossAmount = row(sheet, grossRow).createCell(10);
-        if (itemCount == 0) {
-            grossAmount.setCellValue(0);
-        } else {
-            grossAmount.setCellFormula("SUM(K" + firstExcelRow + ":K" + lastExcelRow + ")");
-        }
-        grossAmount.setCellStyle(styles.totalCurrency());
-
-        writeTotalLabel(sheet, discountRow, "Desconto de cabeçalho", styles.total());
-        Cell discountAmount = row(sheet, discountRow).createCell(10);
-        if (discount == null) {
-            discountAmount.setCellValue(0);
-        } else if (discount.getDiscountType() == MeasurementDiscountType.PERCENTAGE) {
-            discountAmount.setCellFormula("K" + (grossRow + 1) + "*" + discount.getDiscountValue().toPlainString() + "/100");
-        } else {
-            discountAmount.setCellValue(discount.getDiscountValue().doubleValue());
-        }
-        discountAmount.setCellStyle(styles.totalCurrency());
-
-        writeTotalLabel(sheet, netRow, "Total líquido", styles.netTotal());
-        Cell netAmount = row(sheet, netRow).createCell(10);
-        netAmount.setCellFormula("K" + (grossRow + 1) + "-K" + (discountRow + 1));
-        netAmount.setCellStyle(styles.netTotalCurrency());
-    }
-
-    private void writeTotalLabel(Sheet sheet, int rowNumber, String label, CellStyle style) {
-        Cell cell = row(sheet, rowNumber).createCell(9);
-        cell.setCellValue(label);
-        cell.setCellStyle(style);
-    }
-
-    private void configureColumns(Sheet sheet) {
-        int[] widths = {8, 22, 30, 20, 15, 16, 12, 12, 18, 18, 18, 52};
-        for (int column = 0; column < widths.length; column++) {
-            sheet.setColumnWidth(column, widths[column] * 256);
-        }
-    }
-
-    private void writeNumber(Row row, int column, BigDecimal value, CellStyle style) {
-        Cell cell = row.createCell(column);
-        if (value != null) {
-            cell.setCellValue(value.doubleValue());
-        }
-        cell.setCellStyle(style);
-    }
-
-    private void writeText(Row row, int column, String value, CellStyle style) {
-        Cell cell = row.createCell(column);
-        cell.setCellValue(value == null ? "" : value);
-        cell.setCellStyle(style);
-    }
-
-    private Row row(Sheet sheet, int rowNumber) {
-        Row row = sheet.getRow(rowNumber);
-        return row == null ? sheet.createRow(rowNumber) : row;
-    }
-
-    private String discountDescription(MeasurementExportData data) {
-        if (data.discount() == null) {
-            return "Sem desconto";
-        }
-        String suffix = data.discount().getDiscountType() == MeasurementDiscountType.PERCENTAGE ? "%" : " R$";
-        return data.discount().getDiscountValue().stripTrailingZeros().toPlainString() + suffix;
-    }
-
-    private String chargeTypeLabel(MeasurementChargeType chargeType) {
-        return switch (chargeType) {
-            case SQUARE_METER -> "m²";
-            case LINEAR_METER -> "Metro linear";
-            case KILOGRAM_PER_SQUARE_METER -> "kg/m²";
-            case KILOGRAM_PER_LINEAR_METER -> "kg/metro linear";
-        };
-    }
-
-    private String display(String value, String fallback) {
-        return value == null || value.isBlank() ? fallback : value;
-    }
-
-    private String displayId(Object value) {
-        return value == null ? "Não vinculado" : value.toString();
-    }
-
-    private record Styles(CellStyle title, CellStyle label, CellStyle value, CellStyle date, CellStyle tableHeader,
-                          CellStyle text, CellStyle formula, CellStyle quantity, CellStyle currency, CellStyle integer,
-                          CellStyle total, CellStyle totalCurrency, CellStyle netTotal, CellStyle netTotalCurrency) {
-        static Styles create(Workbook workbook) {
-            CellStyle title = style(workbook, IndexedColors.DARK_TEAL, IndexedColors.WHITE, true, HorizontalAlignment.LEFT);
-            CellStyle label = style(workbook, IndexedColors.LIGHT_CORNFLOWER_BLUE, IndexedColors.BLACK, true, HorizontalAlignment.LEFT);
-            CellStyle value = style(workbook, IndexedColors.WHITE, IndexedColors.BLACK, false, HorizontalAlignment.LEFT);
-            CellStyle date = copy(workbook, value, "yyyy-mm-dd");
-            CellStyle tableHeader = style(workbook, IndexedColors.TEAL, IndexedColors.WHITE, true, HorizontalAlignment.CENTER);
-            CellStyle text = style(workbook, IndexedColors.WHITE, IndexedColors.BLACK, false, HorizontalAlignment.LEFT);
-            text.setWrapText(true);
-            CellStyle formula = copy(workbook, text, null);
-            formula.setWrapText(true);
-            CellStyle quantity = copy(workbook, text, QUANTITY_FORMAT);
-            quantity.setAlignment(HorizontalAlignment.RIGHT);
-            CellStyle currency = copy(workbook, text, CURRENCY_FORMAT);
-            currency.setAlignment(HorizontalAlignment.RIGHT);
-            CellStyle integer = copy(workbook, text, "0");
-            integer.setAlignment(HorizontalAlignment.CENTER);
-            CellStyle total = style(workbook, IndexedColors.GREY_25_PERCENT, IndexedColors.BLACK, true, HorizontalAlignment.RIGHT);
-            CellStyle totalCurrency = copy(workbook, total, CURRENCY_FORMAT);
-            CellStyle netTotal = style(workbook, IndexedColors.DARK_TEAL, IndexedColors.WHITE, true, HorizontalAlignment.RIGHT);
-            CellStyle netTotalCurrency = copy(workbook, netTotal, CURRENCY_FORMAT);
-            return new Styles(title, label, value, date, tableHeader, text, formula, quantity, currency, integer,
-                    total, totalCurrency, netTotal, netTotalCurrency);
-        }
-
-        private static CellStyle style(Workbook workbook, IndexedColors fill, IndexedColors fontColor,
-                                       boolean bold, HorizontalAlignment alignment) {
-            CellStyle style = workbook.createCellStyle();
-            style.setFillForegroundColor(fill.getIndex());
-            style.setFillPattern(FillPatternType.SOLID_FOREGROUND);
-            style.setAlignment(alignment);
-            style.setVerticalAlignment(VerticalAlignment.CENTER);
-            style.setBorderBottom(BorderStyle.THIN);
-            style.setBorderTop(BorderStyle.THIN);
-            style.setBorderLeft(BorderStyle.THIN);
-            style.setBorderRight(BorderStyle.THIN);
-            var font = workbook.createFont();
-            font.setBold(bold);
-            font.setColor(fontColor.getIndex());
-            style.setFont(font);
-            return style;
-        }
-
-        private static CellStyle copy(Workbook workbook, CellStyle source, String numberFormat) {
-            CellStyle copy = workbook.createCellStyle();
-            copy.cloneStyleFrom(source);
-            if (numberFormat != null) {
-                copy.setDataFormat(workbook.createDataFormat().getFormat(numberFormat));
+            CellStyle title = style(workbook, true, IndexedColors.DARK_TEAL, IndexedColors.WHITE, HorizontalAlignment.CENTER);
+            CellStyle group = style(workbook, true, IndexedColors.LIGHT_BLUE, IndexedColors.BLACK, HorizontalAlignment.CENTER);
+            CellStyle normal = style(workbook, false, IndexedColors.WHITE, IndexedColors.BLACK, HorizontalAlignment.LEFT);
+            CellStyle number=workbook.createCellStyle();number.cloneStyleFrom(normal);number.setAlignment(HorizontalAlignment.RIGHT);
+            CellStyle summary = style(workbook, true, IndexedColors.GREY_25_PERCENT, IndexedColors.BLACK, HorizontalAlignment.LEFT);
+            int[] widths = {9, 22, 60, 14, 10, 18, 22, 18, 24, 24};
+            for (int c = 0; c < widths.length; c++) sheet.setColumnWidth(c, widths[c] * 256);
+            Row branding = sheet.createRow(0); branding.setHeightInPoints(44);
+            var logo = data.companyBranding() == null ? null : MeasurementCompanyBrandingImage.normalize(data.companyBranding().logoContent()).orElse(null);
+            if (logo != null) {
+                int index = workbook.addPicture(logo.content(), Workbook.PICTURE_TYPE_PNG);
+                ClientAnchor anchor = workbook.getCreationHelper().createClientAnchor(); anchor.setCol1(0); anchor.setRow1(0);
+                var picture = sheet.createDrawingPatriarch().createPicture(anchor, index);
+                var image = javax.imageio.ImageIO.read(new ByteArrayInputStream(logo.content()));
+                picture.resize(Math.min(170d / image.getWidth(), 50d / image.getHeight()));
+            } else {
+                band(sheet, 0, data.companyBranding() == null ? "Empresa emitente" : data.companyBranding().displayName(), group);
             }
-            return copy;
-        }
+            band(sheet, 1, data.measurement().getTitle(), title);
+            band(sheet, 2, "Referência: " + display(data.measurement().getReference()) + " | Versão: " + data.version().getVersionNumber()
+                    + " | " + status(data.version().getStatus().name()) + " | Moeda: " + data.measurement().getCurrency(), summary);
+            band(sheet, 3, "Data da medição: " + date(data.measurement().getMeasuredOn()) + " | Aceite externo: " + date(data.version().getExternalAcceptanceOn()), normal);
+            band(sheet, 4, "Obra: " + display(data.measurement().getWorkId()) + " | Contrato: " + display(data.measurement().getContractId()), normal);
+            band(sheet, 5, "Observações do aceite: " + display(data.version().getExternalAcceptanceNotes()), normal);
+            String symbol = data.measurement().getCurrency().getSymbol();
+            String[] headers = {"Item", "Situação", "Atividade / descrição", "Data", "Und", "m ou m²", "kg/m ou kg/m²", "Peso (kg)",
+                    "Preço (" + symbol + ")", "Valor (" + symbol + ")", "Nº", "Serviço", "Atividade", "Descrição", "Data (origem)", "Tipo",
+                    "Área (m²)", "Metragem (m)", "Kg/m²", "Kg/m", "Peças/unid. executadas", "Preço unit. (decimal)", "Peso total (kg)",
+                    "Valor total (decimal)", "Item ID", "Versão ID", "Medição ID", "Moeda", "Serviço contínuo ID"};
+            Row header = sheet.createRow(8); header.setHeightInPoints(36);
+            for (int c = 0; c < headers.length; c++) cell(header, c, headers[c], title);
+            for (int c = 10; c < headers.length; c++) sheet.setColumnHidden(c, true);
+            Sheet metadata = workbook.createSheet("_measurement_metadata");
+            String[] values = {"measurement-xlsx-v2", display(data.measurement().getId()), display(data.version().getId()), data.measurement().getCurrency().name()};
+            for (int n = 0; n < values.length; n++) cell(metadata.createRow(n), 0, values[n], normal);
+            workbook.setSheetVisibility(1, SheetVisibility.VERY_HIDDEN);
+            int[] next = {9}, count = {0}, first = {-1}, last = {-1};
+            String[] service = {null}; BigDecimal[] sums = {BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO};
+            Object[] previousService={null};
+            items.consume(item -> {
+                java.util.UUID identity=data.serviceIdentity(item.getId());
+                Object key=identity==null?item.getServiceTitle():identity;
+                if (!Objects.equals(previousService[0], key)) {
+                    if (service[0] != null) total(sheet, next[0]++, "Subtotal bruto do serviço", money(sums[2], data.measurement().getCurrency()), summary);
+                    band(sheet, next[0]++, "SERVIÇO: " + item.getServiceTitle(), group); service[0] = item.getServiceTitle(); sums[2] = BigDecimal.ZERO;
+                    previousService[0]=key;
+                }
+                Row row = sheet.createRow(next[0]++); int excelRow = row.getRowNum() + 1;
+                String description = item.getActivity() + (item.getDescription() == null ? "" : "\n" + item.getDescription());
+                String[] visible = {data.version().getVersionNumber() + "." + item.getItemNumber(), status(data.version().getStatus().name()), description,
+                        date(item.getMeasuredOn()), quantity(item.getUnitQuantity()), measure(item), factor(item), quantity(item.getTotalWeightKg()),
+                        money(item.getUnitPrice(), data.measurement().getCurrency()), money(item.getTotalAmount(), data.measurement().getCurrency())};
+                for (int c = 0; c < visible.length; c++) cell(row, c, visible[c], c>=4?number:normal);
+                // Raw decimal strings are exact. Excel formulas below are preview-only, never imported as official totals.
+                String[] raw = {Integer.toString(item.getItemNumber()), item.getServiceTitle(), item.getActivity(), display(item.getDescription()),
+                        item.getMeasuredOn() == null ? "" : item.getMeasuredOn().toString(), item.getChargeType().name(), decimal(item.getAreaSquareMeters()),
+                        decimal(item.getLinearMeters()), decimal(item.getKilogramsPerSquareMeter()), decimal(item.getKilogramsPerLinearMeter()),
+                        decimal(item.getUnitQuantity()), decimal(item.getUnitPrice())};
+                for (int c = 0; c < raw.length; c++) cell(row, c + 10, raw[c], normal);
+                var weight = row.createCell(22);
+                switch (item.getChargeType()) {
+                    case KILOGRAM_PER_SQUARE_METER -> weight.setCellFormula("Q" + excelRow + "*S" + excelRow);
+                    case KILOGRAM_PER_LINEAR_METER -> weight.setCellFormula("R" + excelRow + "*T" + excelRow);
+                    default -> { }
+                }
+                String quantityColumn = switch (item.getChargeType()) {
+                    case SQUARE_METER -> "Q"; case LINEAR_METER -> "R";
+                    case KILOGRAM_PER_SQUARE_METER, KILOGRAM_PER_LINEAR_METER -> "W"; case UNIT -> "U";
+                };
+                row.createCell(23).setCellFormula(quantityColumn + excelRow + "*V" + excelRow);
+                cell(row, 24, item.getId() == null ? "" : item.getId().toString(), normal);
+                cell(row, 25, display(data.version().getId()), normal); cell(row, 26, display(data.measurement().getId()), normal);
+                cell(row, 27, data.measurement().getCurrency().name(), normal);
+                cell(row, 28, identity==null?"":identity.toString(), normal);
+                row.setHeightInPoints(Math.min(409, Math.max(38, (description.length() / 52 + 2) * 13)));
+                // Description is stored in full in the stable columns and in continuation presentation rows.
+                if (description.length() > 1200) {
+                    row.getCell(2).setCellValue(description.substring(0, 1200));
+                    for (int start = 1200; start < description.length(); start += 1200) {
+                        Row continuation = sheet.createRow(next[0]++);
+                        cell(continuation, 2, description.substring(start, Math.min(start + 1200, description.length())), normal);
+                        continuation.setHeightInPoints(338);
+                    }
+                }
+                if (first[0] < 0) first[0] = excelRow; last[0] = excelRow;
+                count[0]++; sums[0] = sums[0].add(item.getTotalAmount()); sums[2] = sums[2].add(item.getTotalAmount());
+                if (item.getTotalWeightKg() != null) sums[1] = sums[1].add(item.getTotalWeightKg());
+            });
+            if (service[0] != null) total(sheet, next[0]++, "Subtotal bruto do serviço", money(sums[2], data.measurement().getCurrency()), summary);
+            var amounts = MeasurementVersionAmountCalculator.calculate(sums[1], sums[0], data.discount());
+            total(sheet, ++next[0], "Peso total (kg)", quantity(amounts.totalWeightKg()), summary);
+            total(sheet, ++next[0], "Total bruto", money(amounts.grossAmount(), data.measurement().getCurrency()), summary);
+            if (first[0] > 0) sheet.getRow(next[0]).createCell(23).setCellFormula("SUM(X" + first[0] + ":X" + last[0] + ")");
+            total(sheet, ++next[0], "Desconto de cabeçalho", money(amounts.discountAmount(), data.measurement().getCurrency()), summary);
+            total(sheet, ++next[0], "Total líquido", money(amounts.netAmount(), data.measurement().getCurrency()), title);
+            sheet.createFreezePane(0, 9); sheet.setRepeatingRows(new CellRangeAddress(8, 8, 0, 9));
+            sheet.getPrintSetup().setLandscape(true); sheet.setFitToPage(true); sheet.getPrintSetup().setFitWidth((short) 1);
+            workbook.setPrintArea(0, 0, 9, 0, next[0]); workbook.setForceFormulaRecalculation(true);workbook.write(output); output.flush();
+            return new MeasurementExportResult(count[0], amounts);
+        } finally { workbook.dispose(); }
     }
 
-    private static final class ItemSummary {
-        private int itemCount;
-        private BigDecimal grossAmount = BigDecimal.ZERO;
-
-        void add(MeasurementItem item) {
-            itemCount++;
-            grossAmount = grossAmount.add(item.getTotalAmount());
-        }
-
-        int itemCount() {
-            return itemCount;
-        }
-
-        BigDecimal grossAmount() {
-            return grossAmount;
-        }
+    private static String decimal(BigDecimal value) { return value == null ? "" : value.toPlainString(); }
+    private static String display(Object value) { return value == null ? "-" : value.toString(); }
+    private static void cell(Row row, int column, String value, CellStyle style) {
+        Cell cell = row.createCell(column); cell.setCellValue(value); cell.setCellStyle(style);
+    }
+    private static void band(Sheet sheet, int index, String label, CellStyle style) {
+        Row row = sheet.getRow(index); if (row == null) row = sheet.createRow(index);
+        cell(row, 0, label, style); sheet.addMergedRegion(new CellRangeAddress(index, index, 0, 9)); row.setHeightInPoints(30);
+    }
+    private static void total(Sheet sheet, int index, String label, String value, CellStyle style) {
+        Row row = sheet.createRow(index); cell(row, 0, label, style); cell(row, 8, value, style);
+        sheet.addMergedRegion(new CellRangeAddress(index, index, 0, 7)); sheet.addMergedRegion(new CellRangeAddress(index, index, 8, 9)); row.setHeightInPoints(26);
+    }
+    private static CellStyle style(Workbook workbook, boolean bold, IndexedColors fill, IndexedColors color, HorizontalAlignment alignment) {
+        CellStyle style = workbook.createCellStyle(); style.setFillForegroundColor(fill.getIndex()); style.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+        style.setAlignment(alignment); style.setVerticalAlignment(VerticalAlignment.CENTER); style.setWrapText(true);
+        Font font = workbook.createFont(); font.setBold(bold); font.setColor(color.getIndex()); style.setFont(font); return style;
     }
 }

@@ -14,6 +14,8 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import com.renovar.canteiro.io.platform.subscription.application.PaymentGatewayWebhookAuthenticationException;
 
 import java.net.URI;
@@ -22,6 +24,8 @@ import java.util.List;
 @Order(Ordered.HIGHEST_PRECEDENCE)
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
     @ExceptionHandler(ApiException.class)
     ProblemDetail handleApiException(ApiException exception, HttpServletRequest request) {
@@ -93,6 +97,10 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     ProblemDetail handleUnexpected(Exception exception, HttpServletRequest request) {
+        // Do not place exception details in the response. The log has the full causal chain
+        // and the correlation id required to investigate it without disclosing internals.
+        LOGGER.error("Unhandled API exception [correlationId={}, method={}, path={}]",
+                CorrelationIdFilter.getCorrelationId(request), request.getMethod(), request.getRequestURI(), exception);
         return problem(
                 HttpStatus.INTERNAL_SERVER_ERROR,
                 ErrorCode.INTERNAL_ERROR,

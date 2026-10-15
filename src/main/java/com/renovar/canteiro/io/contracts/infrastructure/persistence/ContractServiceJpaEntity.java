@@ -62,9 +62,13 @@ class ContractServiceJpaEntity extends BaseJpaEntity {
     @Column(name = "net_amount", nullable = false, precision = 19, scale = 2)
     private BigDecimal netAmount;
 
+    @Column(name = "measurement_composition_amount", nullable = false, precision = 19, scale = 2)
+    private BigDecimal measurementCompositionAmount;
+
     ContractServiceJpaEntity(UUID companyId, UUID contractId, UUID serviceTemplateId, String name, String description,
                              ContractServiceStatus status, BigDecimal quantity, BigDecimal unitPrice, BigDecimal grossAmount,
-                             DiscountType discountType, BigDecimal discountValue, BigDecimal discountAmount, BigDecimal netAmount) {
+                             DiscountType discountType, BigDecimal discountValue, BigDecimal discountAmount, BigDecimal netAmount,
+                             BigDecimal measurementCompositionAmount) {
         this.companyId = companyId;
         this.contractId = contractId;
         this.serviceTemplateId = serviceTemplateId;
@@ -78,11 +82,12 @@ class ContractServiceJpaEntity extends BaseJpaEntity {
         this.discountValue = discountValue;
         this.discountAmount = discountAmount;
         this.netAmount = netAmount;
+        this.measurementCompositionAmount = measurementCompositionAmount;
     }
 
     void update(String name, String description, ContractServiceStatus status, BigDecimal quantity, BigDecimal unitPrice,
                 BigDecimal grossAmount, DiscountType discountType, BigDecimal discountValue, BigDecimal discountAmount,
-                BigDecimal netAmount) {
+                BigDecimal netAmount, BigDecimal measurementCompositionAmount) {
         this.name = name;
         this.description = description;
         this.status = status;
@@ -93,5 +98,6 @@ class ContractServiceJpaEntity extends BaseJpaEntity {
         this.discountValue = discountValue;
         this.discountAmount = discountAmount;
         this.netAmount = netAmount;
+        this.measurementCompositionAmount = measurementCompositionAmount;
     }
 }

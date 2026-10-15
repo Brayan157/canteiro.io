@@ -41,6 +41,8 @@ public class GenerateMeasurementSpreadsheetService {
     private final MeasurementSpreadsheetGenerator spreadsheetGenerator;
     private final AuditEventRecorder auditEventRecorder;
     private final TransactionTemplate transactionTemplate;
+    private final MeasurementCompanyBrandingLoader companyBrandingLoader;
+    private final com.renovar.canteiro.io.measurements.domain.MeasurementContinuityRepository continuity;
 
     @Transactional(readOnly = true)
     public GeneratedMeasurementSpreadsheet generate(UUID measurementId, UUID measurementVersionId) {
@@ -58,9 +60,10 @@ public class GenerateMeasurementSpreadsheetService {
         MeasurementDiscount discount = measurementDiscountRepository
                 .findByMeasurementVersionIdAndCompanyId(version.getId(), tenant.companyId())
                 .orElse(null);
-        String filename = "measurement-" + measurement.getId() + "-v" + version.getVersionNumber() + ".xlsx";
+        String filename = MeasurementExportFilename.spreadsheet(measurement.getTitle());
         String correlationId = MDC.get("X-Correlation-Id");
-        MeasurementExportData data = new MeasurementExportData(measurement, version, discount);
+        MeasurementExportData data = new MeasurementExportData(measurement, version, discount,
+                companyBrandingLoader.load(tenant.companyId()));
         return new GeneratedMeasurementSpreadsheet(filename, output -> write(tenant, correlationId, data, output, filename));
     }
 
@@ -71,7 +74,8 @@ public class GenerateMeasurementSpreadsheetService {
             MDC.put("X-Correlation-Id", correlationId);
         }
         try {
-            MeasurementExportResult result = spreadsheetGenerator.write(data, pagedItems(tenant, data.version().getId()), output);
+            Map<UUID,UUID> bindings=new java.util.HashMap<>();
+            MeasurementExportResult result = spreadsheetGenerator.write(data.withServiceIdentityResolver(bindings::get), pagedItems(tenant, data.version().getId(),bindings), output);
             transactionTemplate.executeWithoutResult(status -> auditEventRecorder.recordDirectAction(
                     AuditModule.MEASUREMENTS, AuditAction.EXPORT, "MeasurementVersion", data.version().getId(), null,
                     Map.of("measurementId", data.measurement().getId().toString(),
@@ -85,15 +89,19 @@ public class GenerateMeasurementSpreadsheetService {
         }
     }
 
-    private MeasurementItemSource pagedItems(TenantContext tenant, UUID versionId) {
+    private MeasurementItemSource pagedItems(TenantContext tenant, UUID versionId,Map<UUID,UUID> bindings) {
         return consumer -> {
             int pageNumber = 0;
             org.springframework.data.domain.Page<MeasurementItem> page;
             do {
                 page = measurementItemRepository.findByMeasurementVersionIdAndCompanyId(versionId, tenant.companyId(),
                         PageRequest.of(pageNumber++, 250, Sort.by(Sort.Order.asc("itemNumber"), Sort.Order.asc("id"))));
+                bindings.clear();bindings.putAll(continuity.serviceBindings(tenant.companyId(),page.getContent().stream().map(MeasurementItem::getId).toList()));
                 for (MeasurementItem item : page) {
-                    consumer.accept(item);
+                    // Inactive draft/history lines keep their audit trail but are not official spreadsheet items.
+                    if (item.isActive()) {
+                        consumer.accept(item);
+                    }
                 }
             } while (page.hasNext());
         };

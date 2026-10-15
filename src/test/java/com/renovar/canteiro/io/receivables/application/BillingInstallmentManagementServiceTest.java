@@ -10,6 +10,7 @@ import com.renovar.canteiro.io.contracts.domain.ContractServiceStatus;
 import com.renovar.canteiro.io.contracts.domain.ContractStatus;
 import com.renovar.canteiro.io.governance.application.AuditEventRecorder;
 import com.renovar.canteiro.io.governance.application.ChangeRequestService;
+import com.renovar.canteiro.io.measurements.domain.MeasurementContractCompositionRepository;
 import com.renovar.canteiro.io.receivables.domain.BillingAllocation;
 import com.renovar.canteiro.io.receivables.domain.BillingAllocationRepository;
 import com.renovar.canteiro.io.receivables.domain.BillingAllocationStatus;
@@ -47,6 +48,8 @@ class BillingInstallmentManagementServiceTest {
     @Mock private AccessAuthorizationService accessAuthorizationService;
     @Mock private ContractRepository contractRepository;
     @Mock private ContractServiceRepository contractServiceRepository;
+    @Mock private MeasurementContractCompositionRepository measurementContractCompositionRepository;
+    @Mock private com.renovar.canteiro.io.measurements.domain.MeasurementContinuityRepository measurementContinuityRepository;
     @Mock private BillingInstallmentRepository billingInstallmentRepository;
     @Mock private BillingAllocationRepository billingAllocationRepository;
     @Mock private ReceivableRepository receivableRepository;
@@ -73,6 +76,10 @@ class BillingInstallmentManagementServiceTest {
         when(tenantContextHolder.requireCurrentTenant()).thenReturn(new TenantContext(UUID.randomUUID(), companyId));
         when(accessAuthorizationService.requireChangeAuthorization(any(), any())).thenReturn(ChangeAuthorizationMode.DIRECT);
         when(contractRepository.findByIdAndCompanyId(contractId, companyId)).thenReturn(Optional.of(contract));
+        when(contractRepository.findByIdAndCompanyIdWithBillingLock(contractId, companyId)).thenAnswer(invocation -> {
+            org.mockito.Mockito.verifyNoInteractions(contractServiceRepository);
+            return Optional.of(contract);
+        });
         when(contractServiceRepository.findByIdAndCompanyId(serviceId, companyId)).thenReturn(Optional.of(service));
         when(billingInstallmentRepository.save(any())).thenReturn(savedInstallment);
         when(billingAllocationRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
@@ -85,7 +92,7 @@ class BillingInstallmentManagementServiceTest {
         });
         BillingInstallmentManagementService serviceUnderTest = new BillingInstallmentManagementService(
                 tenantContextHolder, accessAuthorizationService, contractRepository, contractServiceRepository,
-                billingInstallmentRepository, billingAllocationRepository, receivableRepository,
+                measurementContractCompositionRepository, measurementContinuityRepository, billingInstallmentRepository, billingAllocationRepository, receivableRepository,
                 validateContractBillingLimitUseCase, changeRequestService, auditEventRecorder
         );
 

@@ -7,7 +7,29 @@ import com.renovar.canteiro.io.contracts.domain.ContractRepository;
 import com.renovar.canteiro.io.governance.application.AuditEventRecorder;
 import com.renovar.canteiro.io.governance.application.ChangeRequestService;
 import com.renovar.canteiro.io.payables.domain.PayableRepository;
-import com.renovar.canteiro.io.receivables.domain.*;
+import com.renovar.canteiro.io.receivables.domain.BillingAllocationRepository;
+import com.renovar.canteiro.io.receivables.domain.BillingInstallment;
+import com.renovar.canteiro.io.receivables.domain.BillingInstallmentRepository;
+import com.renovar.canteiro.io.receivables.domain.BillingInstallmentStatus;
+import com.renovar.canteiro.io.receivables.domain.Invoice;
+import com.renovar.canteiro.io.receivables.domain.InvoiceItem;
+import com.renovar.canteiro.io.receivables.domain.InvoiceItemRepository;
+import com.renovar.canteiro.io.receivables.domain.InvoiceItemStatus;
+import com.renovar.canteiro.io.receivables.domain.InvoiceRepository;
+import com.renovar.canteiro.io.receivables.domain.InvoiceStatus;
+import com.renovar.canteiro.io.receivables.domain.Receivable;
+import com.renovar.canteiro.io.receivables.domain.ReceivableBalance;
+import com.renovar.canteiro.io.receivables.domain.ReceivableRepository;
+import com.renovar.canteiro.io.receivables.domain.ReceivableSettlement;
+import com.renovar.canteiro.io.receivables.domain.ReceivableSettlementEntryType;
+import com.renovar.canteiro.io.receivables.domain.ReceivableSettlementPaymentMethod;
+import com.renovar.canteiro.io.receivables.domain.ReceivableSettlementRepository;
+import com.renovar.canteiro.io.receivables.domain.ReceivableSettlementStatus;
+import com.renovar.canteiro.io.receivables.domain.ReceivableStatus;
+import com.renovar.canteiro.io.receivables.domain.TaxObligation;
+import com.renovar.canteiro.io.receivables.domain.TaxObligationRepository;
+import com.renovar.canteiro.io.receivables.domain.TaxObligationStatus;
+import com.renovar.canteiro.io.receivables.domain.TaxTreatment;
 import com.renovar.canteiro.io.tenancy.application.TenantContextHolder;
 import com.renovar.canteiro.io.tenancy.domain.TenantContext;
 import org.junit.jupiter.api.Test;
@@ -158,6 +180,6 @@ class FinancialCancellationServiceTest {
                 installmentRepository, allocationRepository, invoiceRepository, invoiceItemRepository,
                 taxObligationRepository, payableRepository, receivableRepository, settlementRepository,
                 calculateReceivableBalanceUseCase, changeRequestService, auditEventRecorder,
-                Clock.fixed(Instant.parse("2026-08-20T12:00:00Z"), ZoneOffset.UTC));
+                Clock.fixed(Instant.parse("2026-08-20T12:00:00Z"), ZoneOffset.UTC),org.mockito.Mockito.mock(ReceivableSettlementAttributionService.class));
     }
 }

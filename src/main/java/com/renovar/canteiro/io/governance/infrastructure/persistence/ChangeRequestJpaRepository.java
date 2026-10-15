@@ -13,6 +13,7 @@ import java.util.UUID;
 interface ChangeRequestJpaRepository extends JpaRepository<ChangeRequestJpaEntity, UUID> {
 
     Optional<ChangeRequestJpaEntity> findByIdAndCompanyId(UUID changeRequestId, UUID companyId);
+    java.util.List<ChangeRequestJpaEntity> findByCompanyIdAndEntityTypeAndEntityIdAndStatus(UUID companyId,String entityType,UUID entityId,ChangeRequestStatus status);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     Optional<ChangeRequestJpaEntity> findWithLockByIdAndCompanyId(UUID changeRequestId, UUID companyId);

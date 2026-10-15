@@ -1,6 +1,7 @@
 package com.renovar.canteiro.io.measurements.application;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
 
 public record AdvanceMeasurementWorkflowCommand(
@@ -10,6 +11,7 @@ public record AdvanceMeasurementWorkflowCommand(
         Boolean externallyAccepted,
         LocalDate externalAcceptanceOn,
         String externalAcceptanceNotes,
+        List<UUID> correctionItemIds,
         String justification
 ) {
 }

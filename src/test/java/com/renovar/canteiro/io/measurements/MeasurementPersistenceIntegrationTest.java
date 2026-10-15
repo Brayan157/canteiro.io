@@ -71,6 +71,40 @@ class MeasurementPersistenceIntegrationTest extends AbstractPostgresIntegrationT
     }
 
     @Test
+    void persistsAnUnboundMeasurementAndLinksItLater() {
+        Company company = createCompany();
+        Work work = createWork(company);
+        Contract contract = contractRepository.save(Contract.create(
+                company.getId(), work.getId(), "C-LINK", "Contract", ContractStatus.OPEN, null, null, null
+        ));
+        Measurement measurement = measurementRepository.save(Measurement.create(
+                company.getId(), null, null, "Medição avulsa", "M-LINK", null, LocalDate.now()
+        ));
+
+        assertEquals(null, measurement.getWorkId());
+        measurement.linkToWork(work.getId(), contract.getId());
+        Measurement linked = measurementRepository.save(measurement);
+
+        assertEquals(work.getId(), linked.getWorkId());
+        assertEquals(contract.getId(), linked.getContractId());
+    }
+
+    @Test
+    void persistsLogicalMeasurementCancellationAndKeepsItsRecord() {
+        Company company = createCompany();
+        Measurement measurement = measurementRepository.save(Measurement.create(
+                company.getId(), null, null, "Medição descartada", "M-CANCEL", null, LocalDate.now()
+        ));
+
+        measurement.cancel();
+        measurementRepository.save(measurement);
+
+        Measurement persisted = measurementRepository.findByIdAndCompanyId(measurement.getId(), company.getId())
+                .orElseThrow();
+        assertEquals(MeasurementStatus.CANCELLED, persisted.getStatus());
+    }
+
+    @Test
     void rejectsContractFromAnotherWork() {
         Company company = createCompany();
         Work measurementWork = createWork(company);
@@ -112,7 +146,7 @@ class MeasurementPersistenceIntegrationTest extends AbstractPostgresIntegrationT
         MeasurementItem linearItem = measurementItemRepository.save(MeasurementItem.createLinearMeter(
                 company.getId(), version.getId(), 2, "Assembly", "Linear meter item",
                 new BigDecimal("15.0000"), new BigDecimal("10.00")
-        ));
+        ).withOperationalUnitQuantity(new BigDecimal("2.0000")));
         MeasurementItem kilogramItem = measurementItemRepository.save(MeasurementItem.createKilogramPerSquareMeter(
                 company.getId(), version.getId(), 3, "Fabrication", "Kilogram per square meter item",
                 new BigDecimal("2.5000"), new BigDecimal("10.0000"), new BigDecimal("10.00")
@@ -121,6 +155,10 @@ class MeasurementPersistenceIntegrationTest extends AbstractPostgresIntegrationT
                 company.getId(), version.getId(), 4, "Assembly", "Kilogram per linear meter item",
                 new BigDecimal("2.0000"), new BigDecimal("10.0000"), new BigDecimal("10.00")
         ));
+        MeasurementItem unitItem = measurementItemRepository.save(MeasurementItem.createUnit(
+                company.getId(), version.getId(), 5, "Válvulas", "Instalação", "Unit item", LocalDate.now(),
+                new BigDecimal("12.5000"), new BigDecimal("10.00")
+        ));
 
         MeasurementItem persistedItem = measurementItemRepository.findByIdAndCompanyId(item.getId(), company.getId())
                 .orElseThrow();
@@ -128,10 +166,16 @@ class MeasurementPersistenceIntegrationTest extends AbstractPostgresIntegrationT
         assertEquals(new BigDecimal("125.00"), persistedItem.getTotalAmount());
         assertEquals(new BigDecimal("150.00"), measurementItemRepository
                 .findByIdAndCompanyId(linearItem.getId(), company.getId()).orElseThrow().getTotalAmount());
+        assertEquals(new BigDecimal("2.0000"), measurementItemRepository
+                .findByIdAndCompanyId(linearItem.getId(), company.getId()).orElseThrow().getUnitQuantity());
         assertEquals(new BigDecimal("25.0000"), measurementItemRepository
                 .findByIdAndCompanyId(kilogramItem.getId(), company.getId()).orElseThrow().getTotalWeightKg());
         assertEquals(new BigDecimal("200.00"), measurementItemRepository
                 .findByIdAndCompanyId(linearKilogramItem.getId(), company.getId()).orElseThrow().getTotalAmount());
+        MeasurementItem persistedUnitItem = measurementItemRepository.findByIdAndCompanyId(unitItem.getId(), company.getId()).orElseThrow();
+        assertEquals(new BigDecimal("12.5000"), persistedUnitItem.getUnitQuantity());
+        assertEquals(new BigDecimal("125.00"), persistedUnitItem.getTotalAmount());
+        assertEquals(null, persistedUnitItem.getTotalWeightKg());
 
         measurementDiscountRepository.save(MeasurementDiscount.create(
                 company.getId(), version.getId(), MeasurementDiscountType.FIXED, new BigDecimal("10.00")

@@ -44,6 +44,8 @@ public class ReceivableSettlementService {
     private final ChangeRequestService changeRequestService;
     private final AuditEventRecorder auditEventRecorder;
     private final Clock clock;
+    private final com.renovar.canteiro.io.receivables.domain.ReceivableOriginRepository origins;
+    private final ReceivableSettlementAttributionService attribution;
 
     @Transactional
     public ReceivableSettlementResult settle(CreateReceivableSettlementCommand command) {
@@ -80,6 +82,9 @@ public class ReceivableSettlementService {
     }
 
     private Settlement persist(UUID companyId, CreateReceivableSettlementCommand command) {
+        Receivable source=receivableRepository.findByIdAndCompanyId(command.receivableId(),companyId)
+                .orElseThrow(() -> new TenantResourceNotFoundException("Receivable"));
+        origins.lockInstallment(companyId,source.getBillingInstallmentId());
         Receivable receivable = receivableRepository.findByIdAndCompanyIdWithSettlementLock(command.receivableId(), companyId)
                 .orElseThrow(() -> new TenantResourceNotFoundException("Receivable"));
         validateReceivableStatus(receivable);
@@ -91,6 +96,7 @@ public class ReceivableSettlementService {
                 companyId, receivable.getId(), receivable.getContractId(), command.receivedOn(), command.amount(),
                 command.paymentMethod(), command.note()
         ));
+        attribution.attribute(receivableSettlement);
         ReceivableBalance updatedBalance = currentBalance.afterSettlement(command.amount());
         ReceivableStatus updatedStatus = updatedBalance.statusOn(receivable, LocalDate.now(clock));
         Receivable updatedReceivable = receivableRepository.updateStatus(receivable.withStatus(updatedStatus));

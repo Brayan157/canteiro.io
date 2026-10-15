@@ -1,21 +1,27 @@
 # Catálogo da API para arquitetura do frontend
 
-Documento gerado a partir dos controllers, DTOs, segurança e tratamento de erros existentes no backend em 14/09/2026.
+Documento baseado nos controllers, DTOs, segurança e tratamento de erros do backend. Seções de medições e cadeia financeira revisadas em 14/10/2026.
 
-Cobertura validada: 105 operações de controller documentadas no OpenAPI executável atual. Aliases de acesso continuam a ser URLs distintas para a mesma operação de negócio.
+Aliases de acesso continuam a ser URLs distintas para a mesma operação de negócio. A cobertura executável é validada por `OpenApiContractIntegrationTest`; confira sempre o OpenAPI da instância publicada antes de gerar tipos.
 
 > Fonte de verdade executável: código Java e OpenAPI da aplicação. Este arquivo descreve somente endpoints que já existem; lacunas estão listadas no final.
 
+> Planejamento não executável: a futura Fase 10 de vínculos, readmissão, aviso prévio, conformidade e documentos de funcionário está detalhada em [FRONTEND-EMPLOYEE-LIFECYCLE-PLANNED.md](FRONTEND-EMPLOYEE-LIFECYCLE-PLANNED.md). Essas rotas ainda não existem e não devem gerar tipos manuais no frontend.
+
+> Medição contínua implementada: grade acumulada, identidade persistida, destino contratual, composição incremental, financeiro e relatórios estão no [guia de integração](FRONTEND-MEASUREMENT-CONTINUOUS.md). Gere tipos somente do OpenAPI executável/exportado.
+
+> Atualização publicada em localhost:8081 em 14/10/2026, com V84 aplicada: `currency` BRL/USD/EUR, `GET /api/v1/company/currencies` e relatórios de dez colunas. Contratos, defaults, imutabilidade, erros, reimportação e hash do OpenAPI vivo estão no [guia de moedas e relatórios](FRONTEND-MEASUREMENT-CURRENCY-REPORTS.md). Dinheiro permanece decimal canônico em texto; moeda é código ISO separado. A [F04-41 foi concluída em 15/10/2026](F04-41-LOCAL-PUBLICATION.md), com sincronização/tipos e validação do frontend de moedas e PDF/XLSX reais com filename oficial. Logo real permanece aguardando cadastro pelo usuário/interface do frontend, com fallback seguro.
+
 ## 1. Visão geral
 
-- API REST: `http://localhost:8080` por padrão.
+- API REST: `http://localhost:8080` por padrão; no Docker local publicado em 14/10/2026, o frontend acessa `http://localhost:8081`.
 - Swagger UI: `/swagger`.
 - OpenAPI JSON: `/v3/api-docs`.
 - Formato padrão: JSON em `camelCase`, exceto downloads e uploads multipart.
 - Datas de negócio: `YYYY-MM-DD`.
 - Data/hora: ISO-8601 em UTC, por exemplo `2026-08-24T15:30:00Z`.
 - IDs: UUID em texto.
-- Valores monetários: número decimal; não usar ponto flutuante no estado financeiro do frontend.
+- Valores monetários: os contratos decimais canônicos publicados usam strings como `"1250.50"`; preservar precisão e usar o schema de cada DTO. Existem DTOs legados com `number`, que não autorizam cálculo financeiro local nem conversão dos contratos canônicos para ponto flutuante.
 - Rotas `/api/v1/company/**`: tenant derivado do JWT; nunca enviar `companyId` no payload.
 - Rotas `/api/v1/platform/**`: destinadas a operadores globais autorizados.
 - Não há exclusão física nos endpoints atuais; cancelamentos, reversões e desativações preservam histórico.
@@ -30,7 +36,13 @@ Content-Type: application/json
 X-Correlation-Id: <opcional, até 64 caracteres: letras, números, ponto, hífen ou underscore>
 ```
 
-O backend sempre devolve `X-Correlation-Id`. Rotas públicas:
+O backend sempre devolve `X-Correlation-Id`. O complemento CORS foi publicado em 15/10/2026 e também expõe explicitamente `Content-Disposition` às origens já autorizadas, para leitura do filename pelo navegador. Não substituir o título oficial por nome fabricado no cliente. [Estado e testes](F04-42-DOWNLOAD-CORS-AND-BRANDING.md).
+
+O [storage privado local](F08-23-LOCAL-PRIVATE-STORAGE.md) foi configurado e testado em 15/10/2026, sem mudança de contrato HTTP. Uploads continuam pelas rotas autenticadas; não enviar companyId, acessar o volume pelo frontend nem usar URL pública. Nenhuma logo foi cadastrada pelo agente.
+
+Complemento exclusivo PDF **publicado e verificado em 15/10/2026**: nome/CNPJ da emitente aparecem também quando existe logo, no acumulado/por versão e prévias. Sem campo/rota nova e sem mudança de XLSX; o frontend continua consumindo o Blob oficial. [Estado da implementação/publicação e provas](FRONTEND-MEASUREMENT-PDF-EMITTER.md).
+
+Rotas públicas:
 
 - `/api/v1/auth/activate`, `/login`, `/refresh`, `/logout` e `/password-reset/**`.
 - `/api/v1/catalog`
@@ -224,7 +236,9 @@ Base: `/api/v1/company/contracts`
 | POST | `/{contractId}/services` | `UpsertContractServiceRequest` | `ContractServiceChangeResponse` | `201` direto ou `202` aprovação |
 | PUT | `/{contractId}/services/{serviceId}` | `UpsertContractServiceRequest` | `ContractServiceChangeResponse` | `200` direto ou `202` aprovação |
 | PUT | `/{contractId}/services/{serviceId}/discount` | `SetContractDiscountRequest` | `ContractServiceChangeResponse` | `200` direto ou `202` aprovação |
+| POST | `/{contractId}/services/{serviceId}/discount/reversal` | `ReverseDiscountRequest` | `ContractServiceChangeResponse` | `200` direto ou `202` aprovação |
 | PUT | `/{contractId}/discount` | `SetContractDiscountRequest` | `ContractServiceChangeResponse` | `200` direto ou `202` aprovação |
+| POST | `/{contractId}/discount/reversal` | `ReverseDiscountRequest` | `ContractServiceChangeResponse` | `200` direto ou `202` aprovação |
 
 Modelos de serviço para seleção: `GET /api/v1/company/service-templates?includeInactive=false`. A lista é do tenant autenticado e retorna somente modelos ativos por padrão.
 
@@ -249,6 +263,12 @@ Ordenação permitida: `name`, `reference`, `status`, `startedOn`, `expectedComp
 `UpsertContractServiceRequest` contém `sourceServiceTemplateId` opcional, `name`, `description`, `status`, `quantity`, `unitPrice`, `discountType`, `discountValue` e `justification`. Na criação, o modelo informado deve pertencer à empresa e fica registrado como origem. Na edição, ele pode ser reenviado somente se for o mesmo modelo de origem; não pode ser trocado. A edição nunca recebe nem troca `contractId`. `SetContractDiscountRequest` exige `discountType`, `discountValue` e `justification`.
 
 Todo valor de quantidade ou dinheiro dessas rotas é texto decimal canônico: `quantity` usa quatro casas (`"12.5000"`) e valores monetários duas (`"150.00"`). O frontend não calcula descontos, valores líquidos, totais ou saldos: a resposta direta traz o serviço oficial e os totais oficiais do contrato. Respostas `202` trazem somente `changeRequestId` e `mode`, sem serviço ou contrato fictício.
+
+Para desfazer um desconto, o frontend deve usar a rota `.../discount/reversal`, com `ReverseDiscountRequest`:
+```json
+{ "justification": "Desconto comercial cancelado após renegociação." }
+```
+Ela não usa valor zero e não apaga dados: o desconto do serviço é removido do cálculo oficial e o desconto de contrato é desativado logicamente. Em ambos os casos, a auditoria preserva antes/depois, autor, motivo e origem. Para repetir um desconto anterior, envie novamente o valor desejado ao `PUT` normal; a API nunca faz rollback automático de eventos antigos.
 
 ### 2.7 Funcionários operacionais — JWT de empresa
 
@@ -381,19 +401,184 @@ As exportações PDF e XLSX são respostas HTTP em streaming. O frontend continu
 
 | Método | Caminho | Entrada | Resposta | Status |
 |---|---|---|---|---|
-| POST | `/` | `CreateMeasurementRequest` | `MeasurementChangeResponse` | `201` ou `202` |
-| GET | `/{measurementId}` | path UUID | `MeasurementDetailsResponse` | `200` |
+| GET | `/` | paginação, filtros e ordenação abaixo | `PageResponse<MeasurementResponse>` | `200`; `400`/`403` em Problem Details; exige `MEASUREMENTS.READ` |
+| POST | `/` | `CreateMeasurementRequest` | `MeasurementChangeResponse` | `201` direto ou `202` para aprovação; `400`/`403`/`404` em Problem Details |
+| PUT | `/{measurementId}/link` | `LinkMeasurementRequest` | `MeasurementChangeResponse` | `200` direto ou `202` para aprovação; `400`/`403`/`404`/`409` em Problem Details |
+| DELETE | `/{measurementId}` | query opcional `justification` | sem corpo direto ou `MeasurementCancellationResponse` | `204` direto/idempotente ou `202` para aprovação; `400`/`403`/`404`/`409` em Problem Details |
+| GET | `/{measurementId}` | path UUID | `MeasurementDetailsResponse` | `200`; `403`/`404` em Problem Details |
+| GET | `/{measurementId}/versions` | path UUID | `MeasurementVersionHistoryResponse[]` | `200`; histórico por versão decrescente, `403`/`404` em Problem Details; exige `MEASUREMENTS.READ` |
+| GET | `/{measurementId}/versions/{versionId}` | path UUIDs | `MeasurementVersionDetailsResponse` | `200`; itens, serviços e totais oficiais da versão selecionada; `403`/`404` em Problem Details; exige `MEASUREMENTS.READ` |
 | POST | `/{measurementId}/versions/{versionId}/items` | `CreateMeasurementItemRequest` | `MeasurementItemChangeResponse` | `201` ou `202` |
+| POST | `/{measurementId}/versions/{versionId}/items/insert` | `InsertMeasurementItemRequest` | `MeasurementItemCorrectionResponse` | `201` direto ou `202` para aprovação; `400`/`403`/`404`/`409` em Problem Details |
+| PUT | `/{measurementId}/versions/{versionId}/items/reorder` | `ReorderMeasurementItemsRequest` | `MeasurementItemReorderResponse` | `200` direto ou `202` para aprovação; `400`/`403`/`404`/`409` em Problem Details |
+| PUT | `/{measurementId}/versions/{versionId}/items/{itemId}` | `UpdateMeasurementItemRequest` | `MeasurementItemCorrectionResponse` | `200` direto ou `202` para aprovação |
+| DELETE | `/{measurementId}/versions/{versionId}/items/{itemId}` | query opcional `justification` (máximo 2.000 caracteres) | `MeasurementItemCorrectionResponse` | `200` direto ou `202` para aprovação; `400`/`403`/`404`/`409` em Problem Details; exclusão lógica |
+| POST | `/{measurementId}/versions/{versionId}/items/{itemId}/corrective-revision` | `CorrectAcceptedMeasurementItemRequest` | `MeasurementItemCorrectionResponse` | `201` direto ou `202` para aprovação |
 | POST | `/{measurementId}/versions/{versionId}/discount` | `CreateMeasurementDiscountRequest` | `MeasurementDiscountChangeResponse` | `201` ou `202` |
 | POST | `/{measurementId}/versions/{versionId}/workflow` | `AdvanceMeasurementWorkflowRequest` | `MeasurementWorkflowResponse` | `200` ou `202` |
-| POST | `/{measurementId}/revisions` | `CreateMeasurementRevisionRequest` | `MeasurementRevisionResponse` | `201` ou `202` |
+| POST | `/{measurementId}/revisions` | `CreateMeasurementRevisionRequest` | `MeasurementRevisionResponse` | `201` ou `202`; aceita versão anterior `ACCEPTED` ou `REJECTED` |
 | GET | `/{measurementId}/versions/{versionId}/pdf` | path UUIDs | binário PDF + `Content-Disposition` | `200` |
 | GET | `/{measurementId}/versions/{versionId}/spreadsheet` | path UUIDs | binário XLSX + `Content-Disposition` | `200` |
+| GET | `/{measurementId}/versions/{versionId}/spreadsheet/preview` | path UUIDs | binário PDF oficial + `Content-Disposition: inline` | `200`; `403`/`404` em Problem Details; exige `MEASUREMENTS.EXPORT` |
+| POST | `/{measurementId}/versions/{versionId}/items/import/preview` | multipart `file` XLSX | `MeasurementSpreadsheetImportPreviewResponse` | `200`; valida sem alterar itens; `400`/`403`/`404`/`409` em Problem Details |
+| POST | `/{measurementId}/versions/{versionId}/items/import/confirm` | multipart `file`, `spreadsheetHash`, `justification?` | `MeasurementSpreadsheetImportApplyResponse` | `200` direto ou `202` aprovação; `400`/`403`/`404`/`409` em Problem Details |
 | POST | `/{measurementId}/versions/{versionId}/documents` | multipart: `documentType`, `file` | `MeasurementDocumentResponse` | `200` |
 | GET | `/{measurementId}/versions/{versionId}/financial-status` | path UUIDs | `MeasurementFinancialStatusResponse` | `200` |
+| GET | `/{measurementId}/financial-summary` | path UUID | `MeasurementFinancialSummaryResponse` | `200`; exige simultaneamente `MEASUREMENTS.READ`, `BILLING.READ` e `RECEIVABLES.READ`; `403`/`404` em Problem Details |
+| GET | `/{measurementId}/accumulated` | path UUID | `MeasurementAccumulatedResponse` | `200`; grade contínua com aceitos e avanço atual; financeiro protegido pode ser nulo |
+| GET / POST | `/{measurementId}/services` | `CreateMeasurementContinuousServiceRequest` no POST | `MeasurementContinuousServiceResponse[]` / response individual | `200` consulta; `201` direto ou `202` |
+| PUT | `/{measurementId}/services/{continuousServiceId}/destination` | `UpdateMeasurementServiceDestinationRequest` com `expectedVersion` | `MeasurementContinuousServiceResponse` | `200` ou `202`; destino persistido |
+| PUT | `/{measurementId}/versions/{versionId}/items/{itemId}/service` | `AssignMeasurementItemServiceRequest` | `MeasurementContinuousServiceResponse` | `200` ou `202`; somente DRAFT atual |
+| GET | `/{measurementId}/contract-compositions` | path UUID | `MeasurementCompositionState[]` | `200`; estados oficiais/pedidos independentes do aceite |
+| POST | `/{measurementId}/contract-compositions/apply` | sem payload obrigatório | `MeasurementCompositionState[]` | `200`; cada origem informa aplicação/pedido/falta de alçada |
+| GET | `/{measurementId}/accumulated/pdf` | path UUID | PDF attachment | `200`; streaming, MEASUREMENTS.EXPORT |
+| GET | `/{measurementId}/accumulated/spreadsheet` | path UUID | XLSX attachment | `200`; relatório acumulado, não importável |
+| GET | `/{measurementId}/accumulated/spreadsheet/preview` | path UUID | PDF inline | `200`; mesmo conteúdo acumulado |
 | POST | `/{measurementId}/versions/{versionId}/items/{itemId}/contract-service` | query opcional `justification` | `MeasurementItemConversionResponse` | `200` |
+| GET | `/{measurementId}/versions/{versionId}/services` | path UUIDs | `MeasurementServiceGroupResponse[]` | `200`; exige `MEASUREMENTS.READ`; IDs estáveis dos grupos de serviço da versão aceita; `403`/`404` em Problem Details |
+| POST | `/{measurementId}/versions/{versionId}/services/{measurementServiceId}/contract-compositions` | `ComposeMeasurementServiceRequest` | `MeasurementContractCompositionResponse` | `201` direto, `200` idempotente ou `202` por aprovação; `400`/`403`/`404`/`409` em Problem Details |
 
 Tipos de upload de medição: `EVIDENCE`, `SPREADSHEET`.
+
+Na listagem, o tenant vem exclusivamente do JWT. Não envie `companyId` pela URL.
+
+| Parâmetro | Tipo | Regra |
+|---|---|---|
+| `page` | inteiro | índice iniciado em zero; padrão `0` |
+| `size` | inteiro | entre `1` e `100`; padrão `20` |
+| `sort` | string repetível | `<campo>,asc` ou `<campo>,desc`; campos: `measuredOn`, `reference`, `status`, `createdAt`, `updatedAt`; padrão `measuredOn,desc` |
+| `workId` | UUID | obra exata da empresa autenticada |
+| `contractId` | UUID | contrato exato da empresa autenticada |
+| `reference` | string | busca parcial, sem distinção entre maiúsculas e minúsculas |
+| `status` | `MeasurementStatus` | situação exata da medição |
+| `measuredOnFrom` | `YYYY-MM-DD` | primeira data de medição, inclusiva |
+| `measuredOnTo` | `YYYY-MM-DD` | última data de medição, inclusiva; não pode ser anterior a `measuredOnFrom` |
+
+`title` é obrigatório na criação: texto não vazio de 1 a 200 caracteres. Ele é o nome legível da medição e não substitui `reference`, que permanece um código opcional. `workId` e `contractId` são opcionais; porém, nunca envie `contractId` sem `workId`, e o contrato deve pertencer à obra. Envie, por exemplo, `"title": "Medição de estrutura — setembro"` sem os dois vínculos para iniciar uma medição avulsa.
+
+`MeasurementResponse` contém `id`, `workId` opcional, `contractId` opcional, `title`, `reference`, `description`, `measuredOn`, `status`, `createdAt` e `updatedAt`. Ele é usado tanto nos itens de `GET /` como em `MeasurementDetailsResponse.measurement` de `GET /{measurementId}` e em `MeasurementChangeResponse.measurement` de `POST /`. Portanto, exiba o título em listagens, detalhe e retorno imediato de criação/aprovação, sem buscar outro campo ou montar um nome no cliente. Parâmetros inválidos retornam `400 application/problem+json`; ausência de `MEASUREMENTS.READ` retorna `403 application/problem+json`. Ambos seguem o Problem Details padronizado e podem incluir `correlationId`.
+
+#### Histórico e detalhe de versões
+
+`GET /{measurementId}` continua retornando somente a versão operacional mais recente em `latestVersion`. Para a trilha completa, chame `GET /{measurementId}/versions`: a resposta é uma lista em ordem decrescente de `versionNumber`, com `id`, `versionNumber`, `previousVersionId`, `status`, `externalAcceptanceOn`, `createdAt`, `updatedAt`, `totalWeightKg`, `grossAmount`, `discountAmount` e `netAmount`. Os quatro totais são textos decimais canônicos e correspondem exclusivamente aos itens oficiais ativos daquela versão.
+
+Quando o usuário abrir uma entrada da trilha, chame `GET /{measurementId}/versions/{versionId}`. A resposta traz `measurement`, `version`, `items`, `services`, desconto e os totais oficiais da **versão selecionada**, mesmo que exista uma revisão mais nova. Não resolva versões por UUID no cliente nem tente recompor totais localmente. As consultas de histórico e detalhe retornam `200` para uma versão pertencente ao tenant; `403` é falta de `MEASUREMENTS.READ` e `404` cobre medição/versão fora do tenant ou inexistente.
+
+Uma revisão comum após `ACCEPTED` permanece incremental e não copia itens aceitos. Use `GET /{measurementId}/accumulated` para a grade contínua: aceitos anteriores e propostas atuais estão no mesmo corpo, com origem, referência de leitura, editabilidade e totais oficiais separados. O frontend não soma versões. Histórico e detalhe por versão continuam disponíveis.
+
+A consulta de serviços, a grade e os relatórios acumulados excluem somente sobras de migração logicamente retiradas pela V83. Serviços intencionalmente vazios continuam presentes. Títulos repetidos não autorizam união: reutilize `continuousServiceId` nas novas atividades. Organize serviço → atividades → `acceptedTotals`/`pendingTotals` do serviço → totais gerais oficiais. PDF/XLSX incluem esses subtotais sem modificar os relatórios históricos por versão.
+
+`GET /{measurementId}/versions/{versionId}/services` devolve os grupos congelados daquela versão (`measurementServiceId`). A identidade entre avanços é `continuousServiceId`, criada/consultada em `/{measurementId}/services` e enviada nos próximos itens. Título nunca define destino ou vínculo financeiro.
+
+Para vincular depois, chame `PUT /{measurementId}/link` com `{"workId":"uuid","contractId":"uuid-opcional","justification":"..."}`. A operação exige `MEASUREMENTS.UPDATE`, deriva a empresa do JWT, valida toda a cadeia e pode responder `202`; nesse caso, o dado oficial permanece inalterado e a resposta traz somente `changeRequestId`/`authorizationMode`. Uma obra já vinculada não pode ser trocada. É permitido vincular somente a obra primeiro e acrescentar o contrato depois; um contrato já vinculado não pode ser substituído silenciosamente.
+
+Antes de existir obra, o frontend pode criar/consultar a medição, incluir itens e desconto, anexar evidências, exportar PDF/XLSX e registrar o fluxo de envio/aceite externo. `FINALIZE`, conversão de item em serviço contratual e qualquer operação financeira exigem obra e contrato; a API responde `409 application/problem+json` quando faltar o vínculo.
+
+#### Formação do valor do contrato por medição
+
+`ContractResponse.pricingMode` é `FIXED` para preço negociado e `MEASUREMENT_BASED` para preço formado progressivamente por medições aceitas. No primeiro caso a composição é um `CONTRACT_ADDITION`; no segundo é `MEASUREMENT_PRICING`. O modo é escolhido na criação do contrato e não deve ser inferido no cliente.
+
+A escolha do destino é persistida no serviço contínuo antes do aceite. O workflow de aceite, o vínculo posterior com contrato e a definição oficial do destino coordenam a composição dos incrementos aceitos, com autorização própria de SERVICES. Preparar um rascunho não altera valor comercial. Consulte `/{measurementId}/contract-compositions` para distinguir aplicação, aprovação pendente e falta de destino/alçada. Use o [guia de medição contínua](FRONTEND-MEASUREMENT-CONTINUOUS.md) para o fluxo principal; o frontend não deve criar serviços ou recalcular valores para reconstruir essa composição.
+
+O endpoint explícito de composição por grupo de versão continua disponível. Após aceitar uma versão, `GET /{measurementId}/versions/{versionId}/services` retorna `MeasurementServiceGroupResponse.id`, estável para aquela origem aceita. Entre avanços, reutilize `continuousServiceId`; nunca use `serviceTitle` como chave. Na operação explícita, envie `CREATE_NEW_SERVICE` sem `contractServiceId`, ou `ADD_TO_EXISTING_SERVICE` com o serviço de destino:
+
+```json
+{
+  "action": "ADD_TO_EXISTING_SERVICE",
+  "contractId": "uuid-do-contrato-vinculado",
+  "contractServiceId": "uuid-do-servico-de-destino",
+  "justification": "Complemento mensal aceito pelo cliente"
+}
+```
+
+A versão precisa estar `ACCEPTED`, e a medição já precisa estar vinculada ao mesmo contrato. Uma repetição retorna `200` com a composição existente, sem duplicar valores. Em `202`, só `changeRequestId` e `authorizationMode` são oficiais: não altere totais ou saldo no cliente até a aprovação. `grossAmount`, `netAmount` e `totalWeightKg` são textos decimais canônicos e calculados no servidor; o desconto de cabeçalho é rateado pelo backend por valor bruto e ordem estável. `ContractServiceResponse.measurementCompositionAmount` soma as composições aceitas, e `effectiveNetAmount` é valor-base líquido mais composições. O frontend não calcula desconto, saldo ou rateio.
+
+#### Projeção financeira acumulada da medição
+
+`GET /{measurementId}/financial-summary` preserva os cinco valores e acrescenta `remainingToReceive`, `financialAdjustmentAmount`, `acceptedUncomposedAmount`, `financialAvailability` e `asOf` UTC. `services[]` consolida por `continuousServiceId` e contém `compositionIds`; IDs singulares legados ficam nulos quando há várias origens. Dinheiro é string decimal canônica. Exige `MEASUREMENTS.READ`, `BILLING.READ` e `RECEIVABLES.READ`.
+
+A consulta acumulada exige `MEASUREMENTS.READ`; sem contrato ou permissão financeira, informa `NO_CONTRACT` ou `NOT_AUTHORIZED` com financeiro nulo, mantendo itens/totais documentais. `PARTIALLY_COMPOSED` indica aceito ainda não aplicado. Origem aceita sem composição não é faturável.
+
+Para faturamento originado em medição, envie `measurementContractCompositionId` junto de `contractServiceId` na alocação `SERVICE`. A mesma transação valida limite por composição e contrato. NF referencia a alocação; baixas são atribuídas e persistidas por alocação com fechamento exato dos centavos e resíduos limitados à capacidade. Estorno copia as parcelas negativas da baixa original. Somente a base negociada sem origem pode omitir o ID de composição.
+
+Versões não aceitas e `202` não alteram saldo comercial ou financeiro. Aceite e vínculo posterior coordenam somente incrementos aceitos com destino persistido e autorização SERVICES própria. Consulte `/{measurementId}/contract-compositions` para distinguir aplicação, pedido pendente, falta de destino e falta de alçada. Correções resolvem a origem vigente; redução com faturamento ativo exige reversão antes do aceite.
+
+O resumo simples é **Valor total da medição (aceito), Já recebido e Falta receber**. Exiba `acceptedAmount`, `receivedAmount` e `remainingToReceive` sem calcular no frontend. O terceiro inclui aceito não faturado e faturado ainda devido, após ajustes. Créditos e renegociação preservam a origem e não geram cash fictício; consulte o [guia atual](FRONTEND-MEASUREMENT-CONTINUOUS.md).
+
+Relatórios completos: `GET /{measurementId}/accumulated/pdf`, `/accumulated/spreadsheet` e `/accumulated/spreadsheet/preview`. Prévia em PDF inline do mesmo conteúdo acumulado. Exigem `MEASUREMENTS.EXPORT`, streaming, tenant e auditoria. O XLSX acumulado é relatório e é rejeitado pelo importador; o XLSX por versão sincroniza somente a DRAFT atual.
+
+`GET /{measurementId}/versions/{versionId}/spreadsheet/preview` devolve a prévia oficial em PDF dos mesmos dados da planilha, para exibição no navegador. O PDF usa a mesma marca privada (logo ou nome da empresa emitente), título centralizado e grupos consecutivos `SERVIÇO: {serviceTitle}` da exportação XLSX; isso é somente apresentação, sem novo payload. Trate a resposta como `Blob` PDF; ela usa `Content-Disposition: inline` e não cria URL pública. A chamada exige `MEASUREMENTS.EXPORT`, mantém isolamento por tenant e registra a exportação. Ausência de permissão ou de medição/versão no tenant retorna `403` ou `404` em `application/problem+json`.
+
+#### Importação e sincronização de XLSX
+
+Para sincronizar itens de uma versão `DRAFT`, comece por `POST /{measurementId}/versions/{versionId}/items/import/preview` com `multipart/form-data` e o campo `file`. Use uma planilha exportada pela própria API: ela traz uma coluna oculta **Item ID**, que é a única chave estável de cada linha. O frontend não deve usar `itemNumber`, título do serviço ou atividade como chave. Para criar uma linha, deixe o **Item ID** vazio; para alterar ou mover uma linha de serviço, mantenha o ID que veio na exportação. Linha ativa que desaparecer do arquivo será apresentada como `INACTIVATE` e, quando confirmada, ficará inativa — nunca é apagada fisicamente.
+
+A exportação XLSX oficial agora apresenta o título cadastrado centralizado e, à esquerda, a logo privada da empresa emitente ou o nome fantasia/razão social quando não houver logo utilizável. Itens consecutivos são separados por linhas visuais mescladas `SERVIÇO: {serviceTitle}`. Essas linhas são apenas apresentação: não devem ser editadas nem convertidas em itens. Cada linha de item continua trazendo **Serviço** preenchido e a coluna oculta **Item ID**; o mesmo arquivo agrupado pode ser reenviado ao fluxo de importação.
+
+A prévia não altera dado oficial e devolve `spreadsheetHash`, `valid`, `lineErrors`, `differences` (`CREATE`, `UPDATE`, `MOVE_SERVICE`, `REORDER`, `INACTIVATE`) e os totais oficiais simulados. Corrija qualquer linha com erro e só então peça confirmação explícita. O frontend deve reenviar o **mesmo arquivo** para `POST .../items/import/confirm`, junto de `spreadsheetHash` retornado na prévia. Se o arquivo foi modificado, a API devolve `409`; gere outra prévia. Em aplicação direta, `200` devolve todos os itens ativos, a versão e totais oficiais. Sem alçada direta, `202` devolve somente `changeRequestId` e `authorizationMode`: nada oficial muda até a aprovação.
+
+Importação é permitida somente em versão `DRAFT`. Para versão aceita, enviada, pendente de aceite ou finalizada, crie antes uma nova revisão com `POST /{measurementId}/revisions`, exporte essa revisão e importe nela. A API recalcula pesos, valores, desconto e totais; fórmulas/colunas de total do Excel não são aceitas como autoridade.
+
+Para excluir, chame `DELETE /{measurementId}` e envie `justification` somente quando houver uma explicação operacional. A API nunca apaga o registro: muda o status para `CANCELLED` e preserva versões, itens, anexos e auditoria. Medição sem contrato — avulsa ou vinculada apenas à obra — pode ser cancelada. Se `contractId` estiver preenchido, a resposta é `409 application/problem+json`. Com alçada direta a resposta é `204`; com solicitação de aprovação é `202` com `changeRequestId` e `authorizationMode`, e o status oficial continua inalterado até a aprovação.
+
+No detalhe da medição, valores financeiros são sempre strings decimais canônicas — nunca `number`: `discountValue`, `grossAmount`, `discountAmount`, `netAmount`, `items[].unitPrice`, `items[].totalAmount` e `services[].grossAmount`. O peso oficial também é texto decimal de quatro casas em `totalWeightKg`, `items[].totalWeightKg` e `services[].totalWeightKg`. Exemplos: `"1250.50"`, `"50.00"`, `"25.00"` e `"1636.0000"`. Preserve-os como texto ou decimal de precisão arbitrária no cliente; não os converta para ponto flutuante.
+
+`MeasurementDetailsResponse.services` resume somente as linhas oficiais ativas da versão exibida, agrupadas por `serviceTitle` e ordenadas pelo título do serviço: `serviceTitle`, `itemCount`, `grossAmount` e `totalWeightKg`. `totalWeightKg` será `null` se aquele serviço contiver exclusivamente linhas de m², metro linear ou unidade. O desconto de cabeçalho **não é rateado** entre serviços: use `grossAmount` por serviço e os totais `discountAmount`/`netAmount` da medição. Se houver necessidade futura de líquido por serviço, ela dependerá de uma regra oficial de rateio publicada pelo backend.
+
+Na criação de item (`POST /{measurementId}/versions/{versionId}/items`), envie `serviceTitle` para agrupar visualmente atividades do mesmo serviço e `measuredOn` para a data da atividade. `unitPrice` é obrigatório e deve ser texto decimal positivo com duas casas, por exemplo `"unitPrice": "25.00"`. O backend rejeita número JSON, `double`/`float`, zero, valor negativo e formato não canônico.
+
+O frontend deve calcular a prévia de cada linha conforme `chargeType` e pode enviar `previewTotalWeightKg` (quatro casas) e `previewTotalAmount` (duas casas). Esses campos não são autoridade: o backend recalcula com precisão decimal e responde `400` quando a prévia divergir. Para `SQUARE_METER`, `LINEAR_METER` e `UNIT`, envie `previewTotalWeightKg` omitido ou `"0.0000"`. Para `UNIT`, `unitQuantity` decimal positiva (quatro casas no máximo) é obrigatória e calcula `previewTotalAmount = unitQuantity × unitPrice`; área, metragem e parâmetros de quilograma devem ser `null`/omitidos. Para `SQUARE_METER`, `LINEAR_METER`, `KILOGRAM_PER_SQUARE_METER` e `KILOGRAM_PER_LINEAR_METER`, `unitQuantity` é opcional e representa somente peças/unidades executadas — por exemplo, uma curva instalada. Quando enviada, ela é decimal positiva com no máximo quatro casas, mas **não** altera fórmula, peso, valor, prévias ou totais oficiais. Use sempre os totais devolvidos pela API após salvar.
+
+Para inserir uma atividade entre linhas já existentes, use `POST /{measurementId}/versions/{versionId}/items/insert`; não faça vários `PUT` para trocar números. Envie o `insertAfterItemId` da linha ativa imediatamente anterior e o objeto `item`, sem `itemNumber`: a API calcula a posição, desloca a sequência ativa inteira em uma só transação e devolve o novo item, a versão e totais oficiais em `201`. Itens inativos não entram na sequência. Em `202`, a API retorna somente `changeRequestId` e `authorizationMode`; nenhuma posição ou total oficial foi modificado.
+
+Para mover várias linhas ou reagrupar atividades entre serviços, use `PUT /{measurementId}/versions/{versionId}/items/reorder` na DRAFT atual. Envie **todos** os itens ativos, uma única vez cada, já na ordem final; em cada entrada informe `itemId`, o novo `serviceTitle` e, opcionalmente, `continuousServiceId` para manter/mover a identidade contínua oficial. Não envie `itemNumber`: a API atribui `1, 2, 3...` internamente e preserva os itens inativos com seus números históricos. A operação inteira é atômica. A resposta direta `200` traz a lista ordenada, a versão e os totais oficiais; em `202`, traz somente `changeRequestId` e `authorizationMode`, sem qualquer alteração oficial.
+
+#### Correção de itens e revisões
+
+Enquanto a versão estiver em `DRAFT`, use `PUT /{measurementId}/versions/{versionId}/items/{itemId}` para substituir os dados de uma linha, com o mesmo formato de `CreateMeasurementItemRequest`. Para retirar uma linha rascunho, use `DELETE /{measurementId}/versions/{versionId}/items/{itemId}?justification=...`; a justificativa é opcional e aceita até 2.000 caracteres. A API não faz exclusão física: devolve a linha com `active: false`, preserva a referência de importação XLSX, auditoria e histórico, e a remove da grade normal, dos totais, exportações e relatórios oficiais. Um novo item pode reutilizar o número de uma linha inativa.
+
+Com alçada direta, a resposta é `200` e contém `item` (com `active: false`), `version` e os totais oficiais recalculados (`totalWeightKg`, `grossAmount`, `discountAmount` e `netAmount`). Na mesma transação, a API renumera todos os itens ainda ativos pela ordem oficial para a sequência contínua `1..N`; o item inativo mantém seu número histórico e não participa mais da sequência. Portanto, após um `200`, recarregue/use a grade oficial e **não** chame `items/reorder` como segunda etapa. Quando a ação exigir aprovação, a resposta é `202` com `changeRequestId` e `authorizationMode`; mantenha item, numeração e totais atuais até a aprovação. Para versões `ACCEPTED`, `SENT` ou `PENDING_ACCEPTANCE`, o `DELETE` retorna `409 application/problem+json`: crie uma revisão corretiva e envie `action: "VOID"`, pois a versão histórica permanece congelada.
+
+Itens de versão `ACCEPTED` nunca são alterados. Para corrigir, substituir ou anular um deles, use `POST /{measurementId}/versions/{versionId}/items/{itemId}/corrective-revision`. A operação cria uma nova versão `DRAFT`, copia as linhas da última versão aceita e liga as cópias a seus itens de origem por `sourceItemId`. Envie `"action": "REPLACE"` e todos os campos da linha para corrigir/substituir, ou `"action": "VOID"` e `justification` para anular a linha na nova revisão. Em uma substituição `UNIT`, `unitQuantity` continua obrigatória e positiva. O original aceito permanece congelado. Uma resposta direta retorna `201`, `item`, `version` e os totais oficiais `totalWeightKg`, `grossAmount`, `discountAmount` e `netAmount`, todos textos decimais canônicos; sob aprovação, retorna somente `202`, `changeRequestId` e `authorizationMode` até a decisão.
+
+Quando o aceite externo for rejeitado, envie `POST /{measurementId}/versions/{versionId}/workflow` com `"action": "RECORD_EXTERNAL_ACCEPTANCE"`, `"externallyAccepted": false`, `externalAcceptanceOn`, `externalAcceptanceNotes` não vazio e, opcionalmente, `correctionItemIds`. Cada ID deve ser de um item **ativo** da própria versão; a API não aceita item de outra versão/empresa, item inativo ou ID repetido. A resposta e o detalhe passam a retornar `latestVersion.externalAcceptanceNotes` e `latestVersion.correctionItemIds`, para a tela destacar o motivo e as linhas que precisam de correção. Esses dados pertencem à versão rejeitada e não podem ser sobrescritos. Depois de criada a revisão, `GET /{measurementId}` também expõe `correctionRequest` com o `rejectedVersionId`, motivo, data e itens sinalizados da rejeição de origem, para que a tela continue mostrando o contexto mesmo após recarregar a nova grade `DRAFT`.
+
+Após uma rejeição, `POST /{measurementId}/revisions` cria uma nova versão `DRAFT` ligada por `previousVersionId` à versão rejeitada. Em aplicação direta, retorna `201`, a nova versão e `items` com as cópias oficiais de todos os itens ativos da versão rejeitada, em ordem de item. Cada cópia preserva a origem por `sourceItemId`; a versão rejeitada permanece intacta. Em `202`, retorna somente o identificador da solicitação e o modo de autorização, sem criar versão ou itens oficiais. A grade deve editar a nova versão e reenviar pelo fluxo normal de aceite.
+
+`POST /{measurementId}/revisions` também continua sendo a revisão incremental após uma versão aceita. Ela retorna `201` quando criada diretamente e `202` quando depende de aprovação — não use mais `200` como status de sucesso dessa rota.
+
+```json
+{
+  "itemNumber": 1,
+  "serviceTitle": "Serviço linha de vinhaça",
+  "activity": "Fabricar",
+  "description": "Curva inox 40 polegadas",
+  "measuredOn": "2026-06-04",
+  "chargeType": "KILOGRAM_PER_LINEAR_METER",
+  "linearMeters": 12,
+  "unitQuantity": 1,
+  "kilogramsPerLinearMeter": 128,
+  "unitPrice": "3.00",
+  "previewTotalWeightKg": "1536.0000",
+  "previewTotalAmount": "4608.00"
+}
+```
+
+Exemplo de item por unidade:
+
+```json
+{
+  "itemNumber": 2,
+  "serviceTitle": "Instalação de válvulas",
+  "activity": "Instalar válvulas",
+  "measuredOn": "2026-06-04",
+  "chargeType": "UNIT",
+  "unitQuantity": 12.5,
+  "unitPrice": "25.00",
+  "previewTotalWeightKg": "0.0000",
+  "previewTotalAmount": "312.50"
+}
+```
 
 ### 2.11 Controle de faturamento — JWT de empresa
 
@@ -406,7 +591,9 @@ Base: `/api/v1/company/billing-control/contracts`
 
 Filtros: `contractId`, `status`, `query`. Ordenação: `name`, `reference`, `status`, `createdAt`.
 
-No detalhe `GET /{contractId}`, todos os valores monetários são strings decimais canônicas, sem símbolo de moeda ou formatação local (por exemplo, `"99.90"`). Não os converta para `number` no cliente. Os campos são `contractNetAmount`, `activeAllocatedAmount`, `availableAmount`, os valores de `services` e `allocations`, incluindo `registeredInvoiceAmount` e `availableInvoiceAmount`.
+No detalhe `GET /{contractId}`, todos os valores monetários são strings decimais canônicas, sem símbolo de moeda ou formatação local (por exemplo, `"99.90"`). Não os converta para `number` no cliente. Os totais oficiais do contrato são `serviceSubtotal` (subtotal dos serviços antes do ajuste contratual), `contractDiscountAmount` (desconto/ajuste oficial do contrato) e `contractNetAmount` (líquido após o ajuste). Também retornam `activeAllocatedAmount`, `availableAmount`, os valores de `services` e `allocations`, incluindo `registeredInvoiceAmount` e `availableInvoiceAmount`.
+
+A listagem paginada também usa strings em `contractNetAmount`, `activeAllocatedAmount` e `availableAmount`. Os serviços em `GET /api/v1/company/contracts/{contractId}/services` expõem a base `netAmount`, a composição aceita `measurementCompositionAmount` e a posição oficial `effectiveNetAmount`. Não reconstruir o valor do contrato somando medições no frontend. Evidências e ajustes desta revisão: [F05-14](F05-14-FINANCIAL-INVARIANTS-REVIEW.md).
 
 ### 2.12 Parcelas de faturamento — JWT de empresa
 
@@ -420,10 +607,13 @@ Base: `/api/v1/company/billing-installments`
 Regras importantes para a UI:
 
 - `SERVICE` exige `contractServiceId` e valor positivo.
+- Em `SERVICE`, `measurementContractCompositionId` é obrigatório para valores originados de composição aceita de medição; só a base negociada disponível pode omiti-lo. A composição deve pertencer ao mesmo tenant, `contractServiceId` e contrato, sem ultrapassar sua capacidade aceita vigente.
 - `CONTRACT_DISCOUNT` não aceita serviço e exige valor negativo.
 - A parcela deve ter valor líquido positivo.
 - Alocações não podem exceder contrato, serviço ou desconto contratual.
 - Uma parcela aprovada cria um `Receivable` individual; `financialGroupId` agrupa títulos relacionados.
+
+`allocations[].allocatedAmount` e `receivable.originalAmount` são strings decimais canônicas com duas casas, inclusive ajustes negativos como `"-20.00"`. Serviço cancelado não admite novo faturamento (`409`). Edição/desconto de serviço não pode reduzi-lo abaixo do seu comprometimento aprovado, mesmo havendo saldo em outro serviço do contrato. Sua base negociada também precisa cobrir as alocações sem origem de medição; uma composição aceita não pode encobrir esse excesso. Desconto contratual não pode ser reduzido/revertido abaixo das alocações negativas ativas que ele sustenta; estorne/cancele primeiro essas alocações pelo fluxo oficial.
 
 ### 2.13 Notas fiscais — JWT de empresa
 
@@ -436,6 +626,8 @@ Base: `/api/v1/company/invoices`
 | POST | `/{invoiceId}/attachments` | multipart: `attachmentType`, `file` | `InvoiceAttachmentResponse` | `200` |
 
 Anexos aceitos: `PDF`, `XML`. A NF pertence a um único contrato e cada item consome somente a capacidade da `BillingAllocation` informada. Registrar NF não registra recebimento.
+
+`invoice.totalAmount` e `invoice.items[].allocatedAmount` são strings decimais canônicas. A mesma alocação pode ser documentada parcialmente em várias NFs até seu limite; a NF não consome novamente o saldo contratual. A situação ativa e o saldo da alocação são verificados sob lock transacional, também na aprovação.
 
 ### 2.14 Impostos da NF — JWT de empresa
 
@@ -451,6 +643,8 @@ Tratamentos:
 - `WITHHELD_BY_CUSTOMER`: exige `receivableId` compatível e reduz o valor líquido a receber.
 - `INFORMATIONAL`: apenas registra informação; não cria conta a pagar nem baixa.
 
+`taxObligation.amount` é string decimal canônica, não número JSON.
+
 ### 2.15 Contas a receber e recebimentos — JWT de empresa
 
 Base: `/api/v1/company/receivables`
@@ -460,8 +654,17 @@ Base: `/api/v1/company/receivables`
 | POST | `/{receivableId}/settlements` | `CreateReceivableSettlementRequest` | `ReceivableSettlementApprovalResponse` | `201` ou `202` |
 | POST | `/{receivableId}/settlements/{settlementId}/reversal` | `CancelFinancialRecordRequest` | `FinancialCancellationResponse` | `201` ou `202` |
 | GET | `/{receivableId}/balance` | path UUID | `ReceivableBalanceResponse` | `200` |
+| POST | `/{receivableId}/credits` | `CreateReceivableCreditRequest` | `ReceivableCreditResponse` | `201` ou `202`; crédito justificado sem baixa fictícia |
+| POST | `/{receivableId}/credits/{creditId}/reversal` | `CancelFinancialRecordRequest` | `ReceivableCreditResponse` | `201` ou `202`; estorno imutável |
+| GET | `/{receivableId}/renegotiations` | path UUID | `ReceivableRenegotiationResponse` | `200`; títulos descendentes e históricos |
+| POST | `/{receivableId}/renegotiations` | `RenegotiateReceivableRequest` | `ReceivableRenegotiationResponse` | `200` ou `202`; somente saldo ainda devido |
+| POST | `/{receivableId}/renegotiations/reversal` | `CancelFinancialRecordRequest` | `ReceivableRenegotiationResponse` | `200` ou `202`; reabre original após reversão de efeitos descendentes |
 
 Recebimento pode ser parcial. Estorno cria lançamento reverso; não apaga a baixa original.
+
+`settlement.amount` e os campos monetários de `ReceivableBalanceResponse` (`originalAmount`, `withheldAmount`, `creditedAmount`, `netReceivableAmount`, `confirmedSettlementAmount`, `outstandingAmount`) são strings decimais canônicas com duas casas. As rotas de criação de parcela, NF, imposto e baixa documentam `201` direto ou `202` pendente; cancelamentos de parcela/NF usam `200`/`202`, e estorno de baixa usa `201`/`202`. `400`, `403`, `404` e `409` usam Problem Details. O `202` não tem efeito financeiro oficial.
+
+Crédito aparece em `balance.creditedAmount` e não representa recebimento nem libera faturamento. Renegociação preserva parcela, grupo financeiro e alocações de origem; não some valores originais de títulos históricos renegociados com os títulos descendentes para formar saldo. Use a projeção oficial de medição e o [guia de integração](FRONTEND-MEASUREMENT-CONTINUOUS.md).
 
 ### 2.16 Catálogo da plataforma — JWT de proprietário da plataforma
 
@@ -561,8 +764,12 @@ Endpoint condicional: só existe quando `integrations.asaas.enabled=true`. Não 
 
 | DTO | Campos |
 |---|---|
-| `CreateMeasurementRequest` | `workId*`, `contractId`, `reference`, `description`, `measuredOn`, `justification` |
-| `CreateMeasurementItemRequest` | `itemNumber* (>0)`, `activity*`, `description`, `chargeType*`, `areaSquareMeters`, `linearMeters`, `kilogramsPerSquareMeter`, `kilogramsPerLinearMeter`, `unitPrice`, `justification` |
+| `CreateMeasurementRequest` | `workId` opcional, `contractId` opcional (exige `workId` compatível), `title*` (texto não vazio, 1–200 caracteres), `reference`, `description`, `measuredOn`, `justification` |
+| `LinkMeasurementRequest` | `workId*`, `contractId` opcional, `justification` |
+| `CreateMeasurementItemRequest` / `UpdateMeasurementItemRequest` | `itemNumber* (>0)`, `serviceTitle*`, `activity*`, `description`, `measuredOn*`, `chargeType*`, `areaSquareMeters`, `linearMeters`, `kilogramsPerSquareMeter`, `kilogramsPerLinearMeter`, `unitQuantity` (decimal positiva, até quatro casas; obrigatória e usada na fórmula em `UNIT`, opcional e somente operacional nos demais tipos), `unitPrice*` (string decimal positiva com duas casas), `previewTotalWeightKg` (string opcional com quatro casas), `previewTotalAmount` (string opcional com duas casas), `justification` |
+| `InsertMeasurementItemRequest` | `insertAfterItemId*` da linha ativa e `item*` (`MeasurementItemDataRequest`, com os campos de item exceto `itemNumber`) |
+| `ReorderMeasurementItemsRequest` | `items*[]`: todos os itens ativos, exatamente uma vez e na ordem final; cada entrada contém `itemId*` e `serviceTitle*`. `justification` opcional. |
+| `CorrectAcceptedMeasurementItemRequest` | `action*` (`REPLACE` ou `VOID`), os campos da linha em `REPLACE` — inclusive `unitQuantity` positiva obrigatória em `UNIT` ou opcional como registro operacional nos demais tipos — e `justification*` |
 | `CreateMeasurementDiscountRequest` | `discountType*`, `discountValue* (>0)`, `justification` |
 | `AdvanceMeasurementWorkflowRequest` | `action*`, `externallyAccepted`, `externalAcceptanceOn`, `externalAcceptanceNotes`, `justification` |
 | `CreateMeasurementRevisionRequest` | `justification` |
@@ -574,7 +781,7 @@ Os campos de cálculo exigidos variam conforme `chargeType`; o frontend deve mos
 | DTO | Campos |
 |---|---|
 | `CreateApprovedBillingInstallmentRequest` | `contractId*`, `reference`, `description`, `issuedOn`, `dueOn*`, `financialGroupId`, `allocations*[]`, `justification` |
-| `BillingAllocationRequest` | `contractServiceId`, `type*`, `allocatedAmount*` |
+| `BillingAllocationRequest` | `contractServiceId`, `measurementContractCompositionId` opcional (somente `SERVICE`, mesma composição/serviço/contrato), `type*`, `allocatedAmount*` |
 | `CreateRegisteredInvoiceRequest` | `contractId*`, `number*`, `series`, `accessKey`, `issuedOn*`, `items*[]`, `justification` |
 | `InvoiceItemRequest` | `billingAllocationId*`, `description`, `allocatedAmount*` |
 | `CreateTaxObligationRequest` | `receivableId`, `name*`, `description`, `dueOn`, `amount* (>0)`, `treatment*`, `justification` |
@@ -697,8 +904,9 @@ Os campos de cálculo exigidos variam conforme `chargeType`; o frontend deve mos
 
 ### Medições
 
-- `MeasurementDetailsResponse`: medição, versão mais recente, itens, desconto e totais bruto/líquido.
-- `MeasurementItemResponse`: parâmetros de fórmula, `totalWeightKg`, `totalAmount`, `calculationFormula`.
+- `MeasurementDetailsResponse`: `measurement` (`MeasurementResponse`, incluindo `title`), versão mais recente, itens, desconto, `totalWeightKg` e totais bruto/líquido. Peso e valores são strings decimais canônicas.
+- `MeasurementItemResponse`: `serviceTitle`, `activity`, `description`, `measuredOn`, parâmetros da fórmula e `unitQuantity`; em `UNIT`, ela compõe a fórmula. Nos demais tipos, quando preenchida, é somente a quantidade operacional de peças/unidades executadas e não altera valores ou peso. `unitPrice`, `totalWeightKg` e `totalAmount` são strings decimais canônicas. Em `UNIT`, `totalWeightKg` é `null`.
+- `MeasurementItemReorderResponse`: em `200`, `items` na ordem oficial, `version` e totais oficiais; em `202`, somente `changeRequestId` e `authorizationMode`.
 - `MeasurementFinancialStatusResponse`: valor dos serviços originados, desconto, líquido, faturado, saldo e posição por serviço.
 - Respostas de mutação incluem `changeRequestId` e `authorizationMode`.
 
@@ -721,7 +929,7 @@ Os campos de cálculo exigidos variam conforme `chargeType`; o frontend deve mos
 - `WorkExecutionLocationType`: `FINAL_CUSTOMER_LOCATION`, `PROVIDER_UNIT`, `OTHER_ADDRESS`.
 - `MeasurementStatus`: `DRAFT`, `GENERATED`, `SENT`, `PENDING_ACCEPTANCE`, `ACCEPTED`, `FINALIZED`, `REJECTED`, `CANCELLED`.
 - `MeasurementVersionStatus`: `DRAFT`, `SENT`, `PENDING_ACCEPTANCE`, `ACCEPTED`, `REJECTED`.
-- `MeasurementChargeType`: `SQUARE_METER`, `LINEAR_METER`, `KILOGRAM_PER_SQUARE_METER`, `KILOGRAM_PER_LINEAR_METER`.
+- `MeasurementChargeType`: `SQUARE_METER`, `LINEAR_METER`, `KILOGRAM_PER_SQUARE_METER`, `KILOGRAM_PER_LINEAR_METER`, `UNIT`.
 - `MeasurementDiscountType`: `FIXED`, `PERCENTAGE`.
 - `MeasurementWorkflowAction`: `SEND`, `AWAIT_EXTERNAL_ACCEPTANCE`, `RECORD_EXTERNAL_ACCEPTANCE`, `FINALIZE`.
 - `BillingAllocationType`: `SERVICE`, `CONTRACT_DISCOUNT`.
@@ -749,17 +957,19 @@ Os campos de cálculo exigidos variam conforme `chargeType`; o frontend deve mos
 
 Não existem endpoints atuais para:
 
-1. consultar catálogo público de planos antes do onboarding;
-2. definir/alterar desconto contratual pela API;
-3. listar ou consultar detalhes individuais de parcelas;
-4. listar ou consultar NFs já registradas;
-5. listar anexos de NF ou baixar o anexo armazenado;
-6. listar contas a receber ou consultar seus dados básicos — existe apenas consulta de saldo por ID;
-7. listar baixas/recebimentos de uma conta a receber;
-8. listar impostos de uma NF;
-9. consultar/editar os dados da própria empresa;
-10. endpoints de gastos/fornecedores/contas a pagar operacionais;
-11. relatórios e exportações da Fase 7.
+1. listar ou consultar detalhes individuais de parcelas;
+2. listar ou consultar NFs já registradas;
+3. listar anexos de NF ou baixar o anexo armazenado;
+4. listar contas a receber ou consultar seus dados básicos — existe apenas consulta de saldo por ID;
+5. listar baixas/recebimentos de uma conta a receber;
+6. listar impostos de uma NF;
+7. consultar/editar todos os dados cadastrais da própria empresa;
+8. endpoints de gastos/fornecedores/contas a pagar operacionais;
+9. relatórios gerais, exportação DOCX e envio de relatório por e-mail. As exportações PDF/XLSX de uma versão de medição já existem e não integram esta lacuna;
+10. consulta e PDF/XLSX/prévia acumulados da medição, com aceitos anteriores e avanço atual no mesmo corpo e totais separados;
+11. identidade de serviço contínuo entre avanços e escolha persistida de destino contratual antes do aceite;
+12. coordenação de composição incremental autorizada no aceite/vínculo posterior, com pendências consultáveis e idempotência também de solicitações;
+13. extensão do resumo com saldo total `remainingToReceive`, disponibilidade e `asOf`, tratamento completo de correções/ajustes/estornos e origem obrigatória para faturamento de composições. O resumo atual com cinco campos não conclui essas lacunas.
 
 Essas lacunas devem virar backlog de API antes de fechar navegação, telas de listagem e carregamento inicial do frontend. O frontend não deve acessar banco, storage ou gateway diretamente para contorná-las.
 

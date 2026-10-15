@@ -2,26 +2,46 @@ package com.renovar.canteiro.io.measurements.api.response;
 
 import com.renovar.canteiro.io.measurements.application.MeasurementDetails;
 import com.renovar.canteiro.io.measurements.domain.MeasurementDiscountType;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.List;
 
 public record MeasurementDetailsResponse(
         MeasurementResponse measurement,
         MeasurementVersionResponse latestVersion,
+        MeasurementCorrectionRequestResponse correctionRequest,
         List<MeasurementItemResponse> items,
+        List<MeasurementServiceSummaryResponse> services,
         MeasurementDiscountType discountType,
-        BigDecimal discountValue,
-        BigDecimal grossAmount,
-        BigDecimal discountAmount,
-        BigDecimal netAmount
+        @Schema(type = "string", format = "decimal", example = "10.0000", pattern = "^-?\\d+\\.\\d{1,4}$") String discountValue,
+        @Schema(type = "string", format = "decimal", example = "1636.0000", pattern = "^-?\\d+\\.\\d{4}$") String totalWeightKg,
+        @Schema(type = "string", format = "decimal", example = "1250.50", pattern = "^-?\\d+\\.\\d{2}$") String grossAmount,
+        @Schema(type = "string", format = "decimal", example = "50.00", pattern = "^-?\\d+\\.\\d{2}$") String discountAmount,
+        @Schema(type = "string", format = "decimal", example = "1200.50", pattern = "^-?\\d+\\.\\d{2}$") String netAmount
 ) {
     public static MeasurementDetailsResponse from(MeasurementDetails details) {
         return new MeasurementDetailsResponse(MeasurementResponse.from(details.measurement()),
                 MeasurementVersionResponse.from(details.latestVersion()),
+                MeasurementCorrectionRequestResponse.from(details.correctionRequestSource()),
                 details.items().stream().map(MeasurementItemResponse::from).toList(),
+                details.services().stream().map(MeasurementServiceSummaryResponse::from).toList(),
                 details.discount() == null ? null : details.discount().getDiscountType(),
-                details.discount() == null ? null : details.discount().getDiscountValue(),
-                details.amounts().grossAmount(), details.amounts().discountAmount(), details.amounts().netAmount());
+                details.discount() == null ? null : decimal(details.discount().getDiscountValue()),
+                quantity(details.amounts().totalWeightKg()), money(details.amounts().grossAmount()),
+                money(details.amounts().discountAmount()), money(details.amounts().netAmount()));
+    }
+
+    private static String decimal(BigDecimal value) {
+        return value == null ? null : value.toPlainString();
+    }
+
+    private static String money(BigDecimal value) {
+        return value == null ? null : value.setScale(2, RoundingMode.HALF_UP).toPlainString();
+    }
+
+    private static String quantity(BigDecimal value) {
+        return value == null ? null : value.setScale(4, RoundingMode.HALF_UP).toPlainString();
     }
 }

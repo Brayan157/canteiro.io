@@ -13,7 +13,7 @@ interface ReceivableJpaRepository extends JpaRepository<ReceivableJpaEntity, UUI
 
     Optional<ReceivableJpaEntity> findByIdAndCompanyId(UUID id, UUID companyId);
 
-    @Lock(LockModeType.OPTIMISTIC_FORCE_INCREMENT)
+    @Lock(LockModeType.PESSIMISTIC_FORCE_INCREMENT)
     @Query("""
             select receivable from ReceivableJpaEntity receivable
             where receivable.id = :id and receivable.companyId = :companyId
@@ -23,5 +23,7 @@ interface ReceivableJpaRepository extends JpaRepository<ReceivableJpaEntity, UUI
             @Param("companyId") UUID companyId
     );
 
-    Optional<ReceivableJpaEntity> findByBillingInstallmentIdAndCompanyId(UUID billingInstallmentId, UUID companyId);
+    Optional<ReceivableJpaEntity> findByBillingInstallmentIdAndCompanyIdAndRenegotiationSourceReceivableIdIsNull(UUID billingInstallmentId, UUID companyId);
+    java.util.List<ReceivableJpaEntity> findAllByBillingInstallmentIdAndCompanyId(UUID installmentId, UUID companyId);
+    java.util.List<ReceivableJpaEntity> findByRenegotiationSourceReceivableIdAndCompanyId(UUID sourceId,UUID companyId);
 }

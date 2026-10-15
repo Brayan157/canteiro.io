@@ -16,18 +16,31 @@ import java.util.UUID;
 public class JpaMeasurementItemRepository implements MeasurementItemRepository {
 
     private final MeasurementItemJpaRepository measurementItemJpaRepository;
+    private final com.renovar.canteiro.io.measurements.domain.MeasurementContinuityRepository continuityRepository;
 
     @Override
     public MeasurementItem save(MeasurementItem measurementItem) {
+        if (measurementItem.getId() != null) {
+            MeasurementItemJpaEntity existing = measurementItemJpaRepository
+                    .findByIdAndCompanyId(measurementItem.getId(), measurementItem.getCompanyId())
+                    .orElseThrow(() -> new IllegalStateException("Measurement item no longer exists"));
+            existing.apply(measurementItem);
+            return toDomain(measurementItemJpaRepository.save(existing));
+        }
         MeasurementItemJpaEntity entity = new MeasurementItemJpaEntity(
                 measurementItem.getCompanyId(), measurementItem.getMeasurementVersionId(), measurementItem.getItemNumber(),
-                measurementItem.getActivity(), measurementItem.getDescription(), measurementItem.getChargeType(),
+                measurementItem.getServiceTitle(), measurementItem.getActivity(), measurementItem.getDescription(),
+                measurementItem.getMeasuredOn(), measurementItem.getChargeType(),
                 measurementItem.getAreaSquareMeters(), measurementItem.getLinearMeters(),
                 measurementItem.getKilogramsPerSquareMeter(), measurementItem.getKilogramsPerLinearMeter(),
-                measurementItem.getUnitPrice(), measurementItem.getTotalWeightKg(), measurementItem.getTotalAmount(),
-                measurementItem.getCalculationFormula()
+                measurementItem.getUnitQuantity(), measurementItem.getUnitPrice(), measurementItem.getTotalWeightKg(), measurementItem.getTotalAmount(),
+                measurementItem.getCalculationFormula(), measurementItem.isActive(), measurementItem.getSourceItemId()
         );
-        return toDomain(measurementItemJpaRepository.save(entity));
+        MeasurementItem saved = toDomain(measurementItemJpaRepository.saveAndFlush(entity));
+        if (saved.getSourceItemId() != null) {
+            continuityRepository.inheritItemBinding(saved.getCompanyId(), saved.getSourceItemId(), saved.getId(), saved.getMeasurementVersionId());
+        }
+        return saved;
     }
 
     @Override
@@ -38,6 +51,12 @@ public class JpaMeasurementItemRepository implements MeasurementItemRepository {
     @Override
     public Optional<MeasurementItem> findWithLockByIdAndCompanyId(UUID id, UUID companyId) {
         return measurementItemJpaRepository.findWithLockByIdAndCompanyId(id, companyId).map(this::toDomain);
+    }
+
+    @Override
+    public List<MeasurementItem> findWithLockByMeasurementVersionIdAndCompanyId(UUID measurementVersionId, UUID companyId) {
+        return measurementItemJpaRepository.findWithLockByMeasurementVersionIdAndCompanyId(measurementVersionId, companyId)
+                .stream().map(this::toDomain).toList();
     }
 
     @Override
@@ -54,13 +73,19 @@ public class JpaMeasurementItemRepository implements MeasurementItemRepository {
                 .map(this::toDomain);
     }
 
+    @Override
+    public void flush() {
+        measurementItemJpaRepository.flush();
+    }
+
     private MeasurementItem toDomain(MeasurementItemJpaEntity entity) {
         return MeasurementItem.rehydrate(
                 entity.getId(), entity.getCompanyId(), entity.getMeasurementVersionId(), entity.getItemNumber(),
-                entity.getActivity(), entity.getDescription(), entity.getChargeType(), entity.getAreaSquareMeters(),
+                entity.getServiceTitle(), entity.getActivity(), entity.getDescription(), entity.getMeasuredOn(),
+                entity.getChargeType(), entity.getAreaSquareMeters(),
                 entity.getLinearMeters(), entity.getKilogramsPerSquareMeter(), entity.getKilogramsPerLinearMeter(),
-                entity.getUnitPrice(), entity.getTotalWeightKg(), entity.getTotalAmount(), entity.getCalculationFormula(),
-                entity.getCreatedAt(), entity.getUpdatedAt()
+                entity.getUnitQuantity(), entity.getUnitPrice(), entity.getTotalWeightKg(), entity.getTotalAmount(), entity.getCalculationFormula(),
+                entity.isActive(), entity.getSourceItemId(), entity.getCreatedAt(), entity.getUpdatedAt()
         );
     }
 }

@@ -20,6 +20,8 @@ public final class ContractBillingBalanceCalculator {
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         activeAllocatedAmount = money(activeAllocatedAmount);
         return new ContractBillingBalance(
+                money(contractAmount.serviceSubtotal()),
+                money(contractAmount.contractDiscountAmount()),
                 netAmount,
                 activeAllocatedAmount,
                 netAmount.subtract(activeAllocatedAmount).setScale(2, RoundingMode.HALF_UP)

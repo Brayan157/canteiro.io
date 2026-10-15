@@ -16,6 +16,10 @@ import com.renovar.canteiro.io.receivables.application.FinancialCancellationServ
 import com.renovar.canteiro.io.receivables.domain.ReceivableBalance;
 import com.renovar.canteiro.io.receivables.domain.ReceivableSettlement;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -35,6 +39,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 @Tag(name = "Receivables")
 public class ReceivableController {
+    private final com.renovar.canteiro.io.receivables.application.FinancialCurrencyService currencies;
 
     private final ReceivableSettlementService receivableSettlementService;
     private final GetReceivableBalanceUseCase getReceivableBalanceUseCase;
@@ -42,6 +47,14 @@ public class ReceivableController {
 
     @PostMapping("/{receivableId}/settlements/{settlementId}/reversal")
     @Operation(summary = "Reverses a settlement and reopens the receivable balance atomically")
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "Official operation result", content = @Content(schema = @Schema(implementation = FinancialCancellationResponse.class))),
+            @ApiResponse(responseCode = "202", description = "Awaiting approval; no official financial change", content = @Content(schema = @Schema(implementation = FinancialCancellationResponse.class))),
+            @ApiResponse(responseCode = "400", ref = "#/components/responses/ProblemDetail"),
+            @ApiResponse(responseCode = "403", ref = "#/components/responses/ProblemDetail"),
+            @ApiResponse(responseCode = "404", ref = "#/components/responses/ProblemDetail"),
+            @ApiResponse(responseCode = "409", ref = "#/components/responses/ProblemDetail")
+    })
     public ResponseEntity<FinancialCancellationResponse> reverse(@PathVariable UUID receivableId,
                                                                   @PathVariable UUID settlementId,
                                                                   @Valid @RequestBody CancelFinancialRecordRequest request) {
@@ -54,6 +67,14 @@ public class ReceivableController {
 
     @PostMapping("/{receivableId}/settlements")
     @Operation(summary = "Records a partial or full receivable settlement")
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "Official operation result", content = @Content(schema = @Schema(implementation = ReceivableSettlementApprovalResponse.class))),
+            @ApiResponse(responseCode = "202", description = "Awaiting approval; no official financial change", content = @Content(schema = @Schema(implementation = ReceivableSettlementApprovalResponse.class))),
+            @ApiResponse(responseCode = "400", ref = "#/components/responses/ProblemDetail"),
+            @ApiResponse(responseCode = "403", ref = "#/components/responses/ProblemDetail"),
+            @ApiResponse(responseCode = "404", ref = "#/components/responses/ProblemDetail"),
+            @ApiResponse(responseCode = "409", ref = "#/components/responses/ProblemDetail")
+    })
     public ResponseEntity<ReceivableSettlementApprovalResponse> settle(
             @PathVariable UUID receivableId,
             @Valid @RequestBody CreateReceivableSettlementRequest request
@@ -73,6 +94,13 @@ public class ReceivableController {
 
     @GetMapping("/{receivableId}/balance")
     @Operation(summary = "Calculates the receivable balance and its current overdue status")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Official operation result", content = @Content(schema = @Schema(implementation = ReceivableBalanceResponse.class))),
+            @ApiResponse(responseCode = "400", ref = "#/components/responses/ProblemDetail"),
+            @ApiResponse(responseCode = "403", ref = "#/components/responses/ProblemDetail"),
+            @ApiResponse(responseCode = "404", ref = "#/components/responses/ProblemDetail"),
+            @ApiResponse(responseCode = "409", ref = "#/components/responses/ProblemDetail")
+    })
     public ReceivableBalanceResponse balance(@PathVariable UUID receivableId) {
         ReceivableBalanceSnapshot snapshot = getReceivableBalanceUseCase.get(receivableId);
         return toBalanceResponse(snapshot.balance(), snapshot.currentStatus());
@@ -85,16 +113,16 @@ public class ReceivableController {
         return new ReceivableSettlementResponse(
                 settlement.getId(), settlement.getReceivableId(), settlement.getContractId(), settlement.getReceivedOn(),
                 settlement.getAmount(), settlement.getEntryType(), settlement.getReversalOfSettlementId(),
-                settlement.getPaymentMethod(), settlement.getNote(), settlement.getStatus()
+                settlement.getPaymentMethod(), settlement.getNote(), settlement.getStatus(), currencies.forContract(settlement.getContractId())
         );
     }
 
     private ReceivableBalanceResponse toBalanceResponse(ReceivableBalance balance,
                                                          com.renovar.canteiro.io.receivables.domain.ReceivableStatus status) {
         return new ReceivableBalanceResponse(
-                balance.receivableId(), balance.originalAmount(), balance.withheldAmount(), balance.netReceivableAmount(),
+                balance.receivableId(), balance.originalAmount(), balance.withheldAmount(), balance.creditedAmount(),balance.netReceivableAmount(),
                 balance.confirmedSettlementAmount(),
-                balance.outstandingAmount(), status
+                balance.outstandingAmount(), status, currencies.forReceivable(balance.receivableId())
         );
     }
 }

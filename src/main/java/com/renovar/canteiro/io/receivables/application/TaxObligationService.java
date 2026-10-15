@@ -83,8 +83,11 @@ public class TaxObligationService {
         Invoice invoice = invoice(companyId, command.invoiceId(), true);
         Contract contract = contract(companyId, invoice.getContractId());
         if (command.treatment() == TaxTreatment.WITHHELD_BY_CUSTOMER) {
-            receivableRepository.findByIdAndCompanyIdWithSettlementLock(command.receivableId(), companyId)
+            Receivable title=receivableRepository.findByIdAndCompanyIdWithSettlementLock(command.receivableId(), companyId)
                     .orElseThrow(() -> new TenantResourceNotFoundException("Receivable"));
+            if(title.getStatus()==com.renovar.canteiro.io.receivables.domain.ReceivableStatus.RENEGOTIATED
+                ||title.getStatus()==com.renovar.canteiro.io.receivables.domain.ReceivableStatus.CANCELLED)
+                throw new IllegalStateException("Withholding requires an active, non-renegotiated title");
         }
         validateWithheldCapacity(command, companyId);
         TaxObligation taxObligation = taxObligationRepository.save(TaxObligation.register(

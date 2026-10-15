@@ -92,4 +92,38 @@ class MeasurementItemTest {
                 () -> MeasurementItem.createKilogramPerLinearMeter(UUID.randomUUID(), UUID.randomUUID(), 1,
                         "Assembly", null, BigDecimal.ONE, BigDecimal.ZERO, BigDecimal.ONE));
     }
+
+    @Test
+    void calculatesUnitAmountWithoutProducingWeight() {
+        MeasurementItem item = MeasurementItem.createUnit(
+                UUID.randomUUID(), UUID.randomUUID(), 1, "Instalação", "Instalação de válvula", null,
+                java.time.LocalDate.of(2026, 9, 30), new BigDecimal("12.5000"), new BigDecimal("25.00")
+        );
+
+        assertEquals(MeasurementChargeType.UNIT, item.getChargeType());
+        assertEquals(new BigDecimal("12.5000"), item.getUnitQuantity());
+        assertEquals(new BigDecimal("312.50"), item.getTotalAmount());
+        assertEquals(null, item.getTotalWeightKg());
+        assertEquals("unit_quantity × unit_price", item.getCalculationFormula());
+        assertThrows(IllegalArgumentException.class,
+                () -> MeasurementItem.createUnit(UUID.randomUUID(), UUID.randomUUID(), 1, "Instalação", "Atividade", null,
+                        java.time.LocalDate.now(), BigDecimal.ZERO, BigDecimal.ONE));
+    }
+
+    @Test
+    void recordsOperationalUnitQuantityWithoutChangingLinearMeterFormulaOrTotals() {
+        MeasurementItem item = MeasurementItem.createLinearMeter(
+                UUID.randomUUID(), UUID.randomUUID(), 1, "Tubulação", "Instalar trecho", null,
+                java.time.LocalDate.of(2026, 10, 1), new BigDecimal("3.0000"), new BigDecimal("25.00")
+        ).withOperationalUnitQuantity(new BigDecimal("1.0000"));
+
+        assertEquals(new BigDecimal("1.0000"), item.getUnitQuantity());
+        assertEquals(new BigDecimal("75.00"), item.getTotalAmount());
+        assertEquals(null, item.getTotalWeightKg());
+        assertEquals("linear_meters × unit_price", item.getCalculationFormula());
+        assertThrows(IllegalArgumentException.class,
+                () -> item.withOperationalUnitQuantity(BigDecimal.ZERO));
+        assertThrows(IllegalArgumentException.class,
+                () -> item.withOperationalUnitQuantity(new BigDecimal("1.00001")));
+    }
 }

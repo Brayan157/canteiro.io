@@ -24,3 +24,14 @@ A API fica disponível em `http://localhost:8080` por padrão e o PostgreSQL em
 O build da imagem gera o `bootJar` sem executar a suíte de testes: testes de
 integração usam Testcontainers e devem ser executados no pipeline/ambiente de
 desenvolvimento, não durante a construção da imagem de runtime.
+
+## Storage privado local (15/10/2026)
+
+O serviço api monta o volume `canteiroio-api-private-storage` em
+`/app/var/storage`, com LOCAL_STORAGE_BASE_PATH apontando para esse diretório.
+A imagem prepara o alvo com dono canteiro e modo 0700, mantendo a aplicação
+como usuário não root. O volume conserva anexos entre recriações da API; não
+deve ser removido em um restart comum. PostgreSQL mantém seu volume próprio.
+Inventário, preservação e prova de persistência com artefato técnico isolado:
+[F08-23](../F08-23-LOCAL-PRIVATE-STORAGE.md). Não substitui backup externo ou
+object storage de produção.

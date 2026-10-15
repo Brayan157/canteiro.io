@@ -25,12 +25,13 @@ public class JpaContractRepository implements ContractRepository {
         if (contract.getId() != null) {
             ContractJpaEntity entity = contractJpaRepository.findById(contract.getId())
                     .orElseThrow(() -> new IllegalStateException("Contract must exist before it can be updated"));
+            entity.getCurrency().requireSame(contract.getCurrency());
             entity.updateProfile(contract.getContractIdentifier(), contract.getReference(), contract.getName(), contract.getStatus(), contract.getStartedOn(),
                     contract.getExpectedCompletionOn(), contract.getCompletedOn());
             return toDomain(contractJpaRepository.save(entity));
         }
-        ContractJpaEntity entity = new ContractJpaEntity(contract.getCompanyId(), contract.getWorkId(), contract.getContractIdentifier(), contract.getReference(),
-                contract.getName(), contract.getStatus(), contract.getStartedOn(), contract.getExpectedCompletionOn(), contract.getCompletedOn());
+        ContractJpaEntity entity = new ContractJpaEntity(contract.getCompanyId(), contract.getWorkId(), contract.getContractIdentifier(), contract.getPricingMode(), contract.getReference(),
+                contract.getName(), contract.getStatus(), contract.getStartedOn(), contract.getExpectedCompletionOn(), contract.getCompletedOn(), contract.getCurrency());
         return toDomain(contractJpaRepository.save(entity));
     }
 
@@ -108,9 +109,9 @@ public class JpaContractRepository implements ContractRepository {
 
     private Contract toDomain(ContractJpaEntity entity) {
         return Contract.rehydrate(
-                entity.getId(), entity.getCompanyId(), entity.getWorkId(), entity.getContractIdentifier(), entity.getReference(), entity.getName(),
+                entity.getId(), entity.getCompanyId(), entity.getWorkId(), entity.getContractIdentifier(), entity.getPricingMode(), entity.getReference(), entity.getName(),
                 entity.getStatus(), entity.getStartedOn(), entity.getExpectedCompletionOn(), entity.getCompletedOn(),
-                entity.getCreatedAt(), entity.getUpdatedAt()
+                entity.getCreatedAt(), entity.getUpdatedAt(), entity.getCurrency()
         );
     }
 

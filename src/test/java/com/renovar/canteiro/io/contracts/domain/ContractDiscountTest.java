@@ -18,6 +18,21 @@ class ContractDiscountTest {
 
         assertEquals(DiscountType.PERCENTAGE, discount.getDiscountType());
         assertEquals(new BigDecimal("10.0000"), discount.getDiscountValue());
+        assertEquals(true, discount.isActive());
+    }
+
+    @Test
+    void reversesWithoutDiscardingTheDiscountIdentityOrValues() {
+        ContractDiscount discount = ContractDiscount.create(
+                UUID.randomUUID(), UUID.randomUUID(), DiscountType.FIXED, new BigDecimal("50.00")
+        );
+
+        ContractDiscount reversed = discount.reverse();
+
+        assertEquals(false, reversed.isActive());
+        assertEquals(DiscountType.FIXED, reversed.getDiscountType());
+        assertEquals(new BigDecimal("50.00"), reversed.getDiscountValue());
+        assertThrows(IllegalStateException.class, reversed::reverse);
     }
 
     @Test

@@ -85,6 +85,7 @@ Regras arquiteturais:
 - Commands/requests terminam em CreateRequest, UpdateRequest, ApproveRequest ou FilterRequest.
 - Responses terminam em Response; casos de uso terminam em UseCase ou Service somente quando representam uma aplicação clara.
 - IDs são UUID. Valores monetários usam BigDecimal, nunca double/float.
+- Moedas de contrato/medição: BRL, USD ou EUR, duas casas. Persistir código ISO imutável desde a criação; legado é BRL sem conversão. Medição/contrato vinculados exigem a mesma moeda. Descendentes herdam a unidade pela cadeia imutável. Não somar moedas diferentes em consolidações, nem converter silenciosamente; separar por código. Formatação monetária recebe BigDecimal diretamente e símbolos são apenas apresentação, nunca parte do decimal JSON.
 - Datas de negócio usam LocalDate; data/hora de auditoria usa Instant/UTC.
 - Use enums para status, tipo de cobrança, escopo financeiro e tratamento tributário.
 
@@ -166,20 +167,35 @@ Nunca substitua Work por Contract, nem mova faturamento de Contract para Work.
 - Desconto de contrato é ajuste negativo separado, sem ContractService associado; não regrava, altera ou rateia o preço dos serviços.
 - Não permitir redução de contrato para valor líquido inferior ao faturamento líquido aprovado sem estorno, crédito ou renegociação auditada.
 - Não fazer exclusão física: use status, cancelamento, inativação ou estorno.
+- Contract possui `pricing_mode`: `FIXED` preserva o valor-base negociado; `MEASUREMENT_BASED` forma o valor comercial progressivamente por composições de versões de medição aceitas.
+- Composição de medição é imutável, idempotente por grupo estável de serviço/versão e auditável. Ela não substitui o valor-base de `ContractService`; a posição efetiva do serviço soma valor-base líquido e composições aceitas. `serviceTitle` não é chave financeira.
+- Correção posterior de origem já composta exige reversão/substituição rastreável. Redução que alcance valor faturado exige estorno, crédito ou renegociação antes de reduzir saldo.
 
 ### 8.2 Medição
 
-1. Measurement pertence sempre a uma Work e pode não ter Contract inicialmente.
-2. Antes de produzir efeito financeiro, ela deve se ligar a um Contract existente da mesma Work ou criar Contract novo nessa Work.
-3. Aceite é externo ao sistema. A empresa registra internamente o resultado e anexa a evidência quando houver.
-4. Itens aceitos ficam congelados. Acréscimo/alteração cria MeasurementVersion nova e exige novo aceite externo.
-5. A conversão de MeasurementItem aceito em ContractService é idempotente e ocorre no máximo uma vez por item/revisão.
-6. Medição exibe faturado e saldo derivados dos serviços que originou; não possui controle de faturamento independente.
-7. Fórmulas iniciais:
+1. Measurement pode ser criada sem Work e sem Contract. Se Contract for informado, Work é obrigatório e ambos devem pertencer à mesma cadeia e Company.
+2. O vínculo posterior com Work e, opcionalmente, Contract é uma operação explícita, auditada e sujeita à mesma alçada direta ou aprovação das demais alterações. Uma Work já vinculada não pode ser trocada; um Contract pode ser acrescentado depois, desde que pertença à Work vinculada, e não pode ser trocado silenciosamente.
+3. Antes do vínculo, são permitidos cadastro, consulta, itens, desconto, documentos, exportações e registro do aceite externo. Finalização, conversão em ContractService e qualquer efeito financeiro exigem Work e Contract válidos.
+4. Aceite é externo ao sistema. A empresa registra internamente o resultado e anexa a evidência quando houver.
+5. Itens aceitos ficam congelados. Acréscimo/alteração cria MeasurementVersion nova e exige novo aceite externo.
+6. A composição de um grupo estável de serviço de uma versão aceita em ContractService é idempotente e ocorre no máximo uma vez por grupo/revisão. A origem registra medição, versão, grupo, itens, serviço de destino, usuário e justificativa.
+7. Medição exibe uma projeção financeira derivada de suas composições/alocações de origem, títulos, baixas e estornos; não possui controle de faturamento independente. Duas medições que complementam o mesmo ContractService não podem compartilhar integralmente o mesmo faturamento/recebimento.
+8. Fórmulas iniciais:
    - m²: área × preço por m²;
    - metro linear: metragem × preço por metro;
    - kg/m²: kg por m² × área = kg total; kg total × preço por kg;
    - kg/metro linear: kg por metro × metros = kg total; kg total × preço por kg.
+   - unidade: quantidade de unidades × preço por unidade; não produz peso.
+   - Nos quatro tipos não-UNIT, `unitQuantity` pode registrar opcionalmente peças/unidades executadas. É informativa, positiva com até quatro casas e não altera fórmula, peso, valor, prévias ou totais oficiais.
+9. A exclusão de Measurement é sempre lógica, por status CANCELLED, preservando versões, itens, documentos e auditoria. Só é permitida enquanto não houver Contract vinculado; vínculo apenas com Work não impede o cancelamento.
+10. A medição é contínua: preserva `measurementId`, título e identidade de serviço durante vários avanços. A consulta, grade e relatórios acumulados exibem os itens aceitos anteriores no corpo principal junto dos itens do avanço atual, inclusive quando a revisão nova estiver vazia. Histórico isolado não atende a essa visão.
+11. Identidade contínua do serviço é independente do grupo aceito por versão. `serviceTitle` nunca é chave de continuidade, destino ou vínculo financeiro. O destino contratual novo/existente deve ser persistido e sobreviver à recarga, validado pelo ID e pela cadeia do tenant.
+12. Somente itens da versão `DRAFT` atual podem ser criados, corrigidos, removidos, reorganizados ou movidos por operação comum. Itens aceitos mantêm identidade, preço, ordem histórica e origem congelados. Acrescentar uma atividade com preço diferente não reavalia itens anteriores.
+13. Preparar destino, editar/enviar rascunho ou rejeitar aceite não aumenta valor comercial. Aceite com destino/contrato oficial ou vínculo posterior de origens aceitas coordena a composição autorizada do incremento novo, de forma transacional e idempotente. Não reaplicar o total acumulado em cada avanço nem exigir que o frontend crie serviços/atualize valores para reconstruir o efeito.
+14. Permissões de medição não concedem permissões de serviço. Aceite externo e aprovação interna da composição são fatos distintos e seus estados/pedidos devem ser expostos separadamente. Uma proposta `202` não altera o dado oficial que pretende aplicar; repetição não duplica serviço, incremento nem pedido pendente para a mesma origem. Reassociar origem aceita/composta exige fluxo formal auditado.
+15. A projeção acumulada resolve cópias corretivas, substituições/anulações e reversões antes de calcular totais. Nunca somar indiscriminadamente snapshots de versões corretivas. Itens novos/pendentes têm total separado do aceito; nenhuma pendência produz saldo contratual, NF, recebível ou baixa.
+16. O relatório acumulado apresenta total aceito, já recebido e falta receber. `remainingToReceive` é calculado no backend e inclui a parte aceita ainda não faturada, além do faturado ainda devido, com ajustes/retenções/créditos/estornos oficiais. Publicar disponibilidade financeira e instante UTC; sem contrato ou permissão financeira, indicar indisponibilidade sem zeros fictícios, mantendo a exportação dos itens/totais autorizados. O frontend não calcula esse saldo.
+17. Exportações acumuladas mantêm streaming, tenant, auditoria, marca privada, título e origem/situação de cada linha, e sua prévia representa o mesmo conteúdo. Relatório por versão preserva o contrato histórico. Importação/reordenação atua somente no avanço editável; linhas aceitas não podem ser inativadas pela ausência em XLSX de rascunho.
 
 ## 9. Receita, faturamento e NF — INVARIANTE
 
@@ -192,6 +208,7 @@ Nunca substitua Work por Contract, nem mova faturamento de Contract para Work.
 7. Uma parcela aprovada gera um título de Receivable. Títulos parcelados são registros individuais agrupados por grupo financeiro.
 8. Cancelar NF, parcela, recebimento ou pagamento gera cancelamento/estorno rastreável; não apagar histórico.
 9. Work consolida receita faturada, emitida em NF e recebida a partir de seus Contracts, sem possuir saldo, NF ou parcela própria.
+10. Uma alocação originada em medição preserva a composição específica, do mesmo tenant/contrato/serviço, ao longo de NF, recebível, recebimento parcial e estorno. A referência pode ser ausente para valores sem origem em medição, mas não pode ser omitida para ocultar/rastrear incorretamente uma origem de medição. Limite por composição e limite contratual são validados dentro da mesma transação e sob concorrência.
 
 ## 10. Gastos, impostos, lucro e fluxo de caixa — INVARIANTE
 
@@ -239,6 +256,7 @@ Antes de considerar uma tarefa concluída:
 7. manter paginação, filtros, ordenação, erro padronizado e correlação de logs;
 8. não expor segredo, senha, token, cartão ou conteúdo fiscal sensível em resposta/log;
 9. preservar alterações não relacionadas já existentes no repositório.
+10. para medição contínua, entregar conjuntamente visão acumulada, destino persistido, composição autorizada/idempotente, resumo financeiro correto e relatórios acumulados com testes focados. Um resumo financeiro isolado não encerra a integração; documentar recortes parciais no backlog e somente publicar rotas/DTOs existentes no OpenAPI gerado da aplicação.
 
 ## 14. Exigir autorização explícita do usuário antes de
 

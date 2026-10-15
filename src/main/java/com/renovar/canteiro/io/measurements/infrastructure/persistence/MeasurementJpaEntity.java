@@ -2,6 +2,7 @@ package com.renovar.canteiro.io.measurements.infrastructure.persistence;
 
 import com.renovar.canteiro.io.shared.infrastructure.persistence.jpa.BaseJpaEntity;
 import com.renovar.canteiro.io.measurements.domain.MeasurementStatus;
+import com.renovar.canteiro.io.shared.domain.CurrencyCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -24,11 +25,18 @@ public class MeasurementJpaEntity extends BaseJpaEntity {
     @Column(name = "company_id", nullable = false, updatable = false)
     private UUID companyId;
 
-    @Column(name = "work_id", nullable = false, updatable = false)
+    @Column(name = "work_id")
     private UUID workId;
 
-    @Column(name = "contract_id", updatable = false)
+    @Column(name = "contract_id")
     private UUID contractId;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "currency", nullable = false, length = 3, updatable = false)
+    private CurrencyCode currency;
+
+    @Column(name = "title", nullable = false, length = 200, updatable = false)
+    private String title;
 
     @Column(name = "reference", length = 100)
     private String reference;
@@ -47,11 +55,18 @@ public class MeasurementJpaEntity extends BaseJpaEntity {
     @Column(name = "lock_version", nullable = false)
     private int lockVersion;
 
-    public MeasurementJpaEntity(UUID companyId, UUID workId, UUID contractId, String reference, String description,
+    public MeasurementJpaEntity(UUID companyId, UUID workId, UUID contractId, String title, String reference, String description,
                                 LocalDate measuredOn, MeasurementStatus status) {
+        this(companyId, workId, contractId, title, reference, description, measuredOn, status, CurrencyCode.BRL);
+    }
+
+    public MeasurementJpaEntity(UUID companyId, UUID workId, UUID contractId, String title, String reference, String description,
+                                LocalDate measuredOn, MeasurementStatus status, CurrencyCode currency) {
         this.companyId = companyId;
         this.workId = workId;
         this.contractId = contractId;
+        this.currency = CurrencyCode.defaultIfAbsent(currency);
+        this.title = title;
         this.reference = reference;
         this.description = description;
         this.measuredOn = measuredOn;

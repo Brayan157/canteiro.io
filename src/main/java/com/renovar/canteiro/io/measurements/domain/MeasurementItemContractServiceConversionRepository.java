@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.UUID;
 
 public interface MeasurementItemContractServiceConversionRepository {
+    boolean existsByMeasurementIdAndCompanyId(UUID measurementId,UUID companyId);
 
     MeasurementItemContractServiceConversion save(MeasurementItemContractServiceConversion conversion);
 

@@ -19,6 +19,8 @@ public record ContractServiceResponse(
         DiscountType discountType,
         @Schema(type = "string", format = "decimal", example = "10.0000") String discountValue,
         @Schema(type = "string", format = "decimal", example = "187.50") String discountAmount,
-        @Schema(type = "string", format = "decimal", example = "1687.50") String netAmount
+        @Schema(type = "string", format = "decimal", example = "1687.50") String netAmount,
+        @Schema(type = "string", format = "decimal", example = "1200.50") String measurementCompositionAmount,
+        @Schema(type = "string", format = "decimal", example = "2888.00") String effectiveNetAmount
 ) {
 }

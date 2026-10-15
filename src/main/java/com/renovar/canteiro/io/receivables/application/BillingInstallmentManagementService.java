@@ -7,6 +7,8 @@ import com.renovar.canteiro.io.access.domain.ChangeAuthorizationMode;
 import com.renovar.canteiro.io.access.domain.ChangeOperation;
 import com.renovar.canteiro.io.contracts.domain.ContractServiceRepository;
 import com.renovar.canteiro.io.contracts.domain.ContractRepository;
+import com.renovar.canteiro.io.measurements.domain.MeasurementContractComposition;
+import com.renovar.canteiro.io.measurements.domain.MeasurementContractCompositionRepository;
 import com.renovar.canteiro.io.governance.application.AuditEventRecorder;
 import com.renovar.canteiro.io.governance.application.ChangeRequestService;
 import com.renovar.canteiro.io.governance.application.CreateChangeRequestCommand;
@@ -45,6 +47,8 @@ public class BillingInstallmentManagementService {
     private final AccessAuthorizationService accessAuthorizationService;
     private final ContractRepository contractRepository;
     private final ContractServiceRepository contractServiceRepository;
+    private final MeasurementContractCompositionRepository measurementContractCompositionRepository;
+    private final com.renovar.canteiro.io.measurements.domain.MeasurementContinuityRepository measurementContinuityRepository;
     private final BillingInstallmentRepository billingInstallmentRepository;
     private final BillingAllocationRepository billingAllocationRepository;
     private final ReceivableRepository receivableRepository;
@@ -55,11 +59,12 @@ public class BillingInstallmentManagementService {
     @Transactional
     public BillingInstallmentApprovalResult createApproved(CreateApprovedBillingInstallmentCommand command) {
         UUID companyId = tenantContextHolder.requireCurrentTenant().companyId();
-        validate(command, companyId);
+        requireHeader(command);
         ChangeAuthorizationMode mode = accessAuthorizationService.requireChangeAuthorization(
                 AccessModule.BILLING, ChangeOperation.CREATE
         );
         if (mode == ChangeAuthorizationMode.REQUEST_APPROVAL) {
+            validate(command, companyId);
             ChangeRequest changeRequest = changeRequestService.create(new CreateChangeRequestCommand(
                     AuditModule.BILLING,
                     ChangeRequestOperation.CREATE,
@@ -81,12 +86,17 @@ public class BillingInstallmentManagementService {
     @Transactional
     public void applyApprovedCreation(ChangeRequest changeRequest) {
         CreateApprovedBillingInstallmentCommand command = fromProposal(changeRequest.getSnapshot().proposedData().values());
-        validate(command, changeRequest.getCompanyId());
         Creation creation = persistApproved(changeRequest.getCompanyId(), command);
         recordCreation(creation, "approved-change-request", changeRequest.getId());
     }
 
     private Creation persistApproved(UUID companyId, CreateApprovedBillingInstallmentCommand command) {
+        requireHeader(command);
+        // Do not populate the persistence context with services/origins before this lock.
+        // Repeating validation after the lock does not refresh an already managed JPA entity.
+        contractRepository.findByIdAndCompanyIdWithBillingLock(command.contractId(), companyId)
+                .orElseThrow(() -> new TenantResourceNotFoundException("Contract"));
+        validate(command, companyId);
         BillingInstallment installment = billingInstallmentRepository.save(BillingInstallment.createApproved(
                 companyId, command.contractId(), command.reference(), command.description(), command.issuedOn(), command.dueOn()
         ));
@@ -117,18 +127,24 @@ public class BillingInstallmentManagementService {
                                                       BillingAllocationCommand command) {
         return command.type() == BillingAllocationType.SERVICE
                 ? BillingAllocation.createService(companyId, billingInstallmentId, contractId, command.contractServiceId(),
-                        command.allocatedAmount()).activate()
+                        command.measurementContractCompositionId(), command.allocatedAmount()).activate()
                 : BillingAllocation.createContractDiscount(companyId, billingInstallmentId, contractId,
                         command.allocatedAmount()).activate();
     }
 
-    private void validate(CreateApprovedBillingInstallmentCommand command, UUID companyId) {
-        if (command.contractId() == null || command.dueOn() == null || command.allocations() == null || command.allocations().isEmpty()) {
+    private void requireHeader(CreateApprovedBillingInstallmentCommand command) {
+        if (command == null || command.contractId() == null || command.dueOn() == null || command.allocations() == null || command.allocations().isEmpty()) {
             throw new IllegalArgumentException("Contract, due date and at least one billing allocation are required");
         }
+    }
+
+    private void validate(CreateApprovedBillingInstallmentCommand command, UUID companyId) {
+        requireHeader(command);
         if (contractRepository.findByIdAndCompanyId(command.contractId(), companyId).isEmpty()) {
             throw new TenantResourceNotFoundException("Contract");
         }
+        Map<UUID, BigDecimal> requestedByMeasurementComposition = new LinkedHashMap<>();
+        Map<UUID, BigDecimal> requestedWithoutOrigin = new LinkedHashMap<>();
         for (BillingAllocationCommand allocation : command.allocations()) {
             if (allocation == null || allocation.type() == null || allocation.allocatedAmount() == null) {
                 throw new IllegalArgumentException("Billing allocation type and amount are required");
@@ -141,10 +157,28 @@ public class BillingInstallmentManagementService {
                     throw new TenantResourceNotFoundException("Contract service");
                 }
                 BillingAllocation.createService(companyId, UUID.randomUUID(), command.contractId(),
-                        allocation.contractServiceId(), allocation.allocatedAmount());
+                        allocation.contractServiceId(), allocation.measurementContractCompositionId(), allocation.allocatedAmount());
+                validateMeasurementCompositionAllocation(companyId, command.contractId(), allocation,
+                        requestedByMeasurementComposition.getOrDefault(allocation.measurementContractCompositionId(), BigDecimal.ZERO));
+                if (allocation.measurementContractCompositionId() != null) {
+                    requestedByMeasurementComposition.merge(allocation.measurementContractCompositionId(),
+                            allocation.allocatedAmount().setScale(2,RoundingMode.HALF_UP), BigDecimal::add);
+                } else {
+                    BigDecimal requested = requestedWithoutOrigin.merge(allocation.contractServiceId(),
+                            allocation.allocatedAmount().setScale(2,RoundingMode.HALF_UP), BigDecimal::add);
+                    var targetService = contractServiceRepository.findByIdAndCompanyId(allocation.contractServiceId(), companyId).orElseThrow();
+                    BigDecimal previouslyUnattributed = billingAllocationRepository.findByContractIdAndCompanyId(command.contractId(),companyId).stream()
+                            .filter(line -> line.getStatus() == com.renovar.canteiro.io.receivables.domain.BillingAllocationStatus.ACTIVE
+                                    && allocation.contractServiceId().equals(line.getContractServiceId()) && line.getMeasurementContractCompositionId()==null)
+                            .map(BillingAllocation::getAllocatedAmount).reduce(BigDecimal.ZERO,BigDecimal::add);
+                    if (targetService.getMeasurementCompositionAmount().signum()>0
+                            && previouslyUnattributed.add(requested).compareTo(targetService.getNetAmount())>0) {
+                        throw new IllegalArgumentException("Measurement-originated billing requires measurementContractCompositionId; untraced allocation exceeds the negotiated base");
+                    }
+                }
             } else {
-                if (allocation.contractServiceId() != null) {
-                    throw new IllegalArgumentException("Contract discount allocation must not reference a contract service");
+                if (allocation.contractServiceId() != null || allocation.measurementContractCompositionId() != null) {
+                    throw new IllegalArgumentException("Contract discount allocation must not reference a contract service or measurement composition");
                 }
                 BillingAllocation.createContractDiscount(companyId, UUID.randomUUID(), command.contractId(),
                         allocation.allocatedAmount());
@@ -154,12 +188,46 @@ public class BillingInstallmentManagementService {
                 command.issuedOn(), command.dueOn());
     }
 
+    private void validateMeasurementCompositionAllocation(UUID companyId, UUID contractId, BillingAllocationCommand allocation,
+                                                           BigDecimal amountAlreadyRequestedInThisInstallment) {
+        if (allocation.measurementContractCompositionId() == null) return;
+        MeasurementContractComposition composition = measurementContractCompositionRepository
+                .findByIdAndCompanyId(allocation.measurementContractCompositionId(), companyId)
+                .orElseThrow(() -> new TenantResourceNotFoundException("Measurement contract composition"));
+        if (!contractId.equals(composition.getContractId())
+                || !allocation.contractServiceId().equals(composition.getContractServiceId())) {
+            throw new IllegalArgumentException("Measurement composition must belong to the allocated contract service");
+        }
+        if (measurementContinuityRepository.isReversed(companyId, composition.getId())) {
+            throw new IllegalStateException("A reversed measurement composition cannot receive billing");
+        }
+        if (measurementContinuityRepository.hasUnreconciledReduction(companyId,composition.getId())) {
+            throw new IllegalStateException("Reconcile the accepted corrective origin before billing its contractual position");
+        }
+        BigDecimal alreadyAllocated = billingAllocationRepository
+                .findByMeasurementContractCompositionIdAndCompanyId(composition.getId(), companyId).stream()
+                .filter(line -> line.getStatus() == com.renovar.canteiro.io.receivables.domain.BillingAllocationStatus.ACTIVE)
+                .map(BillingAllocation::getAllocatedAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        if (alreadyAllocated.add(amountAlreadyRequestedInThisInstallment).add(allocation.allocatedAmount().setScale(2,RoundingMode.HALF_UP))
+                .compareTo(composition.getNetAmount()) > 0) {
+            throw new IllegalStateException("Billing allocation exceeds the available accepted measurement composition amount");
+        }
+    }
+
     private void recordCreation(Creation creation, String origin, UUID changeRequestId) {
         Map<String, Object> installmentData = new LinkedHashMap<>();
         installmentData.put("contractId", creation.billingInstallment().getContractId().toString());
         installmentData.put("status", creation.billingInstallment().getStatus().name());
         installmentData.put("allocationCount", creation.allocations().size());
         installmentData.put("netAmount", creation.receivable().getOriginalAmount());
+        installmentData.put("allocations", creation.allocations().stream().map(allocation -> {
+            Map<String,Object> line=new LinkedHashMap<>();
+            line.put("allocationId",allocation.getId()==null?null:allocation.getId().toString());
+            line.put("contractServiceId",allocation.getContractServiceId()==null?null:allocation.getContractServiceId().toString());
+            line.put("measurementContractCompositionId",allocation.getMeasurementContractCompositionId()==null?null:allocation.getMeasurementContractCompositionId().toString());
+            line.put("amount",allocation.getAllocatedAmount().toPlainString()); return line;
+        }).toList());
         auditEventRecorder.recordDirectAction(
                 AuditModule.BILLING, AuditAction.CREATE, "BillingInstallment", creation.billingInstallment().getId(),
                 null, installmentData, auditMetadata(origin, changeRequestId)
@@ -188,6 +256,8 @@ public class BillingInstallmentManagementService {
         for (BillingAllocationCommand allocation : command.allocations()) {
             Map<String, Object> value = new LinkedHashMap<>();
             value.put("contractServiceId", allocation.contractServiceId() == null ? null : allocation.contractServiceId().toString());
+            value.put("measurementContractCompositionId", allocation.measurementContractCompositionId() == null
+                    ? null : allocation.measurementContractCompositionId().toString());
             value.put("type", allocation.type().name());
             value.put("allocatedAmount", allocation.allocatedAmount().toPlainString());
             allocations.add(value);
@@ -201,6 +271,7 @@ public class BillingInstallmentManagementService {
         List<BillingAllocationCommand> allocations = ((List<Map<String, Object>>) proposal.get("allocations")).stream()
                 .map(value -> new BillingAllocationCommand(
                         uuid((String) value.get("contractServiceId")),
+                        uuid((String) value.get("measurementContractCompositionId")),
                         BillingAllocationType.valueOf((String) value.get("type")),
                         new BigDecimal((String) value.get("allocatedAmount"))
                 ))

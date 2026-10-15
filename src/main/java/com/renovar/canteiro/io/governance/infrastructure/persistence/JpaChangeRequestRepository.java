@@ -17,6 +17,10 @@ public class JpaChangeRequestRepository implements ChangeRequestRepository {
 
     private final ChangeRequestJpaRepository changeRequestJpaRepository;
     private final ChangeRequestPersistenceMapper changeRequestPersistenceMapper;
+    @Override public java.util.List<ChangeRequest> findPendingByEntity(UUID company,String type,UUID id) {
+        return changeRequestJpaRepository.findByCompanyIdAndEntityTypeAndEntityIdAndStatus(company,type,id,ChangeRequestStatus.PENDING)
+            .stream().map(changeRequestPersistenceMapper::toDomain).toList();
+    }
 
     @Override
     public ChangeRequest save(ChangeRequest changeRequest) {

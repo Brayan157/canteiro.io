@@ -18,6 +18,9 @@ interface MeasurementItemJpaRepository extends JpaRepository<MeasurementItemJpaE
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     Optional<MeasurementItemJpaEntity> findWithLockByIdAndCompanyId(UUID id, UUID companyId);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    List<MeasurementItemJpaEntity> findWithLockByMeasurementVersionIdAndCompanyId(UUID measurementVersionId, UUID companyId);
+
     List<MeasurementItemJpaEntity> findByMeasurementVersionIdAndCompanyId(UUID measurementVersionId, UUID companyId);
 
     Page<MeasurementItemJpaEntity> findByMeasurementVersionIdAndCompanyId(UUID measurementVersionId, UUID companyId,

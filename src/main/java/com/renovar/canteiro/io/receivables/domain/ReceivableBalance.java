@@ -9,11 +9,15 @@ public record ReceivableBalance(
         UUID receivableId,
         BigDecimal originalAmount,
         BigDecimal withheldAmount,
-        BigDecimal confirmedSettlementAmount
+        BigDecimal confirmedSettlementAmount,
+        BigDecimal creditedAmount
 ) {
 
     public ReceivableBalance(UUID receivableId, BigDecimal originalAmount, BigDecimal confirmedSettlementAmount) {
-        this(receivableId, originalAmount, BigDecimal.ZERO, confirmedSettlementAmount);
+        this(receivableId, originalAmount, BigDecimal.ZERO, confirmedSettlementAmount, BigDecimal.ZERO);
+    }
+    public ReceivableBalance(UUID receivableId,BigDecimal originalAmount,BigDecimal withheldAmount,BigDecimal confirmedSettlementAmount) {
+        this(receivableId,originalAmount,withheldAmount,confirmedSettlementAmount,BigDecimal.ZERO);
     }
 
     public ReceivableBalance {
@@ -21,16 +25,20 @@ public record ReceivableBalance(
         originalAmount = positive(originalAmount, "Receivable original amount is required");
         withheldAmount = nonNegative(withheldAmount, "Withheld amount is required");
         confirmedSettlementAmount = nonNegative(confirmedSettlementAmount, "Confirmed settlement amount is required");
+        creditedAmount = nonNegative(creditedAmount, "Credited amount is required");
         if (withheldAmount.compareTo(originalAmount) > 0) {
             throw new IllegalArgumentException("Withheld amount must not exceed receivable original amount");
         }
-        if (confirmedSettlementAmount.compareTo(originalAmount.subtract(withheldAmount)) > 0) {
+        if (creditedAmount.add(withheldAmount).compareTo(originalAmount)>0) {
+            throw new IllegalArgumentException("Credits and withholding exceed the original receivable");
+        }
+        if (confirmedSettlementAmount.compareTo(originalAmount.subtract(withheldAmount).subtract(creditedAmount)) > 0) {
             throw new IllegalArgumentException("Confirmed settlement amount must not exceed receivable net amount");
         }
     }
 
     public BigDecimal netReceivableAmount() {
-        return originalAmount.subtract(withheldAmount).setScale(2, RoundingMode.HALF_UP);
+        return originalAmount.subtract(withheldAmount).subtract(creditedAmount).setScale(2, RoundingMode.HALF_UP);
     }
 
     public BigDecimal outstandingAmount() {
@@ -46,7 +54,7 @@ public record ReceivableBalance(
         if (!canSettle(amount)) {
             throw new IllegalArgumentException("Receivable settlement exceeds the outstanding amount");
         }
-        return new ReceivableBalance(receivableId, originalAmount, withheldAmount, confirmedSettlementAmount.add(amount));
+        return new ReceivableBalance(receivableId, originalAmount, withheldAmount, confirmedSettlementAmount.add(amount),creditedAmount);
     }
 
     public ReceivableStatus statusOn(Receivable receivable, LocalDate currentDate) {

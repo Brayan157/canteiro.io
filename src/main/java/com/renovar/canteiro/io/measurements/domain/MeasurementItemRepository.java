@@ -15,8 +15,12 @@ public interface MeasurementItemRepository {
 
     Optional<MeasurementItem> findWithLockByIdAndCompanyId(UUID id, UUID companyId);
 
+    List<MeasurementItem> findWithLockByMeasurementVersionIdAndCompanyId(UUID measurementVersionId, UUID companyId);
+
     List<MeasurementItem> findByMeasurementVersionIdAndCompanyId(UUID measurementVersionId, UUID companyId);
 
     Page<MeasurementItem> findByMeasurementVersionIdAndCompanyId(UUID measurementVersionId, UUID companyId,
                                                                   Pageable pageable);
+
+    void flush();
 }

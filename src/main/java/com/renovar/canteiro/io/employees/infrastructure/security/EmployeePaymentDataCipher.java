@@ -1,6 +1,7 @@
 package com.renovar.canteiro.io.employees.infrastructure.security;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import javax.crypto.Cipher;
 import javax.crypto.spec.GCMParameterSpec;
@@ -12,10 +13,28 @@ import java.util.Base64;
 
 @Component
 public class EmployeePaymentDataCipher {
+    private static final int MINIMUM_SECRET_LENGTH = 32;
+
     private final SecretKeySpec key;
-    public EmployeePaymentDataCipher(@Value("${security.employee-payment-data.encryption-key}") String secret) {
-        try { key = new SecretKeySpec(MessageDigest.getInstance("SHA-256").digest(secret.getBytes(StandardCharsets.UTF_8)), "AES"); }
-        catch (Exception exception) { throw new IllegalStateException("Employee payment encryption cannot be configured", exception); }
+
+    @Autowired
+    public EmployeePaymentDataCipher(@Value("${security.employee-payment-data.encryption-key}") String secret,
+                                     @Value("${security.jwt.secret}") String jwtSecret) {
+        validateSecret(secret);
+        if (jwtSecret != null && MessageDigest.isEqual(
+                secret.trim().getBytes(StandardCharsets.UTF_8), jwtSecret.trim().getBytes(StandardCharsets.UTF_8))) {
+            throw new IllegalStateException("Employee payment encryption key must differ from the JWT signing secret");
+        }
+        key = keyFrom(secret);
+    }
+
+    private EmployeePaymentDataCipher(String secret) {
+        validateSecret(secret);
+        key = keyFrom(secret);
+    }
+
+    static EmployeePaymentDataCipher legacyJwtCipherForMigration(String secret) {
+        return new EmployeePaymentDataCipher(secret);
     }
     public String encrypt(String value) {
         if (value == null || value.isBlank()) return null;
@@ -40,6 +59,20 @@ public class EmployeePaymentDataCipher {
             return new String(cipher.doFinal(encrypted), StandardCharsets.UTF_8);
         } catch (Exception exception) {
             throw new IllegalStateException("Employee payment data cannot be decrypted", exception);
+        }
+    }
+
+    private static SecretKeySpec keyFrom(String secret) {
+        try {
+            return new SecretKeySpec(MessageDigest.getInstance("SHA-256").digest(secret.trim().getBytes(StandardCharsets.UTF_8)), "AES");
+        } catch (Exception exception) {
+            throw new IllegalStateException("Employee payment encryption cannot be configured", exception);
+        }
+    }
+
+    private static void validateSecret(String secret) {
+        if (secret == null || secret.isBlank() || secret.trim().length() < MINIMUM_SECRET_LENGTH) {
+            throw new IllegalStateException("Employee payment encryption key must contain at least 32 characters");
         }
     }
 }

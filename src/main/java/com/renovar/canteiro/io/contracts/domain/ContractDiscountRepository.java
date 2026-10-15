@@ -7,5 +7,5 @@ public interface ContractDiscountRepository {
 
     ContractDiscount save(ContractDiscount contractDiscount);
 
-    Optional<ContractDiscount> findByContractIdAndCompanyId(UUID contractId, UUID companyId);
+    Optional<ContractDiscount> findActiveByContractIdAndCompanyId(UUID contractId, UUID companyId);
 }

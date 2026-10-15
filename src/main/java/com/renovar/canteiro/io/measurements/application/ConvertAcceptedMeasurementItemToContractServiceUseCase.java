@@ -62,6 +62,8 @@ public class ConvertAcceptedMeasurementItemToContractServiceUseCase {
     private final MeasurementContractAdjustmentRepository adjustmentRepository;
     private final ChangeRequestService changeRequestService;
     private final AuditEventRecorder auditEventRecorder;
+    private final com.renovar.canteiro.io.measurements.domain.MeasurementContinuityRepository continuity;
+    private final com.renovar.canteiro.io.measurements.domain.MeasurementContractCompositionRepository compositions;
 
     @Transactional
     public MeasurementItemConversionResult convert(ConvertAcceptedMeasurementItemCommand command) {
@@ -139,6 +141,7 @@ public class ConvertAcceptedMeasurementItemToContractServiceUseCase {
                 || command.measurementItemId() == null) {
             throw new IllegalArgumentException("Measurement, version and item are required for conversion");
         }
+        continuity.lockMeasurement(companyId,command.measurementId());
         Measurement measurement = measurementRepository.findByIdAndCompanyId(command.measurementId(), companyId)
                 .orElseThrow(() -> new TenantResourceNotFoundException("Measurement"));
         MeasurementVersion version = measurementVersionRepository.findWithLockByIdAndCompanyId(command.measurementVersionId(), companyId)
@@ -156,8 +159,13 @@ public class ConvertAcceptedMeasurementItemToContractServiceUseCase {
             throw new ApiException(HttpStatus.CONFLICT, ErrorCode.BUSINESS_RULE_VIOLATION,
                     "An accepted measurement must be linked to a contract before converting its items");
         }
-        Contract contract = contractRepository.findByIdAndCompanyId(measurement.getContractId(), companyId)
+        Contract contract = contractRepository.findByIdAndCompanyIdWithBillingLock(measurement.getContractId(), companyId)
                 .orElseThrow(() -> new TenantResourceNotFoundException("Contract"));
+        measurement.getCurrency().requireSame(contract.getCurrency());
+        UUID root=continuity.recognitionForItem(companyId,item.getId()).map(com.renovar.canteiro.io.measurements.domain.MeasurementItemRecognition::rootItemId).orElse(item.getId());
+        if(compositions.findByMeasurementIdAndCompanyId(measurement.getId(),companyId).stream().flatMap(c->c.getMeasurementItemIds().stream())
+            .anyMatch(id->root.equals(continuity.recognitionForItem(companyId,id).map(com.renovar.canteiro.io.measurements.domain.MeasurementItemRecognition::rootItemId).orElse(id))))
+            throw new ApiException(HttpStatus.CONFLICT,ErrorCode.BUSINESS_RULE_VIOLATION,"An origin already composed continuously cannot be converted individually");
         if (!measurement.getWorkId().equals(contract.getWorkId())) {
             throw new ApiException(HttpStatus.CONFLICT, ErrorCode.BUSINESS_RULE_VIOLATION,
                     "Measurement contract must belong to the same work");
@@ -175,6 +183,7 @@ public class ConvertAcceptedMeasurementItemToContractServiceUseCase {
             case SQUARE_METER -> item.getAreaSquareMeters();
             case LINEAR_METER -> item.getLinearMeters();
             case KILOGRAM_PER_SQUARE_METER, KILOGRAM_PER_LINEAR_METER -> item.getTotalWeightKg();
+            case UNIT -> item.getUnitQuantity();
         };
     }
 

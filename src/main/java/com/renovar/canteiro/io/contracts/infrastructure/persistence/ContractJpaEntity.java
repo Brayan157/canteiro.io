@@ -2,6 +2,8 @@ package com.renovar.canteiro.io.contracts.infrastructure.persistence;
 
 import com.renovar.canteiro.io.contracts.domain.ContractStatus;
 import com.renovar.canteiro.io.shared.infrastructure.persistence.jpa.BaseJpaEntity;
+import com.renovar.canteiro.io.contracts.domain.ContractPricingMode;
+import com.renovar.canteiro.io.shared.domain.CurrencyCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -30,6 +32,14 @@ public class ContractJpaEntity extends BaseJpaEntity {
     @Column(name = "contract_identifier", length = 100)
     private String contractIdentifier;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "pricing_mode", nullable = false, length = 30)
+    private ContractPricingMode pricingMode;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "currency", nullable = false, length = 3, updatable = false)
+    private CurrencyCode currency;
+
     @Column(name = "reference", length = 100)
     private String reference;
 
@@ -55,14 +65,27 @@ public class ContractJpaEntity extends BaseJpaEntity {
 
     public ContractJpaEntity(UUID companyId, UUID workId, String reference, String name, ContractStatus status,
                              LocalDate startedOn, LocalDate expectedCompletionOn, LocalDate completedOn) {
-        this(companyId, workId, null, reference, name, status, startedOn, expectedCompletionOn, completedOn);
+        this(companyId, workId, null, ContractPricingMode.FIXED, reference, name, status, startedOn, expectedCompletionOn, completedOn);
     }
 
     public ContractJpaEntity(UUID companyId, UUID workId, String contractIdentifier, String reference, String name, ContractStatus status,
                              LocalDate startedOn, LocalDate expectedCompletionOn, LocalDate completedOn) {
+        this(companyId, workId, contractIdentifier, ContractPricingMode.FIXED, reference, name, status, startedOn, expectedCompletionOn, completedOn);
+    }
+
+    public ContractJpaEntity(UUID companyId, UUID workId, String contractIdentifier, ContractPricingMode pricingMode, String reference, String name, ContractStatus status,
+                             LocalDate startedOn, LocalDate expectedCompletionOn, LocalDate completedOn) {
+        this(companyId, workId, contractIdentifier, pricingMode, reference, name, status, startedOn,
+                expectedCompletionOn, completedOn, CurrencyCode.BRL);
+    }
+
+    public ContractJpaEntity(UUID companyId, UUID workId, String contractIdentifier, ContractPricingMode pricingMode, String reference, String name, ContractStatus status,
+                             LocalDate startedOn, LocalDate expectedCompletionOn, LocalDate completedOn, CurrencyCode currency) {
         this.companyId = companyId;
         this.workId = workId;
         this.contractIdentifier = contractIdentifier;
+        this.pricingMode = pricingMode == null ? ContractPricingMode.FIXED : pricingMode;
+        this.currency = CurrencyCode.defaultIfAbsent(currency);
         this.reference = reference;
         this.name = name;
         this.status = status;

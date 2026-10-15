@@ -48,6 +48,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.mock;
 
 @ExtendWith(MockitoExtension.class)
 class ConvertAcceptedMeasurementItemToContractServiceUseCaseTest {
@@ -93,7 +94,7 @@ class ConvertAcceptedMeasurementItemToContractServiceUseCaseTest {
         when(measurementRepository.findByIdAndCompanyId(measurementId, companyId)).thenReturn(Optional.of(measurement));
         when(measurementVersionRepository.findWithLockByIdAndCompanyId(versionId, companyId)).thenReturn(Optional.of(version));
         when(measurementItemRepository.findWithLockByIdAndCompanyId(itemId, companyId)).thenReturn(Optional.of(item));
-        when(contractRepository.findByIdAndCompanyId(contractId, companyId)).thenReturn(Optional.of(contract));
+        when(contractRepository.findByIdAndCompanyIdWithBillingLock(contractId, companyId)).thenReturn(Optional.of(contract));
         when(conversionRepository.findByMeasurementItemIdAndCompanyId(itemId, companyId))
                 .thenAnswer(invocation -> Optional.ofNullable(savedConversion.get()));
         when(contractServiceRepository.save(any())).thenReturn(savedService);
@@ -106,7 +107,9 @@ class ConvertAcceptedMeasurementItemToContractServiceUseCaseTest {
         ConvertAcceptedMeasurementItemToContractServiceUseCase useCase = new ConvertAcceptedMeasurementItemToContractServiceUseCase(
                 tenantContextHolder, accessAuthorizationService, measurementRepository, measurementVersionRepository,
                 measurementItemRepository, contractRepository, contractServiceRepository, conversionRepository,
-                measurementDiscountRepository, adjustmentRepository, changeRequestService, auditEventRecorder
+                measurementDiscountRepository, adjustmentRepository, changeRequestService, auditEventRecorder,
+                mock(com.renovar.canteiro.io.measurements.domain.MeasurementContinuityRepository.class),
+                mock(com.renovar.canteiro.io.measurements.domain.MeasurementContractCompositionRepository.class)
         );
         ConvertAcceptedMeasurementItemCommand command = new ConvertAcceptedMeasurementItemCommand(measurementId, versionId,
                 itemId, null);
@@ -152,7 +155,7 @@ class ConvertAcceptedMeasurementItemToContractServiceUseCaseTest {
         when(measurementVersionRepository.findWithLockByIdAndCompanyId(versionId, companyId)).thenReturn(Optional.of(version));
         when(measurementItemRepository.findWithLockByIdAndCompanyId(itemId, companyId)).thenReturn(Optional.of(item));
         when(measurementItemRepository.findByMeasurementVersionIdAndCompanyId(versionId, companyId)).thenReturn(List.of(item));
-        when(contractRepository.findByIdAndCompanyId(contractId, companyId)).thenReturn(Optional.of(contract));
+        when(contractRepository.findByIdAndCompanyIdWithBillingLock(contractId, companyId)).thenReturn(Optional.of(contract));
         when(contractServiceRepository.save(any())).thenReturn(service);
         when(conversionRepository.findByMeasurementItemIdAndCompanyId(itemId, companyId)).thenReturn(Optional.empty());
         when(conversionRepository.save(any())).thenAnswer(invocation -> {
@@ -170,7 +173,9 @@ class ConvertAcceptedMeasurementItemToContractServiceUseCaseTest {
         ConvertAcceptedMeasurementItemToContractServiceUseCase useCase = new ConvertAcceptedMeasurementItemToContractServiceUseCase(
                 tenantContextHolder, accessAuthorizationService, measurementRepository, measurementVersionRepository,
                 measurementItemRepository, contractRepository, contractServiceRepository, conversionRepository,
-                measurementDiscountRepository, adjustmentRepository, changeRequestService, auditEventRecorder
+                measurementDiscountRepository, adjustmentRepository, changeRequestService, auditEventRecorder,
+                mock(com.renovar.canteiro.io.measurements.domain.MeasurementContinuityRepository.class),
+                mock(com.renovar.canteiro.io.measurements.domain.MeasurementContractCompositionRepository.class)
         );
 
         useCase.convert(new ConvertAcceptedMeasurementItemCommand(measurementId, versionId, itemId, null));

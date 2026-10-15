@@ -24,13 +24,15 @@ public final class ContractService {
     private final BigDecimal discountValue;
     private final BigDecimal discountAmount;
     private final BigDecimal netAmount;
+    private final BigDecimal measurementCompositionAmount;
     private final Instant createdAt;
     private final Instant updatedAt;
 
     private ContractService(UUID id, UUID companyId, UUID contractId, UUID sourceServiceTemplateId, String name,
                             String description, ContractServiceStatus status, BigDecimal quantity, BigDecimal unitPrice,
                             BigDecimal grossAmount, DiscountType discountType, BigDecimal discountValue,
-                            BigDecimal discountAmount, BigDecimal netAmount, Instant createdAt, Instant updatedAt) {
+                            BigDecimal discountAmount, BigDecimal netAmount, BigDecimal measurementCompositionAmount,
+                            Instant createdAt, Instant updatedAt) {
         this.id = id;
         this.companyId = require(companyId, "Contract service company is required");
         this.contractId = require(contractId, "Contract service contract is required");
@@ -60,6 +62,9 @@ public final class ContractService {
                 "Contract service net amount must not be negative", 2)) != 0) {
             throw new IllegalArgumentException("Contract service net amount is inconsistent");
         }
+        this.measurementCompositionAmount = measurementCompositionAmount == null ? BigDecimal.ZERO.setScale(2)
+                : requireNonNegative(measurementCompositionAmount,
+                "Contract service measurement composition amount must not be negative", 2);
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
     }
@@ -67,20 +72,20 @@ public final class ContractService {
     public static ContractService create(UUID companyId, UUID contractId, String name, String description,
                                          ContractServiceStatus status, BigDecimal quantity, BigDecimal unitPrice) {
         return new ContractService(null, companyId, contractId, null, name, description, status, quantity, unitPrice,
-                null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null);
     }
 
     public static ContractService create(UUID companyId, UUID contractId, String name, String description,
                                          ContractServiceStatus status, BigDecimal quantity, BigDecimal unitPrice,
                                          DiscountType discountType, BigDecimal discountValue) {
         return new ContractService(null, companyId, contractId, null, name, description, status, quantity, unitPrice,
-                null, discountType, discountValue, null, null, null, null);
+                null, discountType, discountValue, null, null, null, null, null);
     }
 
     public static ContractService copyOf(UUID companyId, UUID contractId, ServiceTemplate template) {
         return new ContractService(null, companyId, contractId, template.getId(), template.getName(),
                 template.getDescription(), ContractServiceStatus.DRAFT, BigDecimal.ONE, BigDecimal.ZERO, null, null, null,
-                null, null, null, null);
+                null, null, null, null, null);
     }
 
     public static ContractService rehydrate(UUID id, UUID companyId, UUID contractId, UUID sourceServiceTemplateId,
@@ -89,25 +94,54 @@ public final class ContractService {
                                             BigDecimal discountValue, BigDecimal discountAmount, BigDecimal netAmount,
                                             Instant createdAt, Instant updatedAt) {
         return new ContractService(id, companyId, contractId, sourceServiceTemplateId, name, description, status, quantity,
-                unitPrice, grossAmount, discountType, discountValue, discountAmount, netAmount, createdAt, updatedAt);
+                unitPrice, grossAmount, discountType, discountValue, discountAmount, netAmount, null, createdAt, updatedAt);
+    }
+
+    public static ContractService rehydrate(UUID id, UUID companyId, UUID contractId, UUID sourceServiceTemplateId,
+                                            String name, String description, ContractServiceStatus status, BigDecimal quantity,
+                                            BigDecimal unitPrice, BigDecimal grossAmount, DiscountType discountType,
+                                            BigDecimal discountValue, BigDecimal discountAmount, BigDecimal netAmount,
+                                            BigDecimal measurementCompositionAmount, Instant createdAt, Instant updatedAt) {
+        return new ContractService(id, companyId, contractId, sourceServiceTemplateId, name, description, status, quantity,
+                unitPrice, grossAmount, discountType, discountValue, discountAmount, netAmount, measurementCompositionAmount,
+                createdAt, updatedAt);
     }
 
     public static ContractService create(UUID companyId, UUID contractId, UUID sourceServiceTemplateId, String name, String description,
                                          ContractServiceStatus status, BigDecimal quantity, BigDecimal unitPrice,
                                          DiscountType discountType, BigDecimal discountValue) {
         return new ContractService(null, companyId, contractId, sourceServiceTemplateId, name, description, status, quantity, unitPrice,
-                null, discountType, discountValue, null, null, null, null);
+                null, discountType, discountValue, null, null, null, null, null);
     }
 
     public ContractService updateProfile(String name, String description, ContractServiceStatus status,
                                          BigDecimal quantity, BigDecimal unitPrice) {
         return new ContractService(id, companyId, contractId, sourceServiceTemplateId, name, description, status,
-                quantity, unitPrice, null, discountType, discountValue, null, null, createdAt, updatedAt);
+                quantity, unitPrice, null, discountType, discountValue, null, null, measurementCompositionAmount, createdAt, updatedAt);
     }
 
     public ContractService withDiscount(DiscountType discountType, BigDecimal discountValue) {
         return new ContractService(id, companyId, contractId, sourceServiceTemplateId, name, description, status,
-                quantity, unitPrice, null, discountType, discountValue, null, null, createdAt, updatedAt);
+                quantity, unitPrice, null, discountType, discountValue, null, null, measurementCompositionAmount, createdAt, updatedAt);
+    }
+
+    public ContractService withAddedMeasurementComposition(BigDecimal amount) {
+        BigDecimal addition = requireNonNegative(amount, "Measurement composition amount must not be negative", 2);
+        return new ContractService(id, companyId, contractId, sourceServiceTemplateId, name, description, status,
+                quantity, unitPrice, null, discountType, discountValue, null, null,
+                measurementCompositionAmount.add(addition).setScale(2, RoundingMode.HALF_UP), createdAt, updatedAt);
+    }
+
+    public ContractService withReversedMeasurementComposition(BigDecimal amount) {
+        BigDecimal reduction = requireNonNegative(amount, "Measurement reversal must not be negative", 2);
+        BigDecimal resulting = measurementCompositionAmount.subtract(reduction);
+        if (resulting.signum() < 0) throw new IllegalStateException("Measurement reversal exceeds the commercial position");
+        return new ContractService(id, companyId, contractId, sourceServiceTemplateId, name, description, status,
+                quantity, unitPrice, null, discountType, discountValue, null, null, resulting, createdAt, updatedAt);
+    }
+
+    public BigDecimal getEffectiveNetAmount() {
+        return netAmount.add(measurementCompositionAmount).setScale(2, RoundingMode.HALF_UP);
     }
 
     private static String requireText(String value, String message) {

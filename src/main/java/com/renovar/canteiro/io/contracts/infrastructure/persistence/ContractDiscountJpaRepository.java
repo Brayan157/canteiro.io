@@ -8,4 +8,6 @@ import java.util.UUID;
 interface ContractDiscountJpaRepository extends JpaRepository<ContractDiscountJpaEntity, UUID> {
 
     Optional<ContractDiscountJpaEntity> findByContractIdAndCompanyId(UUID contractId, UUID companyId);
+
+    Optional<ContractDiscountJpaEntity> findByContractIdAndCompanyIdAndActiveTrue(UUID contractId, UUID companyId);
 }

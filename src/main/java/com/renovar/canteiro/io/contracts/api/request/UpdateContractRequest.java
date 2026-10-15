@@ -1,5 +1,8 @@
 package com.renovar.canteiro.io.contracts.api.request;
 
+import com.renovar.canteiro.io.shared.domain.CurrencyCode;
+import io.swagger.v3.oas.annotations.media.Schema;
+
 import com.renovar.canteiro.io.contracts.domain.ContractStatus;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -15,6 +18,7 @@ public record UpdateContractRequest(
         LocalDate startedOn,
         LocalDate expectedCompletionOn,
         LocalDate completedOn,
-        @Size(max = 1000) String justification
+        @Size(max = 1000) String justification,
+        @Schema(description = "Opcional; somente a moeda original é aceita. Moeda é imutável, inclusive em rascunho.", example = "BRL") CurrencyCode currency
 ) {
 }

@@ -15,6 +15,9 @@ public class JpaMeasurementItemContractServiceConversionRepository
         implements MeasurementItemContractServiceConversionRepository {
 
     private final MeasurementItemContractServiceConversionJpaRepository repository;
+    @Override public boolean existsByMeasurementIdAndCompanyId(UUID mid,UUID company) {
+        return repository.existsForMeasurement(mid,company);
+    }
 
     @Override
     public MeasurementItemContractServiceConversion save(MeasurementItemContractServiceConversion conversion) {

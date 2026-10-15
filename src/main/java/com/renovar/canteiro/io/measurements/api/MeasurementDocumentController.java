@@ -43,7 +43,7 @@ public class MeasurementDocumentController {
     private final GenerateMeasurementPdfService generatePdfService;
 
     @GetMapping(path = "/{measurementId}/versions/{versionId}/pdf", produces = MediaType.APPLICATION_PDF_VALUE)
-    @Operation(summary = "Streams a PDF for a measurement version")
+    @Operation(summary = "Streams a PDF for a measurement version", description = "MEASUREMENTS.EXPORT. Ten landscape columns, private emitter branding, centered title/service bands, wrapped activities and official version totals. Every monetary value carries the immutable BRL/USD/EUR symbol. No public URL or cross-version sum.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Streaming PDF download",
                     content = @Content(mediaType = MediaType.APPLICATION_PDF_VALUE,
@@ -55,6 +55,7 @@ public class MeasurementDocumentController {
         GeneratedMeasurementPdf pdf = generatePdfService.generate(measurementId, versionId);
         return ResponseEntity.ok()
                 .contentType(MediaType.APPLICATION_PDF)
+                .header(HttpHeaders.CACHE_CONTROL, "no-store")
                 .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment()
                         .filename(pdf.filename(), StandardCharsets.UTF_8)
                         .build().toString())
@@ -63,7 +64,7 @@ public class MeasurementDocumentController {
 
     @GetMapping(path = "/{measurementId}/versions/{versionId}/spreadsheet",
             produces = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-    @Operation(summary = "Streams an XLSX spreadsheet for a measurement version")
+    @Operation(summary = "Streams an XLSX spreadsheet for a measurement version", description = "MEASUREMENTS.EXPORT. Ten visible columns. Hidden stable item/service fields, exact decimal inputs, preview-only formulas and very-hidden measurement/version/currency metadata preserve DRAFT reimport. BRL/USD/EUR symbols are presentation only; metadata mismatch returns 409 on import. Accepted history is never edited.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Streaming XLSX download",
                     content = @Content(mediaType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -75,10 +76,32 @@ public class MeasurementDocumentController {
         GeneratedMeasurementSpreadsheet spreadsheet = generateSpreadsheetService.generate(measurementId, versionId);
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .header(HttpHeaders.CACHE_CONTROL, "no-store")
                 .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment()
                         .filename(spreadsheet.filename(), StandardCharsets.UTF_8)
                         .build().toString())
                 .body(spreadsheet.writer()::writeTo);
+    }
+
+    @GetMapping(path = "/{measurementId}/versions/{versionId}/spreadsheet/preview", produces = MediaType.APPLICATION_PDF_VALUE)
+    @Operation(summary = "Streams an inline PDF preview of the official measurement spreadsheet")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Inline PDF spreadsheet preview",
+                    content = @Content(mediaType = MediaType.APPLICATION_PDF_VALUE,
+                            schema = @Schema(type = "string", format = "binary"))),
+            @ApiResponse(responseCode = "403", ref = "#/components/responses/ProblemDetail"),
+            @ApiResponse(responseCode = "404", ref = "#/components/responses/ProblemDetail")
+    })
+    public ResponseEntity<StreamingResponseBody> previewSpreadsheet(@PathVariable UUID measurementId,
+                                                                      @PathVariable UUID versionId) {
+        GeneratedMeasurementPdf preview = generatePdfService.generateSpreadsheetPreview(measurementId, versionId);
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_PDF)
+                .header(HttpHeaders.CACHE_CONTROL, "no-store")
+                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.inline()
+                        .filename(preview.filename(), StandardCharsets.UTF_8)
+                        .build().toString())
+                .body(preview.writer()::writeTo);
     }
 
     @PostMapping(path = "/{measurementId}/versions/{versionId}/documents", consumes = MediaType.MULTIPART_FORM_DATA_VALUE,

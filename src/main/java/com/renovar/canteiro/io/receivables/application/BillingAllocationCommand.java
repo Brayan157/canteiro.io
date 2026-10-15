@@ -7,7 +7,12 @@ import java.util.UUID;
 
 public record BillingAllocationCommand(
         UUID contractServiceId,
+        UUID measurementContractCompositionId,
         BillingAllocationType type,
         BigDecimal allocatedAmount
 ) {
+    /** Compatibility constructor for allocations with no measurement origin. */
+    public BillingAllocationCommand(UUID contractServiceId, BillingAllocationType type, BigDecimal allocatedAmount) {
+        this(contractServiceId, null, type, allocatedAmount);
+    }
 }

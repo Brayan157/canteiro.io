@@ -39,6 +39,8 @@ class ContractBillingBalanceCalculatorTest {
         );
 
         assertEquals(new BigDecimal("100.00"), balance.contractNetAmount());
+        assertEquals(new BigDecimal("120.00"), balance.serviceSubtotal());
+        assertEquals(new BigDecimal("20.00"), balance.contractDiscountAmount());
         assertEquals(new BigDecimal("100.00"), balance.activeAllocatedAmount());
         assertEquals(new BigDecimal("0.00"), balance.availableAmount());
     }

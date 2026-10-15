@@ -18,7 +18,9 @@ interface ContractJpaRepository extends JpaRepository<ContractJpaEntity, UUID>, 
 
     Page<ContractJpaEntity> findByCompanyId(UUID companyId, Pageable pageable);
 
-    @Lock(LockModeType.OPTIMISTIC_FORCE_INCREMENT)
+    // Capacity checks must observe the previous writer's committed allocations before
+    // admitting another origin. Keep the version increment and hold a database write lock.
+    @Lock(LockModeType.PESSIMISTIC_FORCE_INCREMENT)
     @Query("""
             select contract from ContractJpaEntity contract
             where contract.id = :id and contract.companyId = :companyId

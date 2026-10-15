@@ -22,6 +22,7 @@ import com.renovar.canteiro.io.governance.domain.ChangeRequestOperation;
 import com.renovar.canteiro.io.governance.domain.ChangeRequestSnapshot;
 import com.renovar.canteiro.io.tenancy.application.TenantContextHolder;
 import com.renovar.canteiro.io.works.domain.WorkRepository;
+import com.renovar.canteiro.io.shared.domain.CurrencyCode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.data.domain.Page;
@@ -93,6 +94,7 @@ public class ContractManagementService {
                 .orElseThrow(() -> new TenantResourceNotFoundException("Contract"));
         ChangeAuthorizationMode mode = accessAuthorizationService.requireChangeAuthorization(
                 AccessModule.CONTRACTS, ChangeOperation.UPDATE);
+        if (command.currency() != null) current.getCurrency().requireSame(command.currency());
         Contract proposed = current.updateProfile(command.contractIdentifier(), command.reference(), command.name(), command.status(), command.startedOn(),
                 command.expectedCompletionOn(), command.completedOn());
         if (mode == ChangeAuthorizationMode.REQUEST_APPROVAL) {
@@ -133,6 +135,7 @@ public class ContractManagementService {
         Contract current = contractRepository.findByIdAndCompanyId(changeRequest.getEntityId(), changeRequest.getCompanyId())
                 .orElseThrow(() -> new TenantResourceNotFoundException("Contract"));
         UpdateContractCommand command = updateFromProposal(changeRequest.getSnapshot().proposedData().values());
+        if (command.currency() != null) current.getCurrency().requireSame(command.currency());
         Contract saved = contractRepository.save(current.updateProfile(command.contractIdentifier(), command.reference(), command.name(), command.status(),
                 command.startedOn(), command.expectedCompletionOn(), command.completedOn()));
         auditEventRecorder.recordDirectAction(AuditModule.CONTRACTS, AuditAction.UPDATE, "Contract", saved.getId(),
@@ -147,8 +150,8 @@ public class ContractManagementService {
 
     private Contract persist(UUID companyId, CreateContractCommand command) {
         return contractRepository.save(Contract.create(
-                companyId, command.workId(), command.contractIdentifier(), command.reference(), command.name(), command.status(), command.startedOn(),
-                command.expectedCompletionOn(), command.completedOn()
+                companyId, command.workId(), command.contractIdentifier(), command.pricingMode(), command.reference(), command.name(), command.status(), command.startedOn(),
+                command.expectedCompletionOn(), command.completedOn(), command.currency()
         ));
     }
 
@@ -156,6 +159,8 @@ public class ContractManagementService {
         Map<String, Object> proposal = new HashMap<>();
         proposal.put("workId", command.workId().toString());
         proposal.put("contractIdentifier", command.contractIdentifier());
+        proposal.put("pricingMode", (command.pricingMode() == null ? com.renovar.canteiro.io.contracts.domain.ContractPricingMode.FIXED : command.pricingMode()).name());
+        proposal.put("currency", CurrencyCode.defaultIfAbsent(command.currency()).name());
         proposal.put("reference", command.reference());
         proposal.put("name", command.name());
         proposal.put("status", command.status().name());
@@ -167,6 +172,7 @@ public class ContractManagementService {
 
     private Map<String, Object> proposal(UpdateContractCommand command) {
         Map<String, Object> proposal = new HashMap<>();
+        proposal.put("currency", command.currency() == null ? null : command.currency().name());
         proposal.put("contractIdentifier", command.contractIdentifier());
         proposal.put("reference", command.reference()); proposal.put("name", command.name());
         proposal.put("status", command.status().name()); proposal.put("startedOn", dateValue(command.startedOn()));
@@ -179,26 +185,30 @@ public class ContractManagementService {
         return new CreateContractCommand(
                 UUID.fromString((String) proposal.get("workId")),
                 (String) proposal.get("contractIdentifier"),
+                com.renovar.canteiro.io.contracts.domain.ContractPricingMode.valueOf((String) proposal.getOrDefault("pricingMode", "FIXED")),
                 (String) proposal.get("reference"),
                 (String) proposal.get("name"),
                 ContractStatus.valueOf((String) proposal.get("status")),
                 date((String) proposal.get("startedOn")),
                 date((String) proposal.get("expectedCompletionOn")),
                 date((String) proposal.get("completedOn")),
-                null
+                null, CurrencyCode.valueOf((String) proposal.getOrDefault("currency", "BRL"))
         );
     }
 
     private UpdateContractCommand updateFromProposal(Map<String, Object> proposal) {
         return new UpdateContractCommand((String) proposal.get("contractIdentifier"), (String) proposal.get("reference"), (String) proposal.get("name"),
                 ContractStatus.valueOf((String) proposal.get("status")), date((String) proposal.get("startedOn")),
-                date((String) proposal.get("expectedCompletionOn")), date((String) proposal.get("completedOn")), null);
+                date((String) proposal.get("expectedCompletionOn")), date((String) proposal.get("completedOn")), null,
+                proposal.get("currency") == null ? null : CurrencyCode.valueOf((String) proposal.get("currency")));
     }
 
     private Map<String, Object> auditData(Contract contract) {
         Map<String, Object> values = new HashMap<>();
         values.put("workId", contract.getWorkId().toString());
         values.put("contractIdentifier", contract.getContractIdentifier());
+        values.put("pricingMode", contract.getPricingMode().name());
+        values.put("currency", contract.getCurrency().name());
         values.put("name", contract.getName());
         values.put("status", contract.getStatus().name());
         return values;

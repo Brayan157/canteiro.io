@@ -5,6 +5,7 @@ import com.renovar.canteiro.io.measurements.domain.MeasurementVersionStatus;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
 
 public record MeasurementVersionResponse(
@@ -15,13 +16,14 @@ public record MeasurementVersionResponse(
         int lockVersion,
         LocalDate externalAcceptanceOn,
         String externalAcceptanceNotes,
+        List<UUID> correctionItemIds,
         Instant createdAt,
         Instant updatedAt
 ) {
     public static MeasurementVersionResponse from(MeasurementVersion version) {
         return version == null ? null : new MeasurementVersionResponse(version.getId(), version.getVersionNumber(),
                 version.getPreviousVersionId(), version.getStatus(), version.getLockVersion(),
-                version.getExternalAcceptanceOn(), version.getExternalAcceptanceNotes(), version.getCreatedAt(),
-                version.getUpdatedAt());
+                version.getExternalAcceptanceOn(), version.getExternalAcceptanceNotes(), version.getCorrectionItemIds(),
+                version.getCreatedAt(), version.getUpdatedAt());
     }
 }

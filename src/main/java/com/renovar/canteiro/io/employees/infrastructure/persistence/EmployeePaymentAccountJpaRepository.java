@@ -6,4 +6,5 @@ import java.util.UUID;
 public interface EmployeePaymentAccountJpaRepository extends JpaRepository<EmployeePaymentAccountJpaEntity, UUID> {
     List<EmployeePaymentAccountJpaEntity> findByCompanyIdAndEmployeeIdAndActiveTrueOrderByCreatedAtAsc(UUID companyId, UUID employeeId);
     Optional<EmployeePaymentAccountJpaEntity> findByIdAndCompanyIdAndEmployeeId(UUID id, UUID companyId, UUID employeeId);
+    List<EmployeePaymentAccountJpaEntity> findByEncryptionKeyVersion(String encryptionKeyVersion);
 }
