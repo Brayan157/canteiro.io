@@ -217,6 +217,13 @@ Regras para escolher o perfil:
 | F06-12 | Pendente | Calcular resultado de caixa da Work e fluxo de caixa geral da Company. | F06-07, F06-10 | Sol xhigh |
 | F06-13 | Pendente | Testar EPI por obra, gasto empresa, impostos, lucro e fluxo de caixa. | F06-01 a F06-12 | Terra ultra |
 | F06-14 | Pendente | Revisar segregação Work/Company e fórmulas financeiras. | F06-01 a F06-13 | Sol ultra |
+| F06-22 | Pendente | Configurar por empresa dois limites decimais ordenados para a base oficial de margem gerencial da obra. Aplicar isolamento por tenant, alçada de edição, auditoria de alterações e controle de versão otimista. Expor a configuração usada e o motivo de indisponibilidade na consulta e no PDF. | Definição da base gerencial da obra | Terra alto |
+
+**Faixas de margem gerencial da obra aprovadas em 18/11/2026.** Com base coberta, receita-base positiva e limites configurados, resultado negativo indica prejuízo e resultado zero indica equilíbrio. Margem positiva abaixo do limite inferior é baixa, a partir do limite inferior e abaixo do superior é boa, e a partir do superior é alta. Os valores de 15% e 25% são exemplos. Cada empresa define seus limites. Sem configuração, cobertura suficiente ou receita-base positiva, a avaliação fica indisponível com motivo explícito. O relatório apresenta moeda, período, cobertura, receita-base, limites e referência da configuração usada. O escopo da obra inclui apenas gastos WORK e a avaliação usa a margem gerencial da obra.
+
+**Referência proposta para o histórico.** Usar a configuração vigente no momento da consulta e identificar a versão e a data da configuração na tela e no PDF. O período financeiro continua independente da data de referência da meta. A proposta não pressupõe vigência retroativa.
+
+**Dependências do agregado gerencial.** Definir a receita-base, seu fato e data de reconhecimento, e como correções entram no período. Definir competência ou consumo para custos e despesas WORK incorridos, inclusive títulos ainda a pagar. Definir o tratamento gerencial de retenções, tributos e créditos, com deduplicação pelo vínculo TaxObligation/Payable. Definir a cobertura mínima para reportar margem, inclusive quando o histórico tem fontes ou competências ausentes. O acumulado usa a mesma base do relatório por período. A configuração pode ser entregue antes do agregado assim que a base gerencial à qual se aplica estiver definida.
 
 **Gate da fase:** EPI pode pertencer apenas à obra; gasto geral não entra em lucro de obra; receitas vêm dos contratos; saldos de contrato permanecem independentes.
 
