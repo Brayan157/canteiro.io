@@ -10,6 +10,7 @@ import com.renovar.canteiro.io.access.domain.RolePermissionRepository;
 import com.renovar.canteiro.io.access.domain.RoleRepository;
 import com.renovar.canteiro.io.access.domain.UserRole;
 import com.renovar.canteiro.io.access.domain.UserRoleRepository;
+import com.renovar.canteiro.io.employees.domain.EmployeeRepository;
 import com.renovar.canteiro.io.identity.application.AccountActivationEmailSender;
 import com.renovar.canteiro.io.identity.application.AccountActivationProperties;
 import com.renovar.canteiro.io.identity.application.ActivationTokenGenerator;
@@ -61,6 +62,8 @@ public class CompanyAccessManagementService {
     private final RolePermissionRepository rolePermissionRepository;
     private final UserRoleRepository userRoleRepository;
     private final Clock clock;
+    private final OwnerOperationalPermissions ownerOperationalPermissions;
+    private final EmployeeRepository employeeRepository;
 
     @Transactional
     public CompanyEmployee createEmployee(CreateCompanyEmployeeCommand command) {
@@ -83,7 +86,7 @@ public class CompanyAccessManagementService {
                 employeeAuditData(employee),
                 Map.of()
         );
-        return new CompanyEmployee(employee, Set.of(), false);
+        return new CompanyEmployee(employee, Set.of(), false, null);
     }
 
     @Transactional(readOnly = true)
@@ -93,17 +96,21 @@ public class CompanyAccessManagementService {
         return companyUserRepository.findByCompanyId(companyId, pageable).map(companyUser -> {
             User user = userRepository.findById(companyUser.getUserId())
                     .orElseThrow(() -> new IllegalStateException("Company user must reference an existing user"));
-            return new CompanyEmployee(user, activeRoleIds(user.getId(), companyId), companyUser.isCompanyOwner());
+            return toCompanyEmployee(companyUser, user);
         });
     }
 
     @Transactional(readOnly = true)
     public CompanyEmployee findEmployee(UUID userId) {
         requireUsersRead();
-        UUID companyId = currentCompanyId();
         CompanyUser companyUser = findCompanyUserMembership(userId);
-        User user = findUser(companyUser);
-        return new CompanyEmployee(user, activeRoleIds(user.getId(), companyId), companyUser.isCompanyOwner());
+        return toCompanyEmployee(companyUser, findUser(companyUser));
+    }
+
+    private CompanyEmployee toCompanyEmployee(CompanyUser membership, User user) {
+        UUID companyId = membership.getCompanyId();
+        String displayName = employeeRepository.findFullNameByUserIdAndCompanyId(user.getId(), companyId).orElse(null);
+        return new CompanyEmployee(user, activeRoleIds(user.getId(), companyId), membership.isCompanyOwner(), displayName);
     }
 
     @Transactional
@@ -270,7 +277,10 @@ public class CompanyAccessManagementService {
     @Transactional(readOnly = true)
     public Set<UUID> findRolePermissionIds(UUID roleId) {
         requireRolesRead();
-        return activePermissionIds(findCurrentCompanyRole(roleId).getId());
+        Role role = findCurrentCompanyRole(roleId);
+        Set<UUID> permissionIds = new HashSet<>(activePermissionIds(role.getId()));
+        ownerOperationalPermissions.forRole(role).map(Permission::getId).forEach(permissionIds::add);
+        return Set.copyOf(permissionIds);
     }
 
     private void createActivationAndSendEmail(User employee) {

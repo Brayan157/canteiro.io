@@ -55,6 +55,7 @@ public class InvoiceRegistrationService {
     private final CalculateContractBillingBalanceUseCase calculateContractBillingBalanceUseCase;
     private final ChangeRequestService changeRequestService;
     private final AuditEventRecorder auditEventRecorder;
+    private final CaptureInvoiceFinancialSnapshotService financialSnapshots;
 
     @Transactional
     public InvoiceRegistrationResult register(CreateRegisteredInvoiceCommand command) {
@@ -90,7 +91,7 @@ public class InvoiceRegistrationService {
     }
 
     private Registration persistRegistered(UUID companyId, CreateRegisteredInvoiceCommand command) {
-        contractRepository.findByIdAndCompanyIdWithBillingLock(command.contractId(), companyId)
+        var lockedContract = contractRepository.findByIdAndCompanyIdWithBillingLock(command.contractId(), companyId)
                 .orElseThrow(() -> new TenantResourceNotFoundException("Contract"));
         // Resolve status, chain and capacity only after acquiring the billing aggregate lock.
         // A pre-lock allocation snapshot can become cancelled while waiting for another writer.
@@ -105,6 +106,7 @@ public class InvoiceRegistrationService {
                 companyId, invoice.getId(), command.contractId(), item.allocation().getId(),
                 item.allocation().getContractServiceId(), item.description(), item.allocatedAmount()
         ))).toList();
+        financialSnapshots.capture(lockedContract, invoice);
         return new Registration(invoice, savedItems);
     }
 
@@ -144,7 +146,9 @@ public class InvoiceRegistrationService {
             if (allocation.getStatus() != BillingAllocationStatus.ACTIVE) {
                 throw new IllegalStateException("Only active billing allocations can be included in an invoice");
             }
-            BigDecimal amount = nonZero(item.allocatedAmount());
+            BigDecimal amount;
+            try{amount=nonZero(item.allocatedAmount().setScale(2,RoundingMode.UNNECESSARY));}
+            catch(ArithmeticException e){throw new IllegalArgumentException("Invoice amount must be exact to cents");}
             if (amount.signum() != allocation.getAllocatedAmount().signum()) {
                 throw new IllegalArgumentException("Invoice item amount must preserve the billing allocation sign");
             }
@@ -153,6 +157,20 @@ public class InvoiceRegistrationService {
         if (sum(resolvedItems.stream().map(ResolvedInvoiceItem::allocatedAmount).toList()).signum() <= 0) {
             throw new IllegalArgumentException("Registered invoice total amount must be positive");
         }
+        if(command.documentTotalAmount()!=null){
+            BigDecimal declared;
+            try{declared=command.documentTotalAmount().setScale(2,RoundingMode.UNNECESSARY);}
+            catch(ArithmeticException e){throw new IllegalArgumentException("Document amount must be exact to cents");}
+            if(declared.signum()<=0)throw new IllegalArgumentException("Document amount must be positive");
+            if(declared.compareTo(sum(resolvedItems.stream().map(ResolvedInvoiceItem::allocatedAmount).toList()))!=0)
+                throw new com.renovar.canteiro.io.receivables.domain.InvoiceServiceCoverageViolation("INVOICE_DOCUMENT_TOTAL_MISMATCH");
+        }
+        Set<UUID> selectedCharges=resolvedItems.stream().map(i->i.allocation().getBillingInstallmentId()).collect(Collectors.toSet());
+        var scope=allocations.values().stream().filter(a->selectedCharges.contains(a.getBillingInstallmentId())).toList();
+        var documented=invoiceItemRepository.registeredAmountsByBillingAllocationIdsAndCompanyId(scope.stream().map(BillingAllocation::getId).toList(),companyId);
+        var groups=com.renovar.canteiro.io.receivables.domain.InvoiceServiceCoverage.groups(companyId,command.contractId(),scope,documented);
+        com.renovar.canteiro.io.receivables.domain.InvoiceServiceCoverage.requireCompleteSelection(groups,resolvedItems.stream()
+                .collect(Collectors.toMap(i->i.allocation().getId(),ResolvedInvoiceItem::allocatedAmount)));
         return validateCapacity ? validateCapacity(resolvedItems, companyId) : resolvedItems;
     }
 
@@ -207,6 +225,7 @@ public class InvoiceRegistrationService {
         Map<String, Object> proposal = new LinkedHashMap<>();
         proposal.put("contractId", command.contractId().toString());
         proposal.put("number", command.number());
+        if(command.documentTotalAmount()!=null)proposal.put("documentTotalAmount",command.documentTotalAmount().toPlainString());
         proposal.put("series", command.series());
         proposal.put("accessKey", command.accessKey());
         proposal.put("issuedOn", command.issuedOn().toString());
@@ -237,7 +256,8 @@ public class InvoiceRegistrationService {
                 (String) proposal.get("accessKey"),
                 LocalDate.parse((String) proposal.get("issuedOn")),
                 items,
-                null
+                null,
+                proposal.get("documentTotalAmount")==null?null:new BigDecimal((String)proposal.get("documentTotalAmount"))
         );
     }
 

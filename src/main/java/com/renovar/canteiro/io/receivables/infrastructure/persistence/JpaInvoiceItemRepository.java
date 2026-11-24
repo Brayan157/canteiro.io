@@ -14,6 +14,12 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class JpaInvoiceItemRepository implements InvoiceItemRepository {
 
+    @Override public java.util.Map<UUID,BigDecimal> registeredAmountsByBillingAllocationIdsAndCompanyId(java.util.Collection<UUID> ids,UUID company){
+        var result=new java.util.HashMap<UUID,BigDecimal>();ids.forEach(id->result.put(id,BigDecimal.ZERO.setScale(2)));
+        if(!ids.isEmpty())invoiceItemJpaRepository.registeredAmounts(company,ids).forEach(v->result.put(v.getAllocationId(),v.getAmount()));
+        return java.util.Map.copyOf(result);
+    }
+
     private final InvoiceItemJpaRepository invoiceItemJpaRepository;
 
     @Override

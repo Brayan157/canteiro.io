@@ -22,6 +22,8 @@ public class SetContractDiscountUseCase {
     private final ContractDiscountRepository contractDiscountRepository;
     private final ContractServiceRepository contractServiceRepository;
     private final ApprovedContractBillingAmountProvider approvedContractBillingAmountProvider;
+    private final ContractDiscountRestrictionProvider discountRestrictions;
+    private final ContractMeasurementAdjustmentAmountProvider measurementAdjustments;
 
     @Transactional
     public ContractDiscount set(UUID companyId, UUID contractId, DiscountType discountType, BigDecimal discountValue) {
@@ -29,14 +31,17 @@ public class SetContractDiscountUseCase {
                 .orElseThrow(() -> new TenantResourceNotFoundException("Contract"));
         ContractDiscount discount = ContractDiscount.create(companyId, contractId, discountType, discountValue);
         var proposedAmount = ContractNetAmountCalculator.calculate(
-                contractServiceRepository.findByContractIdAndCompanyId(contractId, companyId), discount
+                contractServiceRepository.findByContractIdAndCompanyId(contractId, companyId), discount, measurementAdjustments.approvedAmount(companyId, contractId)
         );
+        discountRestrictions.lockInputs(companyId, contractId);
+        String reason = discountRestrictions.restriction(companyId, contractId, proposedAmount.netAmount(), true);
+        if (reason != null) ContractLifecycleService.reject(reason);
         BigDecimal approvedAmount = approvedContractBillingAmountProvider.approvedNetAmount(companyId, contractId);
         if (proposedAmount.netAmount().compareTo(approvedAmount) < 0) {
             throw new IllegalStateException("Contract net amount must not be lower than its approved billing amount");
         }
         if (proposedAmount.contractDiscountAmount().compareTo(approvedContractBillingAmountProvider.approvedDiscountAmount(companyId, contractId)) < 0) {
-            throw new IllegalStateException("Contract discount must cover its active negative billing allocations");
+            throw new IllegalStateException("Contract discount must cover its active legacy and net billing discount commitments");
         }
         return contractDiscountRepository.save(discount);
     }

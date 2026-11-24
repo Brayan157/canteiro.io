@@ -54,20 +54,28 @@ public class ContractController {
 
     private final ContractManagementService contractManagementService;
     private final ContractServiceManagementService contractServiceManagementService;
+    private final com.renovar.canteiro.io.contracts.application.GetContractClosureEligibilityUseCase closureEligibility;
+    private final com.renovar.canteiro.io.contracts.application.GetContractDetailsUseCase contractDetails;
 
     private static final Set<String> SORT_FIELDS = Set.of(
-            "name", "reference", "status", "startedOn", "expectedCompletionOn", "completedOn", "createdAt", "updatedAt"
+            "name", "reference", "status", "startedOn", "expectedCompletionOn", "completedOn", "createdAt", "updatedAt",
+            "openFirst"
     );
 
     @GetMapping
     @Operation(summary = "Lists contracts in the authenticated company")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Paginated contract list", useReturnTypeSchema = true),
+            @ApiResponse(responseCode = "400", ref = "#/components/responses/ProblemDetail"),
             @ApiResponse(responseCode = "403", ref = "#/components/responses/ProblemDetail")
     })
     public PageResponse<ContractResponse> findAll(
             @RequestParam(required = false) Integer page,
             @RequestParam(required = false) Integer size,
+            @io.swagger.v3.oas.annotations.Parameter(description = "Repeatable field,asc or field,desc. Fields: "
+                    + "name, reference, status, startedOn, expectedCompletionOn, completedOn, createdAt, updatedAt, openFirst. "
+                    + "openFirst,asc puts OPEN and ACTIVE first before pagination; desc reverses those groups. "
+                    + "Within each group, explicit sorts apply first, followed by createdAt descending and id ascending.")
             @RequestParam(required = false) List<String> sort,
             @RequestParam(required = false) String name,
             @RequestParam(required = false) String reference,
@@ -92,13 +100,15 @@ public class ContractController {
     }
 
     @PostMapping
-    @Operation(summary = "Creates a contract without requiring services")
+    @Operation(summary = "Creates a contract without requiring services",
+            description = "A duplicate reference within the work returns 409 with reason CONTRACT_REFERENCE_ALREADY_EXISTS and a reference field violation. Approval revalidates the reference.")
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "Contract created", content = @Content(schema = @Schema(implementation = ContractChangeResponse.class))),
             @ApiResponse(responseCode = "202", description = "Contract creation submitted for approval", content = @Content(schema = @Schema(implementation = ContractChangeResponse.class))),
             @ApiResponse(responseCode = "400", ref = "#/components/responses/ProblemDetail"),
             @ApiResponse(responseCode = "403", ref = "#/components/responses/ProblemDetail"),
-            @ApiResponse(responseCode = "404", ref = "#/components/responses/ProblemDetail")
+            @ApiResponse(responseCode = "404", ref = "#/components/responses/ProblemDetail"),
+            @ApiResponse(responseCode = "409", ref = "#/components/responses/ProblemDetail")
     })
     public ResponseEntity<ContractChangeResponse> create(@Valid @RequestBody CreateContractRequest request) {
         var result = contractManagementService.create(new CreateContractCommand(
@@ -122,11 +132,12 @@ public class ContractController {
             @ApiResponse(responseCode = "404", ref = "#/components/responses/ProblemDetail")
     })
     public ContractResponse find(@PathVariable UUID contractId) {
-        return toResponse(contractManagementService.find(contractId));
+        var details = contractDetails.find(contractId);
+        return toResponse(details.contract(), details.hasActiveContractDiscount());
     }
 
     @PutMapping("/{contractId}")
-    @Operation(summary = "Updates a contract while preserving its work relationship")
+    @Operation(summary = "Updates a contract while preserving its work relationship", description = "Lifecycle guards also apply here: completion requires all services terminal and eligible; cancellation requires CANCEL authorization and all services cancelled without live commitments. Prefer the dedicated status route to avoid profile snapshots. 202 is only a proposal; approval revalidates. A changed reference already used in the work returns 409 with reason CONTRACT_REFERENCE_ALREADY_EXISTS and a reference field violation.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Contract updated", content = @Content(schema = @Schema(implementation = ContractChangeResponse.class))),
             @ApiResponse(responseCode = "409", ref = "#/components/responses/ProblemDetail"),
@@ -142,6 +153,47 @@ public class ContractController {
         ContractResponse contract = result.contract() == null ? null : toResponse(result.contract());
         return ResponseEntity.status(contract == null ? HttpStatus.ACCEPTED : HttpStatus.OK).body(new ContractChangeResponse(contract,
                 result.changeRequest() == null ? null : result.changeRequest().getId(), result.mode()));
+    }
+
+    @PutMapping("/{contractId}/status")
+    @Operation(summary = "Changes only the contract status and optional completion date",
+            description = "Reads current profile under the contract lock; never requires client financial/profile snapshots. UPDATE authorization for completion/reopening, CANCEL for cancellation. Same lifecycle decisions as closure-eligibility; invalid transition gives409 with controlled reason. 202 stores only status intent, no official change; approval rereads current profile and revalidates. completedOn omitted/null preserves its current value, never automatically cleared or invented.")
+    @ApiResponses({@ApiResponse(responseCode = "200", content = @Content(schema = @Schema(implementation = ContractChangeResponse.class))),
+            @ApiResponse(responseCode = "202", content = @Content(schema = @Schema(implementation = ContractChangeResponse.class))),
+            @ApiResponse(responseCode = "400", ref = "#/components/responses/ProblemDetail"), @ApiResponse(responseCode = "403", ref = "#/components/responses/ProblemDetail"),
+            @ApiResponse(responseCode = "404", ref = "#/components/responses/ProblemDetail"), @ApiResponse(responseCode = "409", ref = "#/components/responses/ProblemDetail")})
+    public ResponseEntity<ContractChangeResponse> updateStatus(@PathVariable UUID contractId,
+            @Valid @RequestBody com.renovar.canteiro.io.contracts.api.request.UpdateContractStatusRequest request) {
+        var result = contractManagementService.updateStatus(contractId, request.status(), request.completedOn(), request.justification());
+        if (result.changeRequest() != null) return ResponseEntity.accepted().body(new ContractChangeResponse(null,result.changeRequest().getId(),result.mode()));
+        return ResponseEntity.ok(new ContractChangeResponse(toResponse(result.contract()),null,result.mode()));
+    }
+
+    @PutMapping("/{contractId}/services/{serviceId}/status")
+    @Operation(summary = "Changes only the contract service status",
+            description = "Reads current name, price, quantity and discounts under lock. UPDATE for completion/reactivation, CANCEL for cancellation. Completion requires exact proven settlement of the official commercial net value, including registered item withholding; credit/unknown legacy require reconciliation. No cascade or inferred receipt. 202 stores only status intent; approval preserves the profile current at application. Same controlled409 reasons as closure-eligibility.")
+    @ApiResponses({@ApiResponse(responseCode = "200", content = @Content(schema = @Schema(implementation = ContractServiceChangeResponse.class))),
+            @ApiResponse(responseCode = "202", content = @Content(schema = @Schema(implementation = ContractServiceChangeResponse.class))),
+            @ApiResponse(responseCode = "400", ref = "#/components/responses/ProblemDetail"), @ApiResponse(responseCode = "403", ref = "#/components/responses/ProblemDetail"),
+            @ApiResponse(responseCode = "404", ref = "#/components/responses/ProblemDetail"), @ApiResponse(responseCode = "409", ref = "#/components/responses/ProblemDetail")})
+    public ResponseEntity<ContractServiceChangeResponse> updateServiceStatus(@PathVariable UUID contractId, @PathVariable UUID serviceId,
+            @Valid @RequestBody com.renovar.canteiro.io.contracts.api.request.UpdateContractServiceStatusRequest request) {
+        return serviceResponse(contractServiceManagementService.updateStatus(contractId,serviceId,request.status(),request.justification()), HttpStatus.OK);
+    }
+
+    @GetMapping("/{contractId}/closure-eligibility")
+    @Operation(summary = "Gets official contract and service lifecycle eligibility",
+            description = "Requires CONTRACTS.READ and SERVICES.READ, session tenant only. Summary considers ALL services before optional serviceId filtering and paging. Fixed service order name,id ascending; page>=0,size1..100. serviceId must belong to this contract and tenant. Financial decisions require BILLING.READ, RECEIVABLES.READ and INVOICES.READ; otherwise financial eligibility is null with CLOSURE_FINANCIAL_READ_REQUIRED, never fabricated false/zero. No amounts, financial IDs or private history are exposed. Completion uses UPDATE authorization; cancellation uses CANCEL, with effective DIRECT or REQUEST_APPROVAL. DRAFT/ACTIVE services prevent contract completion; cancellation requires all services CANCELLED and no live financial commitments. Empty contracts are allowed. COMPLETED/FINALIZED share the completion guard. Services require exact cash plus proven withholding covering their official net commercial value; credit and unproven legacy require reconciliation, zero value without commitments can complete. No mutation/reservation; existing PUT/approval revalidate under locks and preserve discounts/history. Closed contracts must be explicitly reopened before creating/reactivating services or adding measurement composition.")
+    @ApiResponses({@ApiResponse(responseCode = "200", useReturnTypeSchema = true),
+            @ApiResponse(responseCode = "400", ref = "#/components/responses/ProblemDetail"),
+            @ApiResponse(responseCode = "401", ref = "#/components/responses/ProblemDetail"),
+            @ApiResponse(responseCode = "403", ref = "#/components/responses/ProblemDetail"),
+            @ApiResponse(responseCode = "404", ref = "#/components/responses/ProblemDetail")})
+    public ResponseEntity<com.renovar.canteiro.io.contracts.api.response.ContractClosureEligibilityResponse> closureEligibility(@PathVariable UUID contractId,
+            @RequestParam(required = false) UUID serviceId, @RequestParam(required = false) Integer page, @RequestParam(required = false) Integer size) {
+        return ResponseEntity.ok().cacheControl(org.springframework.http.CacheControl.noStore())
+                .body(com.renovar.canteiro.io.contracts.api.response.ContractClosureEligibilityResponse.from(
+                        closureEligibility.get(contractId, serviceId, new PageQuery(page, size, null).toPageable(Set.of()))));
     }
 
     @GetMapping("/{contractId}/services")
@@ -173,7 +225,8 @@ public class ContractController {
     }
 
     @PutMapping("/{contractId}/services/{serviceId}")
-    @Operation(summary = "Updates a service without changing its contract relationship")
+    @Operation(summary = "Updates a service without changing its contract relationship",
+            description = "Completion requires exact proven financial settlement; cancellation requires CANCEL authorization and no live commitments, with reason codes matching closure-eligibility. Prefer the status-only route. Operational updates, including COMPLETED status, preserve the current service discount when discountType/discountValue are omitted or both null. Approval preserves the discount current at application time. An explicit equal pair is accepted as an echo; a different pair returns409 Problem Details with reason SERVICE_DISCOUNT_CHANGE_REQUIRES_DEDICATED_OPERATION. Use dedicated DISCOUNTS operations for changes/reversals. No implicit reversal, tenant from session, existing billing limits and approval apply.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Service updated", content = @Content(schema = @Schema(implementation = ContractServiceChangeResponse.class))),
             @ApiResponse(responseCode = "202", description = "Service update submitted for approval", content = @Content(schema = @Schema(implementation = ContractServiceChangeResponse.class))),
@@ -188,7 +241,7 @@ public class ContractController {
     }
 
     @PutMapping("/{contractId}/services/{serviceId}/discount")
-    @Operation(summary = "Applies or changes the discount of one contract service")
+    @Operation(summary = "Applies or changes the discount of one contract service", description = "New discount is blocked by an official open charge of this contract even without an invoice (CONTRACT_HAS_OPEN_CHARGES). Contract net must cover confirmed cash net of reversals (CONTRACT_NET_BELOW_RECEIVED_AMOUNT), plus all existing approved billing/base/discount commitments. Checks precede 202 and repeat at approval under locks; never count withholding or credit as cash.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Service discount updated", content = @Content(schema = @Schema(implementation = ContractServiceChangeResponse.class))),
             @ApiResponse(responseCode = "202", description = "Service discount submitted for approval", content = @Content(schema = @Schema(implementation = ContractServiceChangeResponse.class))),
@@ -219,7 +272,7 @@ public class ContractController {
     }
 
     @PutMapping("/{contractId}/discount")
-    @Operation(summary = "Applies or changes the contract-level adjustment without altering its services")
+    @Operation(summary = "Applies or changes the contract-level adjustment without altering its services", description = "CONTRACT_HAS_OPEN_CHARGES blocks discount while any non-cancelled official title has positive outstanding balance, even without an invoice; raw installment OPEN is not the source. CONTRACT_NET_BELOW_RECEIVED_AMOUNT protects confirmed cash net of reversals. Approved billing, origin capacity and discount commitments remain additional stricter limits. Validated before 202 and at approval under locks; no financial effect until applied.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Contract adjustment updated", content = @Content(schema = @Schema(implementation = ContractServiceChangeResponse.class))),
             @ApiResponse(responseCode = "202", description = "Contract adjustment submitted for approval", content = @Content(schema = @Schema(implementation = ContractServiceChangeResponse.class))),
@@ -277,9 +330,13 @@ public class ContractController {
     private String decimalString(BigDecimal value, int scale) { return value.setScale(scale, RoundingMode.HALF_UP).toPlainString(); }
 
     private ContractResponse toResponse(Contract contract) {
+        return toResponse(contract, null);
+    }
+
+    private ContractResponse toResponse(Contract contract, Boolean hasActiveDiscount) {
         return new ContractResponse(
                 contract.getId(), contract.getWorkId(), contract.getContractIdentifier(), contract.getPricingMode(), contract.getReference(), contract.getName(), contract.getStatus(),
-                contract.getStartedOn(), contract.getExpectedCompletionOn(), contract.getCompletedOn(), contract.getCurrency()
+                contract.getStartedOn(), contract.getExpectedCompletionOn(), contract.getCompletedOn(), contract.getCurrency(), hasActiveDiscount
         );
     }
 }

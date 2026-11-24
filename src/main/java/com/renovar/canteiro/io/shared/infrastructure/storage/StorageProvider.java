@@ -6,5 +6,9 @@ public interface StorageProvider {
 
     byte[] load(String storageKey);
 
+    default java.io.InputStream openStream(String storageKey) {
+        return new java.io.ByteArrayInputStream(load(storageKey));
+    }
+
     void delete(String storageKey);
 }

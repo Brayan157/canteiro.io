@@ -18,6 +18,8 @@ public final class BillingAllocation {
     private final UUID measurementContractCompositionId;
     private final BillingAllocationType type;
     private final BigDecimal allocatedAmount;
+    private final BigDecimal netBillingGrossAmount;
+    private final BigDecimal netBillingDiscountAmount;
     private final BillingAllocationStatus status;
     private final Instant createdAt;
     private final Instant updatedAt;
@@ -26,6 +28,14 @@ public final class BillingAllocation {
                               UUID contractServiceId, UUID measurementContractCompositionId, BillingAllocationType type, BigDecimal allocatedAmount,
                               BillingAllocationStatus status,
                               Instant createdAt, Instant updatedAt) {
+        this(id, companyId, billingInstallmentId, contractId, contractServiceId, measurementContractCompositionId,
+                type, allocatedAmount, status, createdAt, updatedAt, null, null);
+    }
+
+    private BillingAllocation(UUID id, UUID companyId, UUID billingInstallmentId, UUID contractId,
+                              UUID contractServiceId, UUID measurementContractCompositionId, BillingAllocationType type,
+                              BigDecimal allocatedAmount, BillingAllocationStatus status, Instant createdAt, Instant updatedAt,
+                              BigDecimal netBillingGrossAmount, BigDecimal netBillingDiscountAmount) {
         this.id = id;
         this.companyId = require(companyId, "Billing allocation company is required");
         this.billingInstallmentId = require(billingInstallmentId, "Billing allocation installment is required");
@@ -34,6 +44,16 @@ public final class BillingAllocation {
         this.contractServiceId = validateService(type, contractServiceId);
         this.measurementContractCompositionId = validateComposition(type, measurementContractCompositionId);
         this.allocatedAmount = validateAmount(type, allocatedAmount);
+        if ((netBillingGrossAmount == null) != (netBillingDiscountAmount == null)) {
+            throw new IllegalArgumentException("Net billing gross and discount basis must be provided together");
+        }
+        this.netBillingGrossAmount = netBillingGrossAmount == null ? null : netBillingGrossAmount.setScale(2, RoundingMode.UNNECESSARY);
+        this.netBillingDiscountAmount = netBillingDiscountAmount == null ? null : netBillingDiscountAmount.setScale(2, RoundingMode.UNNECESSARY);
+        if (this.netBillingGrossAmount != null && (type != BillingAllocationType.SERVICE
+                || this.netBillingDiscountAmount.signum() < 0
+                || this.netBillingGrossAmount.subtract(this.netBillingDiscountAmount).compareTo(this.allocatedAmount) != 0)) {
+            throw new IllegalArgumentException("Net billing basis must equal the positive net amount plus its contract discount");
+        }
         this.status = require(status, "Billing allocation status is required");
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
@@ -62,6 +82,30 @@ public final class BillingAllocation {
                 null, BillingAllocationType.CONTRACT_DISCOUNT, allocatedAmount, BillingAllocationStatus.DRAFT, null, null);
     }
 
+    public static BillingAllocation createNetService(UUID companyId, UUID installmentId, UUID contractId,
+            UUID serviceId, UUID compositionId, BigDecimal netAmount, BigDecimal grossAmount, BigDecimal discountAmount) {
+        return new BillingAllocation(null, companyId, installmentId, contractId, serviceId, compositionId,
+                BillingAllocationType.SERVICE, require(netAmount, "Net billing amount is required").setScale(2, RoundingMode.UNNECESSARY), BillingAllocationStatus.DRAFT, null, null,
+                require(grossAmount, "Net billing gross basis is required"), require(discountAmount, "Net billing discount basis is required"));
+    }
+
+    /** Gross contractual capacity consumed; allocatedAmount remains the actual invoice/receivable amount. */
+    public BigDecimal getCapacityAmount() {
+        return type != BillingAllocationType.SERVICE ? BigDecimal.ZERO.setScale(2)
+                : netBillingGrossAmount == null ? allocatedAmount : netBillingGrossAmount;
+    }
+
+    public BigDecimal getAppliedContractDiscountAmount() {
+        return netBillingDiscountAmount == null ? BigDecimal.ZERO.setScale(2) : netBillingDiscountAmount;
+    }
+
+    public static BillingAllocation rehydrateNet(UUID id, UUID companyId, UUID installmentId, UUID contractId,
+            UUID serviceId, UUID compositionId, BillingAllocationType type, BigDecimal amount, BillingAllocationStatus status,
+            Instant createdAt, Instant updatedAt, BigDecimal grossAmount, BigDecimal discountAmount) {
+        return new BillingAllocation(id, companyId, installmentId, contractId, serviceId, compositionId, type,
+                amount, status, createdAt, updatedAt, grossAmount, discountAmount);
+    }
+
     public static BillingAllocation rehydrate(UUID id, UUID companyId, UUID billingInstallmentId, UUID contractId,
                                               UUID contractServiceId, UUID measurementContractCompositionId, BillingAllocationType type, BigDecimal allocatedAmount,
                                               BillingAllocationStatus status, Instant createdAt, Instant updatedAt) {
@@ -85,13 +129,13 @@ public final class BillingAllocation {
             throw new IllegalStateException("Only draft billing allocations can be activated");
         }
         return new BillingAllocation(id, companyId, billingInstallmentId, contractId, contractServiceId, measurementContractCompositionId, type,
-                allocatedAmount, BillingAllocationStatus.ACTIVE, createdAt, updatedAt);
+                allocatedAmount, BillingAllocationStatus.ACTIVE, createdAt, updatedAt, netBillingGrossAmount, netBillingDiscountAmount);
     }
 
     public BillingAllocation cancel() {
         if (status == BillingAllocationStatus.CANCELLED) return this;
         return new BillingAllocation(id, companyId, billingInstallmentId, contractId, contractServiceId, measurementContractCompositionId, type,
-                allocatedAmount, BillingAllocationStatus.CANCELLED, createdAt, updatedAt);
+                allocatedAmount, BillingAllocationStatus.CANCELLED, createdAt, updatedAt, netBillingGrossAmount, netBillingDiscountAmount);
     }
 
     private static UUID validateService(BillingAllocationType type, UUID contractServiceId) {

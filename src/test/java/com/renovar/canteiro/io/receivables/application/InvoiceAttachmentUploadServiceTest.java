@@ -10,6 +10,7 @@ import com.renovar.canteiro.io.receivables.domain.InvoiceAttachmentType;
 import com.renovar.canteiro.io.receivables.domain.InvoiceRepository;
 import com.renovar.canteiro.io.receivables.domain.InvoiceStatus;
 import com.renovar.canteiro.io.shared.infrastructure.storage.StorageProvider;
+import com.renovar.canteiro.io.shared.api.error.ApiException;
 import com.renovar.canteiro.io.tenancy.application.TenantContextHolder;
 import com.renovar.canteiro.io.tenancy.domain.TenantContext;
 import org.junit.jupiter.api.Test;
@@ -17,6 +18,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -41,14 +44,14 @@ class InvoiceAttachmentUploadServiceTest {
     @Mock private AuditEventRecorder auditEventRecorder;
 
     @Test
-    void storesPdfMetadataAndAuditsItsUpload() {
+    void storesPdfMetadataAndAuditsItsUpload() throws java.io.IOException {
         UUID companyId = UUID.randomUUID();
         UUID invoiceId = UUID.randomUUID();
         UUID contractId = UUID.randomUUID();
         UUID userId = UUID.randomUUID();
         when(tenantContextHolder.requireCurrentTenant()).thenReturn(new TenantContext(userId, companyId));
         when(authorizationService.requireChangeAuthorization(any(), any())).thenReturn(ChangeAuthorizationMode.DIRECT);
-        when(invoiceRepository.findByIdAndCompanyId(invoiceId, companyId)).thenReturn(Optional.of(Invoice.rehydrate(
+        when(invoiceRepository.findByIdAndCompanyIdWithLock(invoiceId, companyId)).thenReturn(Optional.of(Invoice.rehydrate(
                 invoiceId, companyId, contractId, "NF-1", null, null, LocalDate.now(), new BigDecimal("1.00"),
                 InvoiceStatus.REGISTERED, Instant.now(), Instant.now())));
         when(attachmentRepository.save(any())).thenAnswer(invocation -> {
@@ -58,8 +61,16 @@ class InvoiceAttachmentUploadServiceTest {
                     value.getContentSize(), value.getSha256(), value.getStorageKey(), value.getUploadedByUserId(), Instant.now());
         });
 
-        InvoiceAttachment attachment = service().upload(new UploadInvoiceAttachmentCommand(invoiceId,
-                InvoiceAttachmentType.PDF, "../nota.pdf", "application/pdf", new byte[]{1, 2, 3}));
+        InvoiceAttachment attachment;
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            attachment = service().upload(new UploadInvoiceAttachmentCommand(invoiceId,
+                    InvoiceAttachmentType.PDF, "../nota.pdf", "application/pdf", validPdf()));
+            TransactionSynchronizationManager.getSynchronizations()
+                    .forEach(sync -> sync.afterCompletion(TransactionSynchronization.STATUS_COMMITTED));
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
 
         assertEquals("nota.pdf", attachment.getOriginalFilename());
         assertEquals(InvoiceAttachmentType.PDF, attachment.getAttachmentType());
@@ -75,15 +86,24 @@ class InvoiceAttachmentUploadServiceTest {
         UUID invoiceId = UUID.randomUUID();
         when(tenantContextHolder.requireCurrentTenant()).thenReturn(new TenantContext(UUID.randomUUID(), companyId));
         when(authorizationService.requireChangeAuthorization(any(), any())).thenReturn(ChangeAuthorizationMode.DIRECT);
-        when(invoiceRepository.findByIdAndCompanyId(invoiceId, companyId)).thenReturn(Optional.of(Invoice.rehydrate(
+        when(invoiceRepository.findByIdAndCompanyIdWithLock(invoiceId, companyId)).thenReturn(Optional.of(Invoice.rehydrate(
                 invoiceId, companyId, UUID.randomUUID(), "NF-2", null, null, LocalDate.now(), new BigDecimal("1.00"),
                 InvoiceStatus.REGISTERED, Instant.now(), Instant.now())));
-        assertThrows(IllegalArgumentException.class, () -> service().upload(new UploadInvoiceAttachmentCommand(invoiceId,
+        var error = assertThrows(ApiException.class, () -> service().upload(new UploadInvoiceAttachmentCommand(invoiceId,
                 InvoiceAttachmentType.XML, "nota.pdf", "application/pdf", new byte[]{1})));
+        assertEquals("INVOICE_ATTACHMENT_PDF_REQUIRED", error.getReason());
     }
 
     private InvoiceAttachmentUploadService service() {
         return new InvoiceAttachmentUploadService(tenantContextHolder, authorizationService, invoiceRepository,
                 attachmentRepository, storageProvider, auditEventRecorder);
+    }
+
+    private byte[] validPdf() throws java.io.IOException {
+        try (var document = new org.apache.pdfbox.pdmodel.PDDocument(); var output = new java.io.ByteArrayOutputStream()) {
+            document.addPage(new org.apache.pdfbox.pdmodel.PDPage());
+            document.save(output);
+            return output.toByteArray();
+        }
     }
 }

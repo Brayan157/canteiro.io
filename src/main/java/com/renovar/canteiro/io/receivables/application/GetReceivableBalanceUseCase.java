@@ -14,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.UUID;
 
 @Service
@@ -25,6 +26,7 @@ public class GetReceivableBalanceUseCase {
     private final ReceivableRepository receivableRepository;
     private final CalculateReceivableBalanceUseCase calculateReceivableBalanceUseCase;
     private final Clock clock;
+    private final ReceivableSettlementCreationPolicy creationPolicy;
 
     @Transactional(readOnly = true)
     public ReceivableBalanceSnapshot get(UUID receivableId) {
@@ -34,5 +36,17 @@ public class GetReceivableBalanceUseCase {
                 .orElseThrow(() -> new TenantResourceNotFoundException("Receivable"));
         ReceivableBalance balance = calculateReceivableBalanceUseCase.calculate(companyId, receivableId);
         return new ReceivableBalanceSnapshot(receivable, balance, balance.statusOn(receivable, LocalDate.now(clock)));
+    }
+
+    public LocalDate maximumReceivedOn() {
+        return LocalDate.now(clock.withZone(ZoneOffset.UTC));
+    }
+
+    public boolean settlementCreationAvailable() {
+        return creationPolicy.isAvailable();
+    }
+
+    public String settlementCreationBlockReason() {
+        return creationPolicy.blockReason();
     }
 }

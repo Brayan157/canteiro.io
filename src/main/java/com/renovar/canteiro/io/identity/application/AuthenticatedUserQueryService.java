@@ -1,5 +1,6 @@
 package com.renovar.canteiro.io.identity.application;
 
+import com.renovar.canteiro.io.access.application.OwnerOperationalPermissions;
 import com.renovar.canteiro.io.access.domain.Permission;
 import com.renovar.canteiro.io.access.domain.PermissionRepository;
 import com.renovar.canteiro.io.access.domain.Role;
@@ -27,6 +28,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 @Service
 @RequiredArgsConstructor
@@ -41,6 +43,7 @@ public class AuthenticatedUserQueryService {
     private final PermissionRepository permissionRepository;
     private final CompanySubscriptionAccessService companySubscriptionAccessService;
     private final PlatformUserRepository platformUserRepository;
+    private final OwnerOperationalPermissions ownerOperationalPermissions;
 
     @Transactional(readOnly = true)
     public AuthenticatedUserResponse currentUser(UUID userId) {
@@ -65,15 +68,18 @@ public class AuthenticatedUserQueryService {
                 .sorted(Comparator.comparing(Role::getName))
                 .toList();
 
-        List<String> permissions = roles.stream()
+        Stream<Permission> storedPermissions = roles.stream()
                 .flatMap(role -> rolePermissionRepository.findByRoleId(role.getId()).stream())
                 .filter(RolePermission::isActive)
                 .map(RolePermission::getPermissionId)
                 .distinct()
                 .map(permissionId -> permissionRepository.findById(permissionId).orElse(null))
                 .filter(java.util.Objects::nonNull)
-                .filter(Permission::isActive)
+                .filter(Permission::isActive);
+        List<String> permissions = Stream.concat(storedPermissions,
+                        roles.stream().flatMap(role -> ownerOperationalPermissions.forUser(role, user.getId())))
                 .map(Permission::code)
+                .distinct()
                 .sorted()
                 .toList();
 

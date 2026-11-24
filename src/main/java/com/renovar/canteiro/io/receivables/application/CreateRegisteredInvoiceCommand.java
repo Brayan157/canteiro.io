@@ -11,6 +11,10 @@ public record CreateRegisteredInvoiceCommand(
         String accessKey,
         LocalDate issuedOn,
         List<InvoiceItemCommand> items,
-        String justification
+        String justification,
+        java.math.BigDecimal documentTotalAmount
 ) {
+    public CreateRegisteredInvoiceCommand(UUID contractId,String number,String series,String accessKey,LocalDate issuedOn,List<InvoiceItemCommand> items,String justification){
+        this(contractId,number,series,accessKey,issuedOn,items,justification,null);
+    }
 }

@@ -2,6 +2,7 @@ package com.renovar.canteiro.io.governance.infrastructure.persistence;
 
 import com.renovar.canteiro.io.governance.domain.AuditEvent;
 import com.renovar.canteiro.io.governance.domain.AuditEventRepository;
+import com.renovar.canteiro.io.governance.domain.AuditModule;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -35,6 +36,7 @@ public class JpaAuditEventRepository implements AuditEventRepository {
 
     @Override
     public Page<AuditEvent> findByCompanyId(UUID companyId, Pageable pageable) {
-        return auditEventJpaRepository.findByCompanyId(companyId, pageable).map(auditEventPersistenceMapper::toDomain);
+        return auditEventJpaRepository.findByCompanyIdAndModuleNot(companyId, AuditModule.WORK_DIARY, pageable)
+                .map(auditEventPersistenceMapper::toDomain);
     }
 }

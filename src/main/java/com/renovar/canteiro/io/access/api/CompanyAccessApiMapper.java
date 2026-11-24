@@ -17,6 +17,7 @@ public class CompanyAccessApiMapper {
         return new AccessUserResponse(
                 employee.user().getId(),
                 employee.user().getEmail(),
+                employee.displayName(),
                 employee.user().getStatus(),
                 employee.roleIds(),
                 employee.companyOwner(),

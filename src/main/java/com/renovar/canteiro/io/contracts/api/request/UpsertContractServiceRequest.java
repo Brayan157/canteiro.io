@@ -19,9 +19,9 @@ public record UpsertContractServiceRequest(
         @Schema(type = "string", format = "decimal", example = "12.500") String quantity,
         @NotBlank @Pattern(regexp = "^(?:0|[1-9]\\d*)\\.\\d{2}$")
         @Schema(type = "string", format = "decimal", example = "150.00") String unitPrice,
-        DiscountType discountType,
+        @Schema(description = "Optional on creation. On update, omitted/null pair preserves the current discount; an explicit pair may only echo the current values. Changes and reversals require dedicated discount operations.") DiscountType discountType,
         @Pattern(regexp = "^(?:0|[1-9]\\d*)\\.\\d{1,4}$")
-        @Schema(type = "string", format = "decimal", example = "10.0000") String discountValue,
+        @Schema(type = "string", format = "decimal", example = "10.0000", description = "Paired with discountType. On update this cannot change the current discount; omitted/null pair preserves it at application time, including approval.") String discountValue,
         @Size(max = 1000) String justification
 ) {
 }

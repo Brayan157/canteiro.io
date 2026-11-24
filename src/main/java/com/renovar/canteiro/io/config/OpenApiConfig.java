@@ -61,7 +61,11 @@ public class OpenApiConfig {
                 .addProperty("detail", new StringSchema())
                 .addProperty("instance", new StringSchema().format("uri"))
                 .addProperty("code", new StringSchema())
-                .addProperty("correlationId", new StringSchema());
+                .addProperty("correlationId", new StringSchema())
+                .addProperty("reason", new StringSchema().description("Optional controlled operational reason; temporary receipt creation blocking uses SETTLEMENT_INVOICE_LINK_REQUIRED. Never free-form client content."))
+                .addProperty("violations", new io.swagger.v3.oas.models.media.ArraySchema().items(new ObjectSchema()
+                        .addProperty("field", new StringSchema())
+                        .addProperty("message", new StringSchema())));
     }
 
     private ApiResponse problemDetailResponse() {

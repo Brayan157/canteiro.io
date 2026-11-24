@@ -70,6 +70,8 @@ class FinancialCancellationServiceTest {
     @Mock private CalculateReceivableBalanceUseCase calculateReceivableBalanceUseCase;
     @Mock private ChangeRequestService changeRequestService;
     @Mock private AuditEventRecorder auditEventRecorder;
+    @Mock private InvoiceCancellationSafetyGuard invoiceCancellationSafetyGuard;
+    @Mock private InvoiceSettlementService invoiceSettlements;
 
     @Test
     void reversesSettlementWithANegativeLinkedEntryAndReopensReceivable() {
@@ -137,11 +139,11 @@ class FinancialCancellationServiceTest {
                 "Service", new BigDecimal("100.00"));
         TaxObligation tax = TaxObligation.register(companyId, invoiceId, contractId, receivableId, "IRRF", null, null,
                 new BigDecimal("10.00"), TaxTreatment.WITHHELD_BY_CUSTOMER);
-        Receivable receivable = receivable(receivableId, companyId, ReceivableStatus.PARTIALLY_RECEIVED);
+        Receivable receivable = receivable(receivableId, companyId, ReceivableStatus.OPEN);
         directTenant(companyId);
         when(invoiceRepository.findByIdAndCompanyId(invoiceId, companyId)).thenReturn(Optional.of(invoice));
         when(invoiceRepository.findByIdAndCompanyIdWithLock(invoiceId, companyId)).thenReturn(Optional.of(invoice));
-        when(contractRepository.findByIdAndCompanyIdWithBillingLock(contractId, companyId))
+        when(contractRepository.findByIdAndCompanyIdWithCancellationCheckLock(contractId, companyId))
                 .thenReturn(Optional.of(mock(Contract.class)));
         when(taxObligationRepository.findByInvoiceIdAndCompanyId(invoiceId, companyId)).thenReturn(List.of(tax));
         when(payableRepository.findByTaxObligationIdAndCompanyId(tax.getId(), companyId)).thenReturn(Optional.empty());
@@ -152,13 +154,15 @@ class FinancialCancellationServiceTest {
         when(receivableRepository.findByIdAndCompanyIdWithSettlementLock(receivableId, companyId))
                 .thenReturn(Optional.of(receivable));
         when(calculateReceivableBalanceUseCase.calculate(companyId, receivableId)).thenReturn(
-                new ReceivableBalance(receivableId, new BigDecimal("100.00"), new BigDecimal("20.00")));
+                new ReceivableBalance(receivableId, new BigDecimal("100.00"), BigDecimal.ZERO));
         when(receivableRepository.updateStatus(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
         FinancialCancellationResult result = service().cancelInvoice(invoiceId,
                 new CancelFinancialRecordCommand("Nota emitida incorretamente", null));
 
         assertEquals(InvoiceStatus.CANCELLED.name(), result.status());
+        org.mockito.Mockito.inOrder(invoiceCancellationSafetyGuard, invoiceRepository)
+                .verify(invoiceCancellationSafetyGuard).requireSafe(invoice);
         verify(invoiceItemRepository).updateStatus(argThat(value -> value.getStatus() == InvoiceItemStatus.CANCELLED));
         verify(taxObligationRepository).updateStatus(argThat(value -> value.getStatus() == TaxObligationStatus.CANCELLED));
         verify(invoiceRepository).updateStatus(argThat(value -> value.getStatus() == InvoiceStatus.CANCELLED));
@@ -180,6 +184,7 @@ class FinancialCancellationServiceTest {
                 installmentRepository, allocationRepository, invoiceRepository, invoiceItemRepository,
                 taxObligationRepository, payableRepository, receivableRepository, settlementRepository,
                 calculateReceivableBalanceUseCase, changeRequestService, auditEventRecorder,
-                Clock.fixed(Instant.parse("2026-08-20T12:00:00Z"), ZoneOffset.UTC),org.mockito.Mockito.mock(ReceivableSettlementAttributionService.class));
+                Clock.fixed(Instant.parse("2026-08-20T12:00:00Z"), ZoneOffset.UTC),org.mockito.Mockito.mock(ReceivableSettlementAttributionService.class),
+                invoiceCancellationSafetyGuard, invoiceSettlements);
     }
 }

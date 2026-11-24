@@ -44,6 +44,12 @@ final class LocalStorageProvider implements StorageProvider {
         }
     }
 
+    @Override
+    public java.io.InputStream openStream(String storageKey) {
+        try { return Files.newInputStream(resolve(storageKey)); }
+        catch (IOException exception) { throw new IllegalStateException("Could not open attachment", exception); }
+    }
+
     private Path resolve(String storageKey) {
         Path target = basePath.resolve(storageKey).normalize();
         if (!target.startsWith(basePath)) {

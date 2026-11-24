@@ -31,6 +31,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.Instant;
@@ -56,6 +57,9 @@ class CompanyAccessApiIntegrationTest extends AbstractPostgresIntegrationTest {
 
     @Autowired
     private MockMvc mockMvc;
+
+    @Autowired
+    private JdbcTemplate jdbc;
 
     @Autowired
     private CompanyRepository companyRepository;
@@ -89,6 +93,29 @@ class CompanyAccessApiIntegrationTest extends AbstractPostgresIntegrationTest {
 
     @Autowired
     private CapturingAccountActivationEmailSender accountActivationEmailSender;
+
+    @Test
+    void exposesOnlyTheNameFromAnExplicitEmployeeLinkWithinTheCompany() throws Exception {
+        Company company = createCompany("Display name");
+        Company other = createCompany("Other display name");
+        User administrator = createCompanyUser(company, "display-name-admin@example.com");
+        User linked = createCompanyUser(company, "display-name-linked@example.com");
+        User foreignEmployeeLink = createCompanyUser(company, "display-name-foreign-link@example.com");
+        grantAccessManagementPermissions(administrator, company);
+        jdbc.update("INSERT INTO employee (id, company_id, full_name, phone, user_id) VALUES (?, ?, ?, ?, ?)",
+                UUID.randomUUID(), company.getId(), "Ana Souza", "5550100", linked.getId());
+        jdbc.update("INSERT INTO employee (id, company_id, full_name, user_id) VALUES (?, ?, ?, ?)",
+                UUID.randomUUID(), other.getId(), "Outro Nome", foreignEmployeeLink.getId());
+
+        var auth = jwt().jwt(token -> token.subject(administrator.getId().toString()));
+        mockMvc.perform(get("/api/v1/company/access/users").with(auth))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[?(@.id == '" + linked.getId() + "')].displayName")
+                        .value(org.hamcrest.Matchers.contains("Ana Souza")))
+                .andExpect(jsonPath("$.items[?(@.id == '" + foreignEmployeeLink.getId() + "')].displayName").isEmpty())
+                .andExpect(jsonPath("$.items[?(@.id == '" + administrator.getId() + "')].displayName").isEmpty())
+                .andExpect(jsonPath("$.items[*].phone").isEmpty());
+    }
 
     @Test
     void managesEmployeesRolesAndControlledAssignmentsWithinTheCurrentCompany() throws Exception {
@@ -152,7 +179,8 @@ class CompanyAccessApiIntegrationTest extends AbstractPostgresIntegrationTest {
         mockMvc.perform(get("/api/v1/company/access/permissions")
                         .with(jwt().jwt(token -> token.subject(administrator.getId().toString()))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.totalItems").value(152));
+                .andExpect(jsonPath("$.totalItems").value(
+                        Math.toIntExact(permissionRepository.findAll(org.springframework.data.domain.Pageable.unpaged()).getTotalElements())));
     }
 
     @Test
@@ -216,7 +244,8 @@ class CompanyAccessApiIntegrationTest extends AbstractPostgresIntegrationTest {
         mockMvc.perform(get("/api/v1/company/access/users")
                         .with(jwt().jwt(token -> token.subject(administrator.getId().toString()))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.items[?(@.id == '" + owner.getId() + "')].companyOwner[0]").value(true));
+                .andExpect(jsonPath("$.items[?(@.id == '" + owner.getId() + "')].companyOwner")
+                        .value(org.hamcrest.Matchers.contains(true)));
 
         mockMvc.perform(put("/api/v1/company/access/users/{userId}/roles", owner.getId())
                         .with(jwt().jwt(token -> token.subject(administrator.getId().toString())))

@@ -19,6 +19,21 @@ public class JpaTaxObligationRepository implements TaxObligationRepository {
     private final TaxObligationJpaRepository taxObligationJpaRepository;
 
     @Override
+    public org.springframework.data.domain.Page<TaxObligation> findPageByInvoiceIdAndCompanyIdAndContractId(
+            UUID invoiceId, UUID companyId, UUID contractId, TaxObligationStatus status, TaxTreatment treatment,
+            org.springframework.data.domain.Pageable pageable) {
+        return taxObligationJpaRepository.findAll((org.springframework.data.jpa.domain.Specification<TaxObligationJpaEntity>) (root, query, builder) -> {
+            var predicates = new java.util.ArrayList<jakarta.persistence.criteria.Predicate>();
+            predicates.add(builder.equal(root.get("companyId"), companyId));
+            predicates.add(builder.equal(root.get("invoiceId"), invoiceId));
+            predicates.add(builder.equal(root.get("contractId"), contractId));
+            if (status != null) predicates.add(builder.equal(root.get("status"), status));
+            if (treatment != null) predicates.add(builder.equal(root.get("treatment"), treatment));
+            return builder.and(predicates.toArray(jakarta.persistence.criteria.Predicate[]::new));
+        }, pageable).map(this::toDomain);
+    }
+
+    @Override
     public TaxObligation save(TaxObligation taxObligation) {
         return toDomain(taxObligationJpaRepository.save(new TaxObligationJpaEntity(
                 taxObligation.getCompanyId(), taxObligation.getInvoiceId(), taxObligation.getContractId(),

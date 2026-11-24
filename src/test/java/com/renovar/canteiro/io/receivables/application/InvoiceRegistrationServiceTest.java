@@ -64,11 +64,11 @@ class InvoiceRegistrationServiceTest {
     @Test
     void registersAnInvoiceFromAnActiveAllocationOfTheSameContract() {
         Fixture fixture = fixture(new BigDecimal("0.00"));
-        InvoiceRegistrationResult result = fixture.service().register(command(fixture.contractId(), fixture.allocationId(), "80.00"));
+        InvoiceRegistrationResult result = fixture.service().register(command(fixture.contractId(), fixture.allocationId(), "100.00"));
 
         assertEquals(ChangeAuthorizationMode.DIRECT, result.mode());
         assertEquals(fixture.invoiceId(), result.invoice().getId());
-        assertEquals(new BigDecimal("80.00"), result.invoice().getTotalAmount());
+        assertEquals(new BigDecimal("100.00"), result.invoice().getTotalAmount());
         assertEquals(fixture.contractServiceId(), result.items().getFirst().getContractServiceId());
         assertEquals(InvoiceStatus.REGISTERED, result.invoice().getStatus());
     }
@@ -82,21 +82,17 @@ class InvoiceRegistrationServiceTest {
     }
 
     @Test
-    void allowsOneServiceAllocationToBeIssuedAcrossSeveralInvoicesWithoutExceedingIt() {
-        Fixture fixture = fixture(new BigDecimal("0.00"), new BigDecimal("40.00"), new BigDecimal("100.00"));
+    void rejectsNewFragmentationAndPreservesPartialLegacyWithoutReconstructingIt() {
+        Fixture fresh=fixture(BigDecimal.ZERO);
+        assertThrows(IllegalStateException.class,()->fresh.service().register(command(fresh.contractId(),fresh.allocationId(),"50.00")));
+        org.mockito.Mockito.verify(invoiceRepository,org.mockito.Mockito.never()).save(any());
+    }
 
-        InvoiceRegistrationResult first = fixture.service().register(
-                command(fixture.contractId(), fixture.allocationId(), "NF-001", "40.00")
-        );
-        InvoiceRegistrationResult second = fixture.service().register(
-                command(fixture.contractId(), fixture.allocationId(), "NF-002", "60.00")
-        );
-
-        assertEquals(new BigDecimal("40.00"), first.invoice().getTotalAmount());
-        assertEquals(new BigDecimal("60.00"), second.invoice().getTotalAmount());
-        assertThrows(IllegalStateException.class, () -> fixture.service().register(
-                command(fixture.contractId(), fixture.allocationId(), "NF-003", "0.01")
-        ));
+    @Test
+    void rejectsCompletionOfPartiallyDocumentedLegacyWithoutReconstructingIt(){
+        Fixture legacy=fixture(new BigDecimal("40.00"));
+        assertThrows(IllegalStateException.class,()->legacy.service().register(command(legacy.contractId(),legacy.allocationId(),"60.00")));
+        org.mockito.Mockito.verify(invoiceRepository,org.mockito.Mockito.never()).save(any());
     }
 
     @Test
@@ -137,6 +133,8 @@ class InvoiceRegistrationServiceTest {
         lenient().when(billingAllocationRepository.findByIdAndCompanyId(allocationId, companyId)).thenReturn(Optional.of(allocation));
         lenient().when(invoiceItemRepository.registeredAmountByBillingAllocationIdAndCompanyId(allocationId, companyId))
                 .thenReturn(registeredAmounts[0], java.util.Arrays.copyOfRange(registeredAmounts, 1, registeredAmounts.length));
+        lenient().when(invoiceItemRepository.registeredAmountsByBillingAllocationIdsAndCompanyId(any(),any()))
+                .thenReturn(java.util.Map.of(allocationId,registeredAmounts[0]));
         lenient().when(invoiceItemRepository.registeredAmountByContractIdAndCompanyId(contractId, companyId))
                 .thenReturn(registeredAmounts[0], java.util.Arrays.copyOfRange(registeredAmounts, 1, registeredAmounts.length));
         lenient().when(calculateContractBillingBalanceUseCase.calculate(companyId, contractId))
@@ -160,7 +158,7 @@ class InvoiceRegistrationServiceTest {
                         billingAllocationRepository, invoiceRepository, invoiceItemRepository,
                         new CalculateInvoiceAllocationBalanceUseCase(billingAllocationRepository, invoiceItemRepository),
                         calculateContractBillingBalanceUseCase,
-                        changeRequestService, auditEventRecorder));
+                        changeRequestService, auditEventRecorder, org.mockito.Mockito.mock(CaptureInvoiceFinancialSnapshotService.class)));
     }
 
     private CreateRegisteredInvoiceCommand command(UUID contractId, UUID allocationId, String amount) {

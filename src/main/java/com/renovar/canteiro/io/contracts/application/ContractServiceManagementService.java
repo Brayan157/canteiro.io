@@ -50,13 +50,17 @@ public class ContractServiceManagementService {
     private final CalculateContractNetAmountUseCase calculateContractNetAmountUseCase;
     private final ChangeRequestService changeRequestService;
     private final AuditEventRecorder auditEventRecorder;
+    private final ContractLifecycleService lifecycle;
+    private final ContractDiscountRestrictionProvider discountRestrictions;
 
     @Transactional
     public ContractServiceChangeResult create(UUID contractId, ContractServiceCommand command) {
         UUID companyId = tenantContextHolder.requireCurrentTenant().companyId();
-        requireContract(contractId, companyId);
+        var contract = lockLifecycleContract(companyId, contractId);
         ContractService proposed = newService(companyId, contractId, command);
         ChangeAuthorizationMode mode = accessAuthorizationService.requireChangeAuthorization(AccessModule.SERVICES, ChangeOperation.CREATE);
+        lifecycle.requireServiceStatus(contract, null, proposed);
+        guardServiceChange(companyId, contractId, proposed, null, proposed.getDiscountType() != null);
         if (mode == ChangeAuthorizationMode.REQUEST_APPROVAL) {
             return requested(AuditModule.SERVICES, ChangeRequestOperation.CREATE, "ContractService", null, null,
                     proposal(contractId, command), command.justification(), mode);
@@ -71,21 +75,41 @@ public class ContractServiceManagementService {
 
     @Transactional
     public ContractServiceChangeResult update(UUID contractId, UUID serviceId, ContractServiceCommand command) {
+        return update(contractId, serviceId, command, false);
+    }
+
+    @Transactional
+    public ContractServiceChangeResult updateStatus(UUID contractId, UUID serviceId, ContractServiceStatus status, String justification) {
+        UUID company = tenantContextHolder.requireCurrentTenant().companyId();
+        lockLifecycleContract(company, contractId);
+        var current = requireService(contractId, serviceId, company);
+        return update(contractId, serviceId, statusCommand(current, status, justification), true);
+    }
+
+    private ContractServiceCommand statusCommand(ContractService current, ContractServiceStatus status, String justification) {
+        return new ContractServiceCommand(current.getSourceServiceTemplateId(), current.getName(), current.getDescription(), status,
+                current.getQuantity(), current.getUnitPrice(), null, null, justification);
+    }
+
+    private ContractServiceChangeResult update(UUID contractId, UUID serviceId, ContractServiceCommand command, boolean statusOnly) {
         UUID companyId = tenantContextHolder.requireCurrentTenant().companyId();
-        ChangeAuthorizationMode mode = accessAuthorizationService.requireChangeAuthorization(AccessModule.SERVICES, ChangeOperation.UPDATE);
-        lockDirectChange(companyId, contractId, mode);
+        var contract = lockLifecycleContract(companyId, contractId);
         ContractService current = requireService(contractId, serviceId, companyId);
+        boolean cancelling = command.status() == ContractServiceStatus.CANCELLED && current.getStatus() != ContractServiceStatus.CANCELLED;
+        ChangeAuthorizationMode mode = accessAuthorizationService.requireChangeAuthorization(AccessModule.SERVICES, cancelling ? ChangeOperation.CANCEL : ChangeOperation.UPDATE);
         requireUnchangedSourceTemplate(current, command.sourceServiceTemplateId(), companyId);
-        ContractService proposed = current.updateProfile(command.name(), command.description(), command.status(), command.quantity(), command.unitPrice())
-                .withDiscount(command.discountType(), command.discountValue());
+        ContractService proposed = updateProfilePreservingDiscount(current, command);
+        lifecycle.requireServiceStatus(contract, current, proposed);
+        guardServiceChange(companyId, contractId, proposed, current.getId(), proposed.getStatus() != ContractServiceStatus.CANCELLED && proposed.getNetAmount().compareTo(current.getNetAmount()) < 0);
         if (mode == ChangeAuthorizationMode.REQUEST_APPROVAL) {
-            return requested(AuditModule.SERVICES, ChangeRequestOperation.UPDATE, "ContractService", current.getId(), auditData(current),
-                    proposal(contractId, command), command.justification(), mode);
+            return requested(AuditModule.SERVICES, cancelling ? ChangeRequestOperation.CANCEL : ChangeRequestOperation.UPDATE, "ContractService", current.getId(), auditData(current),
+                    statusOnly ? Map.of("contractId", contractId.toString(), "statusOnly", true, "status", command.status().name())
+                            : proposal(contractId, command), command.justification(), mode);
         }
         ensureBillingLimit(companyId, contractId, proposed, current.getId());
         ContractService saved = contractServiceRepository.save(proposed);
         ContractNetAmount totals = calculateContractNetAmountUseCase.calculate(companyId, contractId);
-        auditEventRecorder.recordDirectAction(AuditModule.SERVICES, AuditAction.UPDATE, "ContractService", saved.getId(),
+        auditEventRecorder.recordDirectAction(AuditModule.SERVICES, cancelling ? AuditAction.CANCEL : AuditAction.UPDATE, "ContractService", saved.getId(),
                 auditData(current), auditData(saved), Map.of("origin", "direct", "contractId", contractId.toString()));
         return new ContractServiceChangeResult(saved, totals, null, mode);
     }
@@ -95,9 +119,10 @@ public class ContractServiceManagementService {
                                                           String justification) {
         UUID companyId = tenantContextHolder.requireCurrentTenant().companyId();
         ChangeAuthorizationMode mode = accessAuthorizationService.requireChangeAuthorization(AccessModule.DISCOUNTS, ChangeOperation.UPDATE);
-        lockDirectChange(companyId, contractId, mode);
+        lockLifecycleContract(companyId, contractId);
         ContractService current = requireService(contractId, serviceId, companyId);
         ContractService proposed = current.withDiscount(type, value);
+        guardServiceChange(companyId, contractId, proposed, current.getId(), true);
         Map<String, Object> proposal = discountProposal(type, value);
         proposal.put("contractId", contractId.toString());
         if (mode == ChangeAuthorizationMode.REQUEST_APPROVAL) {
@@ -117,9 +142,10 @@ public class ContractServiceManagementService {
         UUID companyId = tenantContextHolder.requireCurrentTenant().companyId();
         requireContract(contractId, companyId);
         ChangeAuthorizationMode mode = accessAuthorizationService.requireChangeAuthorization(AccessModule.DISCOUNTS, ChangeOperation.UPDATE);
-        lockDirectChange(companyId, contractId, mode);
+        lockLifecycleContract(companyId, contractId);
         ContractDiscount current = contractDiscountRepository.findActiveByContractIdAndCompanyId(contractId, companyId).orElse(null);
         if (mode == ChangeAuthorizationMode.REQUEST_APPROVAL) {
+            guardContractDiscount(companyId, contractId, type, value);
             return requested(AuditModule.DISCOUNTS, ChangeRequestOperation.UPDATE, "ContractDiscount", contractId,
                     current == null ? null : discountAuditData(current), discountProposal(type, value), justification, mode);
         }
@@ -179,7 +205,9 @@ public class ContractServiceManagementService {
         ContractServiceCommand command = commandFromProposal(request.getSnapshot().proposedData().values());
         UUID contractId = UUID.fromString((String) request.getSnapshot().proposedData().values().get("contractId"));
         ContractService proposed = newService(request.getCompanyId(), contractId, command);
-        requireContract(contractId, request.getCompanyId());
+        var contract = lockLifecycleContract(request.getCompanyId(), contractId);
+        lifecycle.requireServiceStatus(contract, null, proposed);
+        guardServiceChange(request.getCompanyId(), contractId, proposed, null, proposed.getDiscountType() != null);
         ensureBillingLimit(request.getCompanyId(), contractId, proposed, null);
         ContractService saved = contractServiceRepository.save(proposed);
         auditEventRecorder.recordDirectAction(AuditModule.SERVICES, AuditAction.CREATE, "ContractService", saved.getId(), null,
@@ -189,15 +217,20 @@ public class ContractServiceManagementService {
     @Transactional
     public void applyApprovedServiceUpdate(ChangeRequest request) {
         UUID contractId = UUID.fromString((String) request.getSnapshot().proposedData().values().get("contractId"));
-        lockContract(request.getCompanyId(), contractId);
+        var contract = lockLifecycleContract(request.getCompanyId(), contractId);
         ContractService current = requireService(contractId, request.getEntityId(), request.getCompanyId());
-        ContractServiceCommand command = commandFromProposal(request.getSnapshot().proposedData().values());
+        var values = request.getSnapshot().proposedData().values();
+        ContractServiceCommand command = Boolean.TRUE.equals(values.get("statusOnly"))
+                ? statusCommand(current, ContractServiceStatus.valueOf((String) values.get("status")), null) : commandFromProposal(values);
         requireUnchangedSourceTemplate(current, command.sourceServiceTemplateId(), request.getCompanyId());
-        ContractService proposed = current.updateProfile(command.name(), command.description(), command.status(), command.quantity(), command.unitPrice())
-                .withDiscount(command.discountType(), command.discountValue());
+        ContractService proposed = updateProfilePreservingDiscount(current, command);
+        if (current.getStatus() != ContractServiceStatus.CANCELLED && proposed.getStatus() == ContractServiceStatus.CANCELLED
+                && request.getOperation() != ChangeRequestOperation.CANCEL) ContractLifecycleService.reject("CANCELLATION_REQUIRES_CANCEL_AUTHORIZATION");
+        lifecycle.requireServiceStatus(contract, current, proposed);
+        guardServiceChange(request.getCompanyId(), contractId, proposed, current.getId(), proposed.getStatus() != ContractServiceStatus.CANCELLED && proposed.getNetAmount().compareTo(current.getNetAmount()) < 0);
         ensureBillingLimit(request.getCompanyId(), contractId, proposed, current.getId());
         ContractService saved = contractServiceRepository.save(proposed);
-        auditEventRecorder.recordDirectAction(AuditModule.SERVICES, AuditAction.UPDATE, "ContractService", saved.getId(), auditData(current),
+        auditEventRecorder.recordDirectAction(AuditModule.SERVICES, request.getOperation() == ChangeRequestOperation.CANCEL ? AuditAction.CANCEL : AuditAction.UPDATE, "ContractService", saved.getId(), auditData(current),
                 auditData(saved), Map.of("origin", "approved-change-request", "changeRequestId", request.getId().toString()));
     }
 
@@ -208,6 +241,7 @@ public class ContractServiceManagementService {
         ContractService current = requireService(contractId, request.getEntityId(), request.getCompanyId());
         ContractService proposed = current.withDiscount(DiscountType.valueOf((String) request.getSnapshot().proposedData().values().get("discountType")),
                 new BigDecimal((String) request.getSnapshot().proposedData().values().get("discountValue")));
+        guardServiceChange(request.getCompanyId(), contractId, proposed, current.getId(), true);
         ensureBillingLimit(request.getCompanyId(), contractId, proposed, current.getId());
         ContractService saved = contractServiceRepository.save(proposed);
         auditEventRecorder.recordDirectAction(AuditModule.DISCOUNTS, AuditAction.UPDATE, "ContractServiceDiscount", saved.getId(), auditData(current),
@@ -252,11 +286,32 @@ public class ContractServiceManagementService {
                 Map.of("origin", "approved-change-request", "changeRequestId", request.getId().toString(), "reversal", true));
     }
 
+    private com.renovar.canteiro.io.contracts.domain.Contract lockLifecycleContract(UUID company, UUID contract) {
+        return contractRepository.findByIdAndCompanyIdWithCancellationCheckLock(contract, company)
+                .orElseThrow(() -> new TenantResourceNotFoundException("Contract"));
+    }
+
+    private ContractService updateProfilePreservingDiscount(ContractService current, ContractServiceCommand command) {
+        if ((command.discountType() == null) != (command.discountValue() == null)) {
+            throw new IllegalArgumentException("Contract service discount type and value must be provided together");
+        }
+        if (command.discountType() != null && (command.discountType() != current.getDiscountType()
+                || current.getDiscountValue() == null || command.discountValue().compareTo(current.getDiscountValue()) != 0)) {
+            throw new com.renovar.canteiro.io.shared.api.error.ApiException(org.springframework.http.HttpStatus.CONFLICT,
+                    com.renovar.canteiro.io.shared.api.error.ErrorCode.BUSINESS_RULE_VIOLATION,
+                    "Use the dedicated service discount operation to change the current discount", List.of(),
+                    "SERVICE_DISCOUNT_CHANGE_REQUIRES_DEDICATED_OPERATION");
+        }
+        // Missing/null fields are not a reversal. Approval preserves the current discount, not the proposal snapshot.
+        return current.updateProfile(command.name(), command.description(), command.status(), command.quantity(), command.unitPrice());
+    }
+
     private ContractDiscount setContractDiscountDirect(UUID companyId, UUID contractId, DiscountType type, BigDecimal value) {
         contractRepository.findByIdAndCompanyIdWithBillingLock(contractId, companyId).orElseThrow(() -> new TenantResourceNotFoundException("Contract"));
         ContractDiscount discount = ContractDiscount.create(companyId, contractId, type, value);
         ContractNetAmount proposed = ContractNetAmountCalculator.calculate(contractServiceRepository.findByContractIdAndCompanyId(contractId, companyId),
                 discount, measurementAdjustmentAmountProvider.approvedAmount(companyId, contractId));
+        requireDiscountRestriction(companyId, contractId, proposed.netAmount(), true);
         if (proposed.netAmount().compareTo(approvedContractBillingAmountProvider.approvedNetAmount(companyId, contractId)) < 0) {
             throw new IllegalStateException("Contract net amount must not be lower than its approved billing amount");
         }
@@ -319,6 +374,25 @@ public class ContractServiceManagementService {
         }
     }
 
+    private void requireDiscountRestriction(UUID company, UUID contract, BigDecimal proposedNet, boolean grantingDiscount) {
+        discountRestrictions.lockInputs(company, contract);
+        String reason = discountRestrictions.restriction(company, contract, proposedNet, grantingDiscount);
+        if (reason != null) ContractLifecycleService.reject(reason);
+    }
+
+    private void guardContractDiscount(UUID company, UUID contract, DiscountType type, BigDecimal value) {
+        var amount = ContractNetAmountCalculator.calculate(contractServiceRepository.findByContractIdAndCompanyId(contract, company),
+                ContractDiscount.create(company, contract, type, value), measurementAdjustmentAmountProvider.approvedAmount(company, contract));
+        requireDiscountRestriction(company, contract, amount.netAmount(), true);
+    }
+
+    private void guardServiceChange(UUID company, UUID contract, ContractService proposed, UUID replacing, boolean grantingDiscount) {
+        var projected = new ArrayList<>(contractServiceRepository.findByContractIdAndCompanyId(contract, company));
+        if (replacing == null) projected.add(proposed); else projected.replaceAll(s -> s.getId().equals(replacing) ? proposed : s);
+        var amount = calculateContractNetAmountUseCase.calculateWithServices(company, contract, projected);
+        requireDiscountRestriction(company, contract, amount.netAmount(), grantingDiscount);
+    }
+
     private void ensureBillingLimit(UUID companyId, UUID contractId, ContractService proposed, UUID replacingId) {
         // All commercial writers serialize against billing/composition on the same versioned aggregate.
         contractRepository.findByIdAndCompanyIdWithBillingLock(contractId, companyId)
@@ -342,6 +416,7 @@ public class ContractServiceManagementService {
         ContractNetAmount amount = ContractNetAmountCalculator.calculate(services,
                 contractDiscountRepository.findActiveByContractIdAndCompanyId(contractId, companyId).orElse(null),
                 measurementAdjustmentAmountProvider.approvedAmount(companyId, contractId));
+        requireDiscountRestriction(companyId, contractId, amount.netAmount(), false);
         if (amount.netAmount().compareTo(approvedContractBillingAmountProvider.approvedNetAmount(companyId, contractId)) < 0) {
             throw new IllegalStateException("Contract net amount must not be lower than its approved billing amount");
         }

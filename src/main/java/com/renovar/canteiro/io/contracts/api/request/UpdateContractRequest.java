@@ -12,6 +12,7 @@ import java.time.LocalDate;
 
 public record UpdateContractRequest(
         @Size(max = 100) String contractIdentifier,
+        @Schema(description = "Optional contract number, unique per work regardless of case and surrounding whitespace. Keeping the same number permits edits to legacy duplicates.", example = "CTR/A-001.2026")
         @Size(max = 100) String reference,
         @NotBlank @Size(max = 255) String name,
         @NotNull ContractStatus status,

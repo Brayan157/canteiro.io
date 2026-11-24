@@ -34,7 +34,7 @@ public final class Contract {
         this.contractIdentifier = normalize(contractIdentifier);
         this.pricingMode = pricingMode == null ? ContractPricingMode.FIXED : pricingMode;
         this.currency = CurrencyCode.defaultIfAbsent(currency);
-        this.reference = normalize(reference);
+        this.reference = normalizeReference(reference);
         this.name = requireName(name);
         this.status = require(status, "Contract status is required");
         validateDates(startedOn, expectedCompletionOn, completedOn);
@@ -125,6 +125,10 @@ public final class Contract {
 
     private static String normalize(String value) {
         return value == null || value.isBlank() ? null : value.trim();
+    }
+
+    public static String normalizeReference(String value) {
+        return value == null || value.isBlank() ? null : value.trim().strip();
     }
 
     private static <T> T require(T value, String message) {

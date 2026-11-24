@@ -19,6 +19,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Set;
+import java.util.stream.Stream;
 
 @Service
 @RequiredArgsConstructor
@@ -29,6 +30,7 @@ public class AccessAuthorizationService {
     private final RoleRepository roleRepository;
     private final RolePermissionRepository rolePermissionRepository;
     private final PermissionRepository permissionRepository;
+    private final OwnerOperationalPermissions ownerOperationalPermissions;
 
     @Transactional(readOnly = true)
     public void requirePermission(AccessModule module, AccessAction action) {
@@ -64,23 +66,39 @@ public class AccessAuthorizationService {
     }
 
     private Set<AccessAction> activeActionsForCurrentTenant(AccessModule module) {
-        TenantContext tenant = tenantContextHolder.requireCurrentTenant();
+        return activeActions(tenantContextHolder.requireCurrentTenant(), module);
+    }
+
+    @Transactional(readOnly = true)
+    public boolean canRequestForTenantUser(AccessModule module, ChangeOperation operation, java.util.UUID userId) {
+        TenantContext current = tenantContextHolder.requireCurrentTenant();
+        return activeActions(new TenantContext(userId, current.companyId()), module).contains(requestActionFor(operation));
+    }
+
+    private Set<AccessAction> activeActions(TenantContext tenant, AccessModule module) {
         return userRoleRepository.findByUserIdAndCompanyId(tenant.userId(), tenant.companyId()).stream()
                 .filter(UserRole::isActive)
                 .map(UserRole::getRoleId)
                 .map(roleId -> roleRepository.findByIdAndCompanyId(roleId, tenant.companyId()))
                 .flatMap(java.util.Optional::stream)
                 .filter(role -> role.isActive())
-                .map(role -> rolePermissionRepository.findByRoleId(role.getId()))
-                .flatMap(java.util.Collection::stream)
+                .flatMap(role -> Stream.concat(
+                        storedPermissions(role.getId()),
+                        module == AccessModule.WORKFORCE || module == AccessModule.WORK_DIARY
+                                ? ownerOperationalPermissions.forUser(role, tenant.userId(), Stream.of(module))
+                                : Stream.empty()))
+                .filter(permission -> permission.getModule() == module)
+                .map(Permission::getAction)
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+    }
+
+    private Stream<Permission> storedPermissions(java.util.UUID roleId) {
+        return rolePermissionRepository.findByRoleId(roleId).stream()
                 .filter(RolePermission::isActive)
                 .map(RolePermission::getPermissionId)
                 .map(permissionRepository::findById)
                 .flatMap(java.util.Optional::stream)
-                .filter(Permission::isActive)
-                .filter(permission -> permission.getModule() == module)
-                .map(Permission::getAction)
-                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+                .filter(Permission::isActive);
     }
 
     private AccessAction directActionFor(ChangeOperation operation) {

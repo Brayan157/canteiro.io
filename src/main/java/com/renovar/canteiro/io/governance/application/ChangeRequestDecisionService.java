@@ -11,6 +11,8 @@ import com.renovar.canteiro.io.governance.domain.ChangeRequestStatus;
 import com.renovar.canteiro.io.shared.api.error.ApiException;
 import com.renovar.canteiro.io.shared.api.error.ErrorCode;
 import com.renovar.canteiro.io.tenancy.application.TenantContextHolder;
+import com.renovar.canteiro.io.workforce.domain.WorkOperation;
+import com.renovar.canteiro.io.workforce.domain.WorkforceRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.AccessDeniedException;
@@ -33,6 +35,7 @@ public class ChangeRequestDecisionService {
     private final AuditEventRecorder auditEventRecorder;
     private final Clock clock;
     private final List<ChangeRequestApprovalHandler> changeRequestApprovalHandlers;
+    private final WorkforceRepository workforce;
 
     @Transactional
     public ChangeRequest approve(ApproveChangeRequestCommand command) {
@@ -41,7 +44,7 @@ public class ChangeRequestDecisionService {
 
     @Transactional
     public ChangeRequestDecisionResult approveWithAppliedEntity(ApproveChangeRequestCommand command) {
-        ChangeRequest changeRequest = requirePendingRequest(command.changeRequestId());
+        ChangeRequest changeRequest = requirePendingRequest(command.changeRequestId(), WorkOperation.APPROVE);
         requireApprovalPermission(changeRequest.getModule(), AccessAction.APPROVE);
         var tenant = tenantContextHolder.requireCurrentTenant();
         preventSelfApproval(changeRequest, tenant.userId());
@@ -56,7 +59,7 @@ public class ChangeRequestDecisionService {
     @Transactional
     public ChangeRequest reject(RejectChangeRequestCommand command) {
         requireRejectionReason(command.decisionReason());
-        ChangeRequest changeRequest = requirePendingRequest(command.changeRequestId());
+        ChangeRequest changeRequest = requirePendingRequest(command.changeRequestId(), WorkOperation.REJECT);
         requireApprovalPermission(changeRequest.getModule(), AccessAction.REJECT);
         var tenant = tenantContextHolder.requireCurrentTenant();
         preventSelfApproval(changeRequest, tenant.userId());
@@ -67,10 +70,17 @@ public class ChangeRequestDecisionService {
         return decidedChangeRequest;
     }
 
-    private ChangeRequest requirePendingRequest(UUID changeRequestId) {
+    private ChangeRequest requirePendingRequest(UUID changeRequestId, WorkOperation operation) {
         var tenant = tenantContextHolder.requireCurrentTenant();
         ChangeRequest changeRequest = changeRequestRepository.findWithLockByIdAndCompanyId(changeRequestId, tenant.companyId())
                 .orElseThrow(ChangeRequestNotFoundException::new);
+        if (changeRequest.getModule() == AuditModule.WORK_DIARY) {
+            UUID workId = UUID.fromString((String) changeRequest.getSnapshot().proposedData().values().get("workId"));
+            if (!workforce.lockWork(tenant.companyId(), workId)
+                    || !workforce.hasGrant(tenant.companyId(), workId, tenant.userId(), operation, clock.instant())) {
+                throw new ChangeRequestNotFoundException();
+            }
+        }
         if (changeRequest.getStatus() != ChangeRequestStatus.PENDING) {
             throw new ApiException(
                     HttpStatus.CONFLICT,
@@ -93,6 +103,7 @@ public class ChangeRequestDecisionService {
             case ROLES -> AccessModule.ROLES;
             case CUSTOMERS -> AccessModule.CUSTOMERS;
             case WORKS -> AccessModule.WORKS;
+            case WORK_DIARY -> AccessModule.WORK_DIARY;
             case CONTRACTS -> AccessModule.CONTRACTS;
             case SERVICES -> AccessModule.SERVICES;
             case DISCOUNTS -> AccessModule.DISCOUNTS;
@@ -126,13 +137,15 @@ public class ChangeRequestDecisionService {
 
     private void recordDecision(AuditAction action, ChangeRequest changeRequest, Map<String, Object> beforeData) {
         auditEventRecorder.recordDirectAction(
-                AuditModule.AUDIT,
+                changeRequest.getModule() == AuditModule.WORK_DIARY ? AuditModule.WORK_DIARY : AuditModule.AUDIT,
                 action,
                 "ChangeRequest",
                 changeRequest.getId(),
                 beforeData,
                 decisionAuditData(changeRequest),
-                Map.of("changeRequestModule", changeRequest.getModule().name())
+                changeRequest.getModule() == AuditModule.WORK_DIARY
+                        ? Map.of("workId", changeRequest.getSnapshot().proposedData().values().get("workId"))
+                        : Map.of("changeRequestModule", changeRequest.getModule().name())
         );
     }
 

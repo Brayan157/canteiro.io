@@ -97,13 +97,13 @@ public class TaxObligationService {
         Payable payable = command.treatment() == TaxTreatment.PAYABLE_BY_COMPANY
                 ? payableRepository.save(Payable.createTaxPayable(
                         companyId, contract.getWorkId(), contract.getId(), taxObligation.getId(),
-                        "TAX-" + invoice.getNumber(), taxObligation.getName(), taxObligation.getDueOn(), taxObligation.getAmount()
+                        "TAX-" + invoice.getNumber(), taxObligation.getName(), taxObligation.getDueOn(), taxObligation.getAmount(),contract.getCurrency()
                 ))
                 : null;
         return new Creation(taxObligation, payable);
     }
 
-    private void validate(CreateTaxObligationCommand command, UUID companyId) {
+    void validate(CreateTaxObligationCommand command, UUID companyId) {
         if (command == null || command.invoiceId() == null || command.name() == null || command.amount() == null
                 || command.treatment() == null) {
             throw new IllegalArgumentException("Invoice, tax name, amount and treatment are required");
@@ -205,5 +205,13 @@ public class TaxObligationService {
     private LocalDate date(String value) { return value == null ? null : LocalDate.parse(value); }
 
     private record Creation(TaxObligation taxObligation, Payable payable) {
+    }
+
+    // Internal adapter for the separately authorized/idempotent calculation workflow. No public permission bypass.
+    TaxObligationCreationResult applyCalculated(UUID companyId, CreateTaxObligationCommand command, UUID requestId) {
+        validate(command, companyId);
+        Creation creation = persist(companyId, command);
+        record(creation, requestId == null ? "calculated-tax-direct" : "calculated-tax-approved", requestId);
+        return new TaxObligationCreationResult(creation.taxObligation(), creation.payable(), null, ChangeAuthorizationMode.DIRECT);
     }
 }

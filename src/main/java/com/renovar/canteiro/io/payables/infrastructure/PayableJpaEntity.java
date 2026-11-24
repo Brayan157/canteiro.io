@@ -15,6 +15,9 @@ import lombok.NoArgsConstructor;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.UUID;
+import jakarta.persistence.Version;
+import com.renovar.canteiro.io.payables.domain.Payable;
+import com.renovar.canteiro.io.shared.domain.CurrencyCode;
 
 @Getter
 @Entity
@@ -32,6 +35,12 @@ class PayableJpaEntity extends BaseJpaEntity {
     @Column(name = "due_on", nullable = false) private LocalDate dueOn;
     @Column(name = "original_amount", nullable = false, precision = 19, scale = 2) private BigDecimal originalAmount;
     @Enumerated(EnumType.STRING) @Column(name = "status", nullable = false, length = 30) private PayableStatus status;
+    @Column(name="financial_group_id",nullable=false,updatable=false) private UUID financialGroupId;
+    @Column(name="supplier_id",updatable=false) private UUID supplierId;
+    @Column(name="financial_category_id",updatable=false) private UUID financialCategoryId;
+    @Column(name="issued_on") private LocalDate issuedOn;
+    @Enumerated(EnumType.STRING) @Column(name="currency",nullable=false,updatable=false,length=3) private CurrencyCode currency;
+    @Version @Column(name="version",nullable=false) private Long version;
 
     PayableJpaEntity(UUID companyId, PayableFinancialScope financialScope, UUID workId, UUID contractId,
                      UUID taxObligationId, String reference, String description, LocalDate dueOn,
@@ -49,4 +58,14 @@ class PayableJpaEntity extends BaseJpaEntity {
     }
 
     void setStatus(PayableStatus status) { this.status = status; }
+
+    PayableJpaEntity(Payable value, UUID groupId) {
+        this(value.getCompanyId(),value.getFinancialScope(),value.getWorkId(),value.getContractId(),value.getTaxObligationId(),
+                value.getReference(),value.getDescription(),value.getDueOn(),value.getOriginalAmount(),value.getStatus());
+        this.financialGroupId=groupId;
+        this.supplierId=value.getSupplierId();
+        this.financialCategoryId=value.getFinancialCategoryId();
+        this.issuedOn=value.getIssuedOn();
+        this.currency=value.getCurrency();
+    }
 }

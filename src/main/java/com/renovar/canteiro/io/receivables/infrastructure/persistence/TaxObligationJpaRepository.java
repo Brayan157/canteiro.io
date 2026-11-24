@@ -11,7 +11,8 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.List;
 
-interface TaxObligationJpaRepository extends JpaRepository<TaxObligationJpaEntity, UUID> {
+interface TaxObligationJpaRepository extends JpaRepository<TaxObligationJpaEntity, UUID>,
+        org.springframework.data.jpa.repository.JpaSpecificationExecutor<TaxObligationJpaEntity> {
 
     Optional<TaxObligationJpaEntity> findByIdAndCompanyId(UUID id, UUID companyId);
 

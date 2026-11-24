@@ -57,13 +57,15 @@ public class ChangeRequestService {
                 command.justification()
         ));
         auditEventRecorder.recordDirectAction(
-                AuditModule.AUDIT,
+                changeRequest.getModule() == AuditModule.WORK_DIARY ? AuditModule.WORK_DIARY : AuditModule.AUDIT,
                 AuditAction.CREATE,
                 "ChangeRequest",
                 changeRequest.getId(),
                 null,
                 auditData(changeRequest),
-                Map.of()
+                changeRequest.getModule() == AuditModule.WORK_DIARY
+                        ? Map.of("workId", command.snapshot().proposedData().values().get("workId"))
+                        : Map.of()
         );
         return changeRequest;
     }
@@ -90,6 +92,7 @@ public class ChangeRequestService {
             case ROLES -> AccessModule.ROLES;
             case CUSTOMERS -> AccessModule.CUSTOMERS;
             case WORKS -> AccessModule.WORKS;
+            case WORK_DIARY -> AccessModule.WORK_DIARY;
             case CONTRACTS -> AccessModule.CONTRACTS;
             case SERVICES -> AccessModule.SERVICES;
             case DISCOUNTS -> AccessModule.DISCOUNTS;

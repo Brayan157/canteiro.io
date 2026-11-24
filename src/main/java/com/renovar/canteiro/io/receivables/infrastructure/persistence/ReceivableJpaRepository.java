@@ -13,6 +13,10 @@ interface ReceivableJpaRepository extends JpaRepository<ReceivableJpaEntity, UUI
 
     Optional<ReceivableJpaEntity> findByIdAndCompanyId(UUID id, UUID companyId);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select r from ReceivableJpaEntity r where r.id = :id and r.companyId = :companyId")
+    Optional<ReceivableJpaEntity> findByIdAndCompanyIdWithCancellationCheckLock(@Param("id") UUID id, @Param("companyId") UUID companyId);
+
     @Lock(LockModeType.PESSIMISTIC_FORCE_INCREMENT)
     @Query("""
             select receivable from ReceivableJpaEntity receivable

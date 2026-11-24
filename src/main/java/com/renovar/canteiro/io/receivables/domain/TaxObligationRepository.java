@@ -7,6 +7,10 @@ import java.util.UUID;
 
 public interface TaxObligationRepository {
 
+    org.springframework.data.domain.Page<TaxObligation> findPageByInvoiceIdAndCompanyIdAndContractId(
+            UUID invoiceId, UUID companyId, UUID contractId, TaxObligationStatus status, TaxTreatment treatment,
+            org.springframework.data.domain.Pageable pageable);
+
     TaxObligation save(TaxObligation taxObligation);
 
     Optional<TaxObligation> findByIdAndCompanyId(UUID id, UUID companyId);

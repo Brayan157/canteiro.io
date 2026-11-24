@@ -126,15 +126,8 @@ public class JpaMeasurementContinuityRepository implements MeasurementContinuity
         // A reduced accepted origin cannot be billed against its obsolete contractual position
         // while the independent SERVICES authorization is still pending.
         Number count=(Number)em.createNativeQuery("select count(*) from measurement_contract_composition c "
-            +"join measurement_service g on g.id=c.measurement_service_id and g.company_id=c.company_id "
             +"where c.company_id=:company and c.id=:cid and "
-            +"coalesce((select sum(r.net_amount) from measurement_item_recognition r where r.company_id=c.company_id "
-            +"and r.continuous_service_id=g.continuous_service_id and r.active=true and not exists "
-            +"(select 1 from measurement_item_recognition n where n.company_id=r.company_id and n.root_item_id=r.root_item_id and n.version_number>r.version_number)),0) "
-            +"< (select coalesce(sum(p.net_amount),0) from measurement_contract_composition p "
-            +"join measurement_service pg on pg.id=p.measurement_service_id and pg.company_id=p.company_id "
-            +"where p.company_id=c.company_id and pg.continuous_service_id=g.continuous_service_id "
-            +"and not exists(select 1 from measurement_composition_adjustment a where a.company_id=p.company_id and a.composition_id=p.id))")
+            +MeasurementCompositionEligibilitySql.UNRECONCILED_REDUCTION)
             .setParameter("company",company).setParameter("cid",cid).getSingleResult();
         return count.longValue()>0;
     }

@@ -4,9 +4,12 @@ import com.renovar.canteiro.io.access.application.AccessAuthorizationService;
 import com.renovar.canteiro.io.access.domain.AccessAction;
 import com.renovar.canteiro.io.access.domain.AccessModule;
 import com.renovar.canteiro.io.governance.domain.ChangeRequest;
+import com.renovar.canteiro.io.governance.domain.AuditModule;
 import com.renovar.canteiro.io.governance.domain.ChangeRequestRepository;
 import com.renovar.canteiro.io.governance.domain.ChangeRequestStatus;
 import com.renovar.canteiro.io.tenancy.application.TenantContextHolder;
+import com.renovar.canteiro.io.workforce.domain.WorkOperation;
+import com.renovar.canteiro.io.workforce.domain.WorkforceRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
@@ -15,9 +18,11 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.time.LocalDate;
 import java.util.Comparator;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * Provides the governance-only view of pending proposals.
@@ -33,15 +38,15 @@ public class ChangeRequestQueryService {
     private final AccessAuthorizationService accessAuthorizationService;
     private final ChangeRequestRepository changeRequestRepository;
     private final ChangeRequestPresentationService changeRequestPresentationService;
+    private final WorkforceRepository workforce;
+    private final Clock clock;
 
     @Transactional(readOnly = true)
     public Page<ChangeRequest> findPending(Pageable pageable) {
         requireReadPermission();
-        return changeRequestRepository.findByCompanyIdAndStatus(
-                tenantContextHolder.requireCurrentTenant().companyId(),
-                ChangeRequestStatus.PENDING,
-                pageable
-        );
+        return restrictPage(changeRequestRepository.findByCompanyIdAndStatus(
+                tenantContextHolder.requireCurrentTenant().companyId(), ChangeRequestStatus.PENDING, Pageable.unpaged()
+        ).getContent().stream().filter(this::visibleInWork).toList(), pageable);
     }
 
     /**
@@ -55,15 +60,33 @@ public class ChangeRequestQueryService {
         List<ChangeRequestListItem> filtered = changeRequestRepository.findByCompanyIdAndStatus(
                         tenant.companyId(), ChangeRequestStatus.PENDING, Pageable.unpaged()
                 ).getContent().stream()
+                .filter(this::visibleInWork)
                 .filter(request -> matchesFilter(request, filter))
                 .map(changeRequestPresentationService::present)
                 .filter(item -> changeRequestPresentationService.matchesSearch(item, filter.search()))
                 .sorted(toComparator(pageable.getSort()))
                 .toList();
 
-        int fromIndex = Math.toIntExact(Math.min(pageable.getOffset(), filtered.size()));
-        int toIndex = Math.min(fromIndex + pageable.getPageSize(), filtered.size());
-        return new PageImpl<>(filtered.subList(fromIndex, toIndex), pageable, filtered.size());
+        return restrictPage(filtered, pageable);
+    }
+
+    private boolean visibleInWork(ChangeRequest request) {
+        if (request.getModule() != AuditModule.WORK_DIARY) {
+            return true;
+        }
+        var tenant = tenantContextHolder.requireCurrentTenant();
+        UUID workId = UUID.fromString((String) request.getSnapshot().proposedData().values().get("workId"));
+        return accessAuthorizationService.hasPermission(AccessModule.WORK_DIARY, AccessAction.READ)
+                && workforce.hasGrant(tenant.companyId(), workId, tenant.userId(), WorkOperation.READ, clock.instant());
+    }
+
+    private static <T> Page<T> restrictPage(List<T> values, Pageable pageable) {
+        if (pageable.isUnpaged()) {
+            return new PageImpl<>(values);
+        }
+        int start = Math.toIntExact(Math.min(pageable.getOffset(), values.size()));
+        int end = Math.min(start + pageable.getPageSize(), values.size());
+        return new PageImpl<>(values.subList(start, end), pageable, values.size());
     }
 
     private boolean matchesFilter(ChangeRequest request, ChangeRequestFilter filter) {

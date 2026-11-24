@@ -177,9 +177,6 @@ public class EmployeeManagementService {
         values.put("hasDocument", employee.getDocumentNumber() != null);
         values.put("hasPis", employee.getPis() != null);
         values.put("currentlyEmployed", employee.isCurrentlyEmployed());
-        values.put("gender", employee.getGender() == null ? null : employee.getGender().name());
-        values.put("ethnicity", employee.getEthnicity() == null ? null : employee.getEthnicity().name());
-        values.put("compensationFrequency", employee.getCompensationFrequency() == null ? null : employee.getCompensationFrequency().name());
         values.put("hasCompensationAmount", employee.getCompensationAmount() != null);
         values.put("active", employee.isActive());
         values.put("hasSystemAccess", employee.getUserId() != null);

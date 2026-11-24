@@ -161,6 +161,7 @@ public class ConvertAcceptedMeasurementItemToContractServiceUseCase {
         }
         Contract contract = contractRepository.findByIdAndCompanyIdWithBillingLock(measurement.getContractId(), companyId)
                 .orElseThrow(() -> new TenantResourceNotFoundException("Contract"));
+        com.renovar.canteiro.io.contracts.application.ContractLifecycleService.requireOpen(contract);
         measurement.getCurrency().requireSame(contract.getCurrency());
         UUID root=continuity.recognitionForItem(companyId,item.getId()).map(com.renovar.canteiro.io.measurements.domain.MeasurementItemRecognition::rootItemId).orElse(item.getId());
         if(compositions.findByMeasurementIdAndCompanyId(measurement.getId(),companyId).stream().flatMap(c->c.getMeasurementItemIds().stream())

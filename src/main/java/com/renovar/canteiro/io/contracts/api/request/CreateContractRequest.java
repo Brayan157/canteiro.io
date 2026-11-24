@@ -15,7 +15,8 @@ public record CreateContractRequest(
         @NotNull UUID workId,
         @jakarta.validation.constraints.Size(max = 100) String contractIdentifier,
         ContractPricingMode pricingMode,
-        String reference,
+        @Schema(description = "Optional contract number, unique per work regardless of case and surrounding whitespace. Letters, numbers and punctuation are preserved.", example = "CTR/A-001.2026")
+        @jakarta.validation.constraints.Size(max = 100) String reference,
         @NotBlank String name,
         @NotNull ContractStatus status,
         LocalDate startedOn,

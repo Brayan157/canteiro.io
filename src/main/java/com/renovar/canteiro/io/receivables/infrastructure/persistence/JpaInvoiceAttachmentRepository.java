@@ -2,6 +2,7 @@ package com.renovar.canteiro.io.receivables.infrastructure.persistence;
 
 import com.renovar.canteiro.io.receivables.domain.InvoiceAttachment;
 import com.renovar.canteiro.io.receivables.domain.InvoiceAttachmentRepository;
+import com.renovar.canteiro.io.receivables.domain.InvoiceAttachmentType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
@@ -14,8 +15,22 @@ public class JpaInvoiceAttachmentRepository implements InvoiceAttachmentReposito
     private final InvoiceAttachmentJpaRepository repository;
 
     @Override
+    public org.springframework.data.domain.Page<InvoiceAttachment> findByInvoiceIdAndCompanyIdAndContractId(
+            UUID invoiceId, UUID companyId, UUID contractId, org.springframework.data.domain.Pageable pageable) {
+        return repository.findByInvoiceIdAndCompanyIdAndContractId(invoiceId, companyId, contractId, pageable).map(this::map);
+    }
+
+    @Override
     public InvoiceAttachment save(InvoiceAttachment attachment) {
-        return map(repository.save(new InvoiceAttachmentJpaEntity(attachment)));
+        // Generate persistence timestamps before copying to the immutable response projection.
+        return map(repository.saveAndFlush(new InvoiceAttachmentJpaEntity(attachment)));
+    }
+
+    @Override
+    public boolean existsByInvoiceIdAndCompanyIdAndContractIdAndAttachmentType(
+            UUID invoiceId, UUID companyId, UUID contractId, InvoiceAttachmentType attachmentType) {
+        return repository.existsByInvoiceIdAndCompanyIdAndContractIdAndAttachmentType(
+                invoiceId, companyId, contractId, attachmentType);
     }
 
     @Override
