@@ -33,7 +33,8 @@ class FinancialResponseSerializationTest {
     void serializesBalancesReceiptsAndTaxesWithoutScientificNotationOrBinaryFloatingPoint() {
         var zero = BigDecimal.ZERO;
         var balance = new ReceivableBalanceResponse(null, new BigDecimal("1E+3"), zero, zero,
-                new BigDecimal("1000"), new BigDecimal("0.01"), new BigDecimal("999.99"), null, com.renovar.canteiro.io.shared.domain.CurrencyCode.EUR);
+                new BigDecimal("1000"), new BigDecimal("0.01"), new BigDecimal("999.99"), null,
+                com.renovar.canteiro.io.shared.domain.CurrencyCode.EUR, java.time.LocalDate.of(2026, 10, 26), false, "SETTLEMENT_INVOICE_LINK_REQUIRED");
         var tree = mapper.valueToTree(balance);
         for (String field : List.of("originalAmount", "withheldAmount", "creditedAmount", "netReceivableAmount",
                 "confirmedSettlementAmount", "outstandingAmount")) assertTrue(tree.path(field).isString(), field);

@@ -1,6 +1,12 @@
 # Catálogo da API para arquitetura do frontend
 
-Documento baseado nos controllers, DTOs, segurança e tratamento de erros do backend. Seções de medições e cadeia financeira revisadas em 14/10/2026.
+Documento baseado nos controllers, DTOs, segurança e tratamento de erros do backend. Seções de medições, cadeia financeira e privacidade operacional revisadas em 22/10/2026.
+
+Complemento de 26/10/2026: leitura paginada/detalhe básico de recebíveis F05-25 / FRONT-F08-11 na seção 2.15 e no [guia de integração](FRONTEND-RECEIVABLE-READ.md). O export gerado permite atualizar tipos; a publicação na instância local é uma etapa separada.
+
+Histórico contextual de recebimentos/estornos F05-26 / FRONT-F08-15 também na seção 2.15 e em [guia próprio](FRONTEND-RECEIVABLE-SETTLEMENT-HISTORY.md). Leitura apenas, sem nova operação financeira nem publicação da API.
+
+Cobrança por serviço FRONT-F08-19/F05-27 e tributo por valor ou base/alíquota FRONT-F08-20/F05-28 concluídos: 38 testes distintos/8 suítes e 21 reexecuções direcionadas aprovados; Checkstyle e OpenAPI final 3.1.0, 142 paths/243 schemas. [Guia efetivo, hash e provas](FRONTEND-SERVICE-BILLING-AND-TAX.md). Prioridade: base primeiro, depois data oficial de aceite; alíquota até quatro casas e dinheiro HALF_UP em duas casas. Gere os tipos do export definitivo; legado compatível e publicação da instância separada.
 
 Aliases de acesso continuam a ser URLs distintas para a mesma operação de negócio. A cobertura executável é validada por `OpenApiContractIntegrationTest`; confira sempre o OpenAPI da instância publicada antes de gerar tipos.
 
@@ -13,6 +19,24 @@ Aliases de acesso continuam a ser URLs distintas para a mesma operação de neg�
 > Atualização publicada em localhost:8081 em 14/10/2026, com V84 aplicada: `currency` BRL/USD/EUR, `GET /api/v1/company/currencies` e relatórios de dez colunas. Contratos, defaults, imutabilidade, erros, reimportação e hash do OpenAPI vivo estão no [guia de moedas e relatórios](FRONTEND-MEASUREMENT-CURRENCY-REPORTS.md). Dinheiro permanece decimal canônico em texto; moeda é código ISO separado. A [F04-41 foi concluída em 15/10/2026](F04-41-LOCAL-PUBLICATION.md), com sincronização/tipos e validação do frontend de moedas e PDF/XLSX reais com filename oficial. Logo real permanece aguardando cadastro pelo usuário/interface do frontend, com fallback seguro.
 
 ## 1. Visão geral
+
+O primeiro recorte de privacidade operacional está em validação: a listagem de funcionários agora usa projeção mínima e não aceita filtros/ordenações documentais ou salariais. O perfil completo e a remuneração permanecem no detalhe autenticado. Consulte [o guia de integração e pendências](FRONTEND-PRIVACY-REMEDIATION.md) antes de adaptar telas ou persistir filtros.
+
+Cadastros da Fase 6 concluídos: `GET/POST /api/v1/company/suppliers`, `GET/PUT/DELETE /api/v1/company/suppliers/{id}` e rotas equivalentes em `/api/v1/company/financial-categories`. [Guia de fornecedores/categorias e snapshot F06-01](FRONTEND-PAYABLE-CATALOGS.md).
+
+Contas a pagar operacionais incluem criação, lista e detalhe com escopo WORK/COMPANY e moeda oficial. [Guia de títulos](FRONTEND-PAYABLES.md). O saldo oficial também é consultável em `GET /api/v1/company/payables/{payableId}/balance`. A subrota `/settlements` lista o histórico e registra pagamentos parciais/totais. `POST /settlements/{settlementId}/reversals` registra estorno integral vinculado. [Guia de baixas, estornos e aprovação](FRONTEND-PAYABLE-SETTLEMENTS.md).
+
+Caixa realizado por empresa e por obra em `GET /api/v1/company/cash-flow/realized` e `GET /api/v1/company/cash-flow/works/{workId}/realized`. As duas rotas recebem `from` e `to` e retornam entradas, saídas e variação líquida por moeda. [Contrato de caixa realizado](FRONTEND-REALIZED-CASH.md).
+
+O acumulado por obra está em `GET /api/v1/company/cash-flow/works/{workId}/realized/accumulated`. O realizado por obra, por período ou acumulado, retorna `cashResultPercentage` por moeda quando houver entradas líquidas positivas e acesso às duas fontes. [Contrato do acumulado e do percentual](FRONTEND-REALIZED-CASH.md).
+
+Caixa previsto por vencimento em `GET /api/v1/company/cash-flow/due` e `GET /api/v1/company/cash-flow/works/{workId}/due`. O parâmetro `horizonDays` delimita os próximos vencimentos a partir do dia UTC atual. As rotas retornam vencidos e próximos vencimentos pelo saldo residual oficial, com cobertura por moeda e escopo. [Contrato de caixa previsto](FRONTEND-CASH-DUE.md).
+
+Comparação oficial de pagamentos em `GET /api/v1/company/cash-flow/payments/comparison` e `GET /api/v1/company/cash-flow/works/{workId}/payments/comparison`. Use `from` e `to` para comparar os pagamentos líquidos de estornos com o intervalo anterior de igual duração. [Contrato de comparação](FRONTEND-CASH-PAYMENTS-COMPARISON.md).
+
+As variantes com sufixo `/by-category` detalham a comparação por categoria e moeda, incluindo categorias inativas e `Sem categoria`. Exigem `COSTS_EXPENSES.READ` além das permissões das rotas gerais. [Contrato por categoria](FRONTEND-CASH-PAYMENTS-BY-CATEGORY.md).
+
+O PDF financeiro de empresa e obra está em `GET /api/v1/company/cash-flow/report/pdf` e `GET /api/v1/company/cash-flow/works/{workId}/report/pdf`. Recebe `from`, `to`, `currency` e `horizonDays`, com alçada de exportação por fonte. [Contrato do PDF](FRONTEND-CASH-FLOW-PDF.md).
 
 - API REST: `http://localhost:8080` por padrão; no Docker local publicado em 14/10/2026, o frontend acessa `http://localhost:8081`.
 - Swagger UI: `/swagger`.
@@ -222,16 +246,122 @@ Ordenação permitida: `name`, `reference`, `status`, `executionLocationType`, `
 
 `UpdateWorkRequest` contém `name`, `reference`, `executionLocationType`, `executionAddress`, `status`, datas e `justification`. Ele não recebe `finalCustomerId`: a edição preserva o cliente final da obra e evita movimentação silenciosa na hierarquia comercial.
 
+#### 2.5.1 Diário de Obra (F13-02)
+
+Base por obra: `/api/v1/company/works/{workId}/diary`. O backend deriva a empresa da sessão e exige tanto a permissão do papel em `WORK_DIARY` quanto a concessão vigente para a operação naquela obra.
+
+| Operação | Caminho | Acesso |
+|---|---|---|
+| Consultar fuso | GET `/time-zone` | `READ` e concessão `READ` |
+| Configurar fuso IANA | PUT `/time-zone` | `WORKFORCE.MANAGE_USERS`. O fuso fica fixo após o primeiro diário efetivo. |
+| Consultar diário do dia | GET `/{date}` | `READ` e concessão `READ` |
+| Selecionar equipe | GET `/{date}/employees` | Mesma leitura, com nome e ID operacionais. Candidatos avulsos exigem concessão `REGISTER_OCCASIONAL`. |
+| Ler totais oficiais | GET `/time-summary?from=...&through=...` | Mesma leitura. Soma em minutos por funcionário e serviço, com datas inclusivas. |
+| Ler revisões | GET `/{date}/revisions` e `/{date}/revisions/{revision}` | Mesma leitura. A lista usa limite e cursor exclusivo `before`. |
+| Consultar auditoria da obra | GET `/audit` | Mesma leitura e `AUDIT.READ`. Cada evento retorna `actorDisplayName` com a identificação segura e mantém `actorId`. A lista global de auditoria omite eventos do Diário, cujo acesso depende da obra. |
+| Criar ou corrigir | POST ou PUT `/{date}` | Alçada de criação ou edição e concessão `CREATE` ou `UPDATE`. |
+| Fechar ou reabrir | POST `/{date}/close` ou `/{date}/reopen` | Alçada de edição e concessão específica `CLOSE` ou `REOPEN`. |
+
+`date`, `from` e `through` são datas locais `YYYY-MM-DD`. Cada comando informa um UUID `operationId`. Uma correção envia a revisão atual em `expectedRevision`, o motivo e as coleções completas de atividades e ocorrências. A atividade pode ser geral ou apontar o `serviceId` pertencente à obra. A contribuição envia um ID estável e `employeeId`, com `minutes` em inteiro positivo ou `start` e `end` completos com deslocamento da obra. Participação avulsa informa `occasionalReason`. O fechamento e a reabertura enviam a versão e motivo, sem coleções. Um fechamento sem execução explícita informa `noExecutionReason`.
+
+O retorno da mutação contém `diaryId`, revisão aplicada ou ID/situação da solicitação, e o indicador de repetição. `201` cria o Diário, `200` confirma aplicação ou um resultado já decidido, e `202` indica solicitação pendente sem alteração no Diário ou nos totais oficiais. A decisão usa `/api/v1/company/change-requests/{id}/approve` ou `/reject`, com permissão de decisão e concessão correspondente na obra. Conflitos de versão, intenção, duplicidade e sobreposição verificável retornam `409`. A área de auditoria e o histórico respeitam a revogação do acesso à obra.
+
+Os comandos mínimos de administração ficam em `/api/v1/company/workforce`. `WORKFORCE.MANAGE_USERS` permite registrar `POST /employments` e `POST /assignments` e encerrá-los via `PUT /employments/{employmentId}/end` e `PUT /assignments/{assignmentId}/end`, com data e versão. `WORKFORCE.MANAGE_ROLES` permite `POST /grants` e `PUT /grants/{grantId}/revoke`. Lotação, vínculo histórico e concessão são registros independentes.
+
+O papel protegido ativo do proprietário inclui as permissões ativas do catálogo `WORKFORCE.MANAGE_USERS`, `WORKFORCE.MANAGE_ROLES`, `WORK_DIARY.READ`, `WORK_DIARY.CREATE_DIRECT` e `WORK_DIARY.UPDATE_DIRECT`. Para proprietários existentes, a API aplica essa regra em tempo de execução, sem regravar atribuições. Os códigos aparecem em `GET /api/v1/auth/me` e os IDs oficiais aparecem na matriz do papel protegido. Operar o Diário exige concessão vigente da operação na obra, inclusive para o proprietário. O modo de assinatura somente consulta continua bloqueando mutações.
+
+Para incluir na equipe a partir da obra selecionada, use `POST /api/v1/company/workforce/assignments/batch` com `workId`, `employeeIds` (de 1 a 100) e `startedOn` (data comum no formato `YYYY-MM-DD`). Requer `WORKFORCE.MANAGE_USERS`. O backend resolve o vínculo de trabalho compatível de cada funcionário e devolve `201` com as lotações abertas. Um reenvio da mesma obra, pessoa e início reutiliza a lotação ainda aberta. O lote é atômico e os resultados devem ser associados por `employeeId`.
+
+Um conflito no lote retorna `409`. Os motivos são `EMPLOYMENT_REQUIRED` quando falta vínculo na data, `OPEN_EMPLOYMENT_REQUIRED` quando o vínculo encontrado já tem fim e `ASSIGNMENT_PERIOD_CONFLICT` quando há sobreposição de lotação. A violação `employeeIds` identifica a pessoa pelo UUID. O cadastro do vínculo com a empresa permanece disponível para registrar a data real de admissão quando necessário.
+
+Para registrar a saída da obra, use `PUT /api/v1/company/workforce/assignments/{assignmentId}/end` com `endedOn` e `expectedVersion`. A saída é o último dia incluído na lotação, que permanece no histórico. Para transferir, encerre a lotação anterior e faça outra com início posterior ao último dia na origem. Encerrar uma lotação por transferência, pedido de demissão ou desligamento registra a saída da obra. A baixa do vínculo com a empresa continua uma ação própria.
+
+#### Horários observados, equipe, paralisação e clima
+
+POST e PUT de conteúdo aceitam os seguintes campos opcionais. A mesma revisão efetiva os retorna nas consultas atual e histórica.
+
+`GET /api/v1/company/works/{workId}/diary/operations` inclui `fieldObservationsSupported: true` a partir da V101. Ative a edição desses campos somente quando a resposta trouxer o valor `true`. A lista de operações efetivas continua governando as ações disponíveis.
+
+| Campo | Escrita | Leitura |
+| --- | --- | --- |
+| `activities[].timing` | `{start,end?}`. A data é a do Diário. O fim fica vazio enquanto a atividade estiver em andamento. | `{startsAt,endsAt}` em UTC. |
+| `activities[].participants` | `[{employeeId,occasionalReason?}]`. Use `entries: []` quando ainda não houver apontamentos. Funcionário avulso precisa da autorização por obra e de justificativa, que pode vir do seu apontamento na atividade. | União sem repetição da equipe informada e dos funcionários com apontamentos. Inclui a referência histórica do vínculo, lotação e justificativa, quando aplicáveis. |
+| `occurrences[].stoppage` | `{start,resumedAt?,crewDepartedAt?}`. Informe somente um desfecho. Sem ambos, a paralisação está em andamento. | `{startsAt,resumedAt,crewDepartedAt,status,durationMinutes}`. Situações `ONGOING`, `RESUMED` ou `CREW_DEPARTED_WITHOUT_RESUMING`. Os minutos são calculados até o desfecho observado e ficam nulos enquanto estiver em andamento. |
+| `occurrences[].timing` | A partir da V103, `{start,end?}` registra a duração da própria ocorrência, inclusive sem paralisação. Omissão ou `null` preserva o horário anterior na correção. | `{startsAt,endsAt,durationMinutes}`. Sem fim, os minutos ficam nulos. A ocorrência antiga sem horário retorna `timing: null`. Habilite a edição apenas com `occurrenceTimingSupported: true` em `/diary/operations`. |
+| `occurrences[].clearStoppage` | `true` corrige a ocorrência para sem paralisação. Deve vir sem objeto `stoppage` e mantém o mesmo ID. | A nova revisão retorna `stoppage: null`. O histórico anterior preserva a paralisação. |
+| `weatherConditions` | Lista de condições distintas entre `SUNNY`, `CLOUDY` e `RAIN`. Envie `[]` para limpar. | Lista de condições observadas. Registros antigos sem clima retornam `[]`. |
+
+Horários de entrada usam deslocamento válido no fuso da obra, precisão de minuto e limites do dia local. O instante de início deve ter ocorrido e o desfecho fica dentro desse dia. Em PUT, omitir ou enviar `null` em `timing`, `participants`, `stoppage` ou `weatherConditions` preserva a observação anterior da mesma atividade, ocorrência ou revisão. A lista explícita de participantes substitui a seleção manual, e a leitura sempre inclui a participação comprovada pelos apontamentos existentes. Alterações continuam sujeitas à alçada e versionamento do Diário. Clima, paralisação ou duração da atividade não calculam atraso, não lançam e não deduzem minutos-pessoa.
+
+#### Evidência fotográfica privada
+
+A base é `/api/v1/company/works/{workId}/diary/{date}/photos`. Use `photoEvidenceSupported: true` para detectar a leitura a partir da V102. Na V103, `itemPhotoEvidenceSupported: true` habilita a inclusão nos cartões dos itens salvos. A galeria do dia permite consultar fotos, inclusive as gerais legadas. A resposta de operações continua governando as alçadas.
+
+| Operação | Contrato |
+| --- | --- |
+| `POST /photos` | `multipart/form-data` com `file`, `operationId` (UUID), `expectedRevision` (inteiro) e exatamente um UUID entre `activityId` e `occurrenceId`. Ausência dos dois ou envio dos dois retorna `400`. O item precisa existir nessa revisão aberta e na mesma obra e data, ou a API retorna `404`. Envie um arquivo por chamada após salvar o Diário. O servidor verifica o formato real e decodifica JPEG ou PNG, até 8 MiB, 6.000 pixels por lado e 16 milhões de pixels no total. Retorna `201` com metadados, ou `200` para reenvio idêntico pelo mesmo autor. Alterar o arquivo, item ou revisão sob o mesmo UUID retorna `409`. |
+| `GET /photos` | Array de metadados. Sem filtros, lista todas as fotos visíveis do dia, inclusive de revisões anteriores e fotos gerais. Um filtro `activityId` ou `occurrenceId` sem `revision` lista fotos visíveis do mesmo item em qualquer revisão, desde que o item ainda exista na revisão atual. Cada foto conserva a revisão de origem. `revision` explícita filtra pela revisão de origem e inclui retiradas. `offset` padrão 0 e `limit` padrão 20, de 1 a 100. |
+| `GET /photos/{photoId}/content` | Bytes originais e MIME detectado pelo servidor, com `Cache-Control: no-store` e `nosniff`. Use requisição autenticada para carregar o conteúdo. Foto retirada retorna `404`. |
+| `PUT /photos/{photoId}/withdraw` | JSON com `expectedRevision` da revisão aberta atual e `reason` obrigatório. Retira a foto da galeria e bloqueia a leitura do arquivo pela API. Preserva origem, autoria, metadados históricos e arquivo privado. Repita com o mesmo autor e motivo para obter a retirada existente. |
+
+Cada objeto da lista contém `id`, `revision` de origem, `activityId`, `occurrenceId`, `contentType`, `sizeBytes`, `uploadedBy`, `uploadedAt`, `withdrawnBy`, `withdrawnAt` e `withdrawalReason`. Fotos gerais legadas retornam ambos os IDs de item nulos e permanecem acessíveis pela galeria e pelo histórico. O vínculo de uma foto não muda quando o item é corrigido, repetido em nova revisão ou removido. A API omite nome original, URL e chave de armazenamento. Os bytes são preservados como evidência, inclusive os metadados que a câmera incluir no arquivo.
+
+Leitura exige `WORK_DIARY.READ` e concessão vigente `READ` na obra. Upload e retirada exigem alçada direta de atualização no Diário e concessão `UPDATE` vigente na obra. Essas ações não abrem solicitação `202`. Uma revisão já fechada só aceita novas ações de foto após reabertura. O anexo referencia a revisão que estava aberta no upload e não cria uma revisão de conteúdo. A perda da concessão bloqueia inclusive o histórico. Upload, retirada e acesso ao conteúdo são auditados.
+
+As consultas administrativas usam `offset` padrão 0 e `limit` padrão 20, de 1 a 100. `GET /employments?employeeId=...` retorna os vínculos históricos. `GET /assignments?workId=...&from=...&through=...` retorna lotações cuja vigência intersecta o intervalo inclusivo, inclusive as encerradas, junto ao nome operacional. Ambas exigem `WORKFORCE.MANAGE_USERS`. `GET /grants?workId=...&userId=...` exige `WORKFORCE.MANAGE_ROLES` e lista concessões, inclusive encerradas e revogadas, com identificação do usuário. O filtro `userId` é opcional.
+
+`GET /api/v1/company/works/{workId}/diary/operations` retorna as operações efetivas do usuário autenticado na obra e o instante UTC da consulta. Combina concessões vigentes e permissões ativas do papel. `mode` informa `DIRECT` ou `REQUEST_APPROVAL` nos comandos que têm alçada de alteração. A operação ausente está indisponível no instante consultado. A API revalida o escopo a cada comando.
+
+O apontamento manual e a consulta de horas usam a mesma fonte efetiva, `work_time_effective`, que seleciona apenas a revisão atual. As revisões anteriores preservam histórico. `totalMinutes` fica nulo sem apontamentos ou declaração explícita de dia sem execução. A integração de planejamento comparativo e a apuração de custos seguem F13-03 a F13-05. [Contrato funcional](SDD-MVP-Gestao-Financeira.md#contrato-funcional-f13-01).
+
+#### 2.5.2 Comparação do Diário com o plano (F13-03)
+
+Na base `/api/v1/company/works/{workId}/diary/{date}`, `PUT /plan` registra a versão diária. Exige concessão `PLAN` na obra e alçada de atualização em `WORK_DIARY`. Envie `operationId`, `expectedVersion` (0 para o primeiro plano), `reason` e `schedules`. Cada linha tem um `serviceId` válido na obra ou representa o trabalho geral. A linha pode informar minutos-pessoa planejados em inteiro e uma janela com início/fim no fuso da obra. Horários que atravessam a virada do dia pertencem às respectivas datas.
+
+Cada marco tem ID, título e data prevista. Para registrar conclusão observada, informe a data e a revisão fechada do Diário da mesma obra que contém atividade do serviço, ou atividade geral para um marco geral. A revisão de plano congela essa referência. A resposta `202` cria uma solicitação pendente. Aprovação revalida autorização, evidência, fuso e versão vigente. O mesmo `operationId` com o mesmo conteúdo devolve a aplicação anterior ou a solicitação correspondente.
+
+`GET /comparison` exige `WORK_DIARY.READ` e concessão `READ` na obra. Por padrão compara o último plano oficial e a revisão efetiva daquela data. `planVersion` e `diaryRevision` selecionam referências históricas explícitas. O resultado distingue plano ausente, Diário ausente e declaração de dia sem execução.
+
+- **Minutos-pessoa** somam contribuições individuais. **Minutos ativos** usam a união dos intervalos, incluindo trabalho simultâneo uma única vez. Duração sem intervalo entra nos minutos-pessoa. Nessa condição, horário e minutos ativos ficam indisponíveis na linha afetada.
+- **Atraso de início** usa o primeiro horário real verificável e o início planejado da mesma zona. **Atraso de cronograma** usa dias entre o vencimento do marco e a data da conclusão registrada. As ocorrências da revisão são retornadas uma vez como contexto. Sua presença confirma o registro do motivo informado.
+
+#### 2.5.3 Resultado gerencial do Diário (F13-05)
+
+`GET /api/v1/company/works/{workId}/diary/managerial-result` recebe `currency` (`BRL`, `USD` ou `EUR`), `from` e `to` inclusivos até hoje UTC. Por padrão retorna a obra. Informe `contractId` para detalhar o contrato e adicione `serviceId` para detalhar o serviço. Ambos são validados contra a cadeia da obra e do tenant. Exige concessão `READ_FINANCIAL` na obra e permissões `WORKS.READ` e `REPORTING.READ`.
+
+| Visão | Fontes e data-base | Permissões adicionais |
+|---|---|---|
+| `projected` | Faturamento líquido da aplicação oficial da cobrança, por alocações ativas na data UTC de registro. Gastos WORK ativos pela data UTC de registro do título. Tributos a pagar pela empresa pela data UTC de registro da obrigação, contados pela origem TaxObligation uma vez. | `BILLING.READ`, `PAYABLES.READ` e `INVOICES.READ` |
+| `recordedCash` | Baixas confirmadas de recebíveis, pagamentos e estornos, com o sinal oficial pela data efetiva de cada evento. Atribuição a serviço só quando as linhas de recebimento reconciliam o evento integral com origens exatas. | `RECEIVABLES.READ` e `PAYABLES.READ` |
+
+É um recorte dos fatos atualmente registrados e efetivos no período de cada base. Cancelamentos vigentes saem do previsto. A consulta informa `calculatedAt` em UTC e não reconstrói o estado de um corte histórico. Valores são strings decimais de duas casas na moeda consultada. Os campos `directIncome`, `directExpense` e `directTax` mostram os valores registrados diretamente no nível consultado. No previsto, `expense` traz os gastos WORK e `tax` é a parcela tributária deduplicada separadamente. No caixa, `tax` é nulo e pagamentos de impostos aparecem na despesa quando baixados.
+
+`RECORDED` cobre os fatos registrados na base aplicada. `PARTIAL` entrega `attributedResult` e explica fatos no nível superior ou renegociação de gasto sem conciliação. Resultado integral e margem ficam nulos nesses casos. Com base registrada coberta, a margem do previsto é o resultado dividido pelo faturamento aprovado positivo. Uma visão com `NO_PERMISSION` tem valores nulos. Sem acesso a nenhuma das duas bases, a resposta é `403`. Alocações inexistentes ficam no nível comprovado e gastos COMPANY ficam fora da obra. `effectiveLaborCostCoverage=NO_RECONCILED_SOURCE` sinaliza a falta de uma fonte conciliável de folha. Horas do Diário ficam disponíveis como execução operacional e a API não estima custo nem duplica obrigações de mão de obra registradas.
+
 ### 2.6 Contratos — JWT de empresa
+
+Complemento F03-19 (05/11/2026): contrato executável gerado e validado, publicado em `localhost:8081` às09:25:11 de05/11/2026 (São Paulo), com [guia de encerramento, situação e descontos](FRONTEND-CONTRACT-LIFECYCLE.md).
+
+Feedback complementar F03-19 publicado/verificado em8081 em05/11/2026 às12:54:46SãoPaulo: a elegibilidade preserva motivo financeiro autorizado do serviço já COMPLETED. No resumo do contrato, `CONTRACT_FINANCIAL_RECONCILIATION_REQUIRED` diferencia origem/crédito que exigem conciliação de `CONTRACT_HAS_UNSETTLED_SERVICES`; o primeiro tem prioridade entre serviços. Sem novo campo/rota ou liberação de guarda, e sem indicar dinheiro ausente pela mera falta de atribuição histórica. ExportF42E4998/151paths/263schemas e pacoteD704704F, com21testes distintos/23execuções aprovados; contrato/ativação no guia.
+
+
+| Método | Rota relativa a `/api/v1/company/contracts` | Contrato | Respostas |
+| --- | --- | --- | --- |
+| GET | `/{contractId}/closure-eligibility` | `ContractClosureEligibilityResponse`; page/size e serviceId opcional; resumo integral antes do filtro; CONTRACTS.READ + SERVICES.READ |200;400/401/403/404 Problem Details |
+| PUT | `/{contractId}/status` | `UpdateContractStatusRequest` → `ContractChangeResponse`; somente status, completedOn opcional e justificativa |200/202;400/403/404/409 Problem Details |
+| PUT | `/{contractId}/services/{serviceId}/status` | `UpdateContractServiceStatusRequest` → `ContractServiceChangeResponse`; somente status e justificativa |200/202;400/403/404/409 Problem Details |
+
+CANCELLED exige alçada CANCEL; demais alterações usam UPDATE.202 não modifica dado oficial e revalida na aprovação; requests não reenviam preços/descontos/perfil. `eligible` e `authorizationMode` podem ser null; decisões financeiras exigem BILLING.READ + RECEIVABLES.READ + INVOICES.READ. Novo desconto é bloqueado por saldo oficial de cobrança aberto mesmo sem NF; líquido inferior ao caixa confirmado líquido de estornos também é bloqueado. Descontos vigentes e limites mais restritivos são preservados. Motivos controlados, reabertura explícita e disponibilidade local estão no guia.
+
 
 Base: `/api/v1/company/contracts`
 
 | Método | Caminho | Entrada | Resposta | Status |
 |---|---|---|---|---|
 | GET | `/` | `page`, `size`, `sort`, filtros abaixo | `PageResponse<ContractResponse>` | `200` |
-| POST | `/` | `CreateContractRequest` | `ContractChangeResponse` | `201` direto ou `202` aprovação |
+| POST | `/` | `CreateContractRequest` | `ContractChangeResponse` | `201` direto, `202` aprovação ou `409` número em uso na obra |
 | GET | `/{contractId}` | path UUID | `ContractResponse` | `200` |
-| PUT | `/{contractId}` | `UpdateContractRequest` | `ContractChangeResponse` | `200` direto ou `202` aprovação |
+| PUT | `/{contractId}` | `UpdateContractRequest` | `ContractChangeResponse` | `200` direto, `202` aprovação ou `409` conflito |
 | GET | `/{contractId}/services` | path UUID | `List<ContractServiceResponse>` | `200` |
 | POST | `/{contractId}/services` | `UpsertContractServiceRequest` | `ContractServiceChangeResponse` | `201` direto ou `202` aprovação |
 | PUT | `/{contractId}/services/{serviceId}` | `UpsertContractServiceRequest` | `ContractServiceChangeResponse` | `200` direto ou `202` aprovação |
@@ -256,9 +386,13 @@ Filtros da listagem:
 | `expectedCompletionFrom` / `expectedCompletionTo` | `YYYY-MM-DD` | intervalo inclusivo da previsão de conclusão |
 | `completedFrom` / `completedTo` | `YYYY-MM-DD` | intervalo inclusivo da data de conclusão |
 
-Ordenação permitida: `name`, `reference`, `status`, `startedOn`, `expectedCompletionOn`, `completedOn`, `createdAt`, `updatedAt`.
+Ordenação permitida: `name`, `reference`, `status`, `startedOn`, `expectedCompletionOn`, `completedOn`, `createdAt`, `updatedAt`, `openFirst`.
+
+Envie `sort=openFirst,asc` para colocar `OPEN` e `ACTIVE` no primeiro grupo antes de paginar. As demais situações continuam na listagem, conforme os filtros. Com `openFirst`, outros campos de ordenação valem dentro de cada grupo, com desempate por `createdAt,desc` e `id,asc`. `openFirst,desc` inverte a prioridade dos grupos. Chamadas sem `openFirst` mantêm o comportamento anterior.
 
 `CreateContractRequest` e `UpdateContractRequest` incluem `contractIdentifier`, uma identificação livre de negócio (por exemplo, `0001/2027` ou `Contrato padrão`). Esse identificador **não é único**, inclusive quando se repetir em contratos de clientes finais distintos. `UpdateContractRequest` também contém `reference`, `name`, `status`, datas e `justification`. Ele não recebe `workId`: a obra do contrato é preservada para não alterar silenciosamente o encadeamento comercial, de medição e de faturamento.
+
+O campo `reference` representa o número do contrato no relatório por obra. É opcional, aceita texto de até 100 caracteres, preserva pontuação e caixa e remove espaços nas pontas de novas referências. Números iguais podem existir em obras diferentes. Na mesma obra, cadastro e alteração para número já em uso retornam `409 application/problem+json` com `code=BUSINESS_RULE_VIOLATION`, `reason=CONTRACT_REFERENCE_ALREADY_EXISTS` e `violations[].field=reference`. Uma edição que mantém o número legado continua permitida. O `202` não reserva número. A aprovação revalida a disponibilidade e devolve o mesmo `409` se houver conflito.
 
 `UpsertContractServiceRequest` contém `sourceServiceTemplateId` opcional, `name`, `description`, `status`, `quantity`, `unitPrice`, `discountType`, `discountValue` e `justification`. Na criação, o modelo informado deve pertencer à empresa e fica registrado como origem. Na edição, ele pode ser reenviado somente se for o mesmo modelo de origem; não pode ser trocado. A edição nunca recebe nem troca `contractId`. `SetContractDiscountRequest` exige `discountType`, `discountValue` e `justification`.
 
@@ -278,7 +412,7 @@ Base: `/api/v1/company/employees`
 |---|---|---|---|---|
 | POST | `/` | `CreateEmployeeRequest` | `EmployeeChangeResponse` | `201` direto ou `202` aprovação |
 | GET | `/{employeeId}` | path UUID | `EmployeeResponse` operacional | `200` |
-| GET | `/` | `page`, `size`, `sort`, filtros abaixo | `PageResponse<EmployeeResponse>` | `200` |
+| GET | `/` | `page`, `size`, `sort`, filtros abaixo | `PageResponse<EmployeeListItemResponse>` mínimo | `200` |
 | POST | `/{employeeId}/access-invitations` | `InviteEmployeeAccessRequest` | `EmployeeAccessInvitationResponse` | `201` |
 | POST | `/{employeeId}/addresses` | `EmployeeAddressRequest` | `EmployeeAddressResponse` | `201` |
 | GET | `/{employeeId}/addresses` | — | `EmployeeAddressResponse[]` | `200` |
@@ -295,22 +429,20 @@ Base: `/api/v1/company/employees`
 
 Filtros da listagem:
 
+Atualização de privacidade de 22/10/2026: a lista HTTP retorna apenas `id`, `fullName`, `preferredName`, `jobTitle`, `department`, `registrationNumber`, `employmentType`, `currentlyEmployed`, `active`, `userId` e `photoUrl`. Documento/PIS, telefone, nascimento, gênero/etnia e remuneração não integram `EmployeeListItemResponse`. **Salário continua disponível no perfil/detalhe `EmployeeResponse`**, bem como os demais campos de cadastro; não tratar a ausência na lista como cadastro vazio nem enviar `null` no PUT completo para apagar dados. Não buscar o detalhe de todos os funcionários para reconstruir uma tabela de dados pessoais. [Recorte, limites e pendências](FRONTEND-PRIVACY-REMEDIATION.md).
+
 | Parâmetro | Tipo | Regra |
 |---|---|---|
 | `name` | string | contém em `fullName` ou `preferredName`, sem diferenciar maiúsculas/minúsculas |
-| `document` | string | contém; o documento é normalizado para dígitos antes da busca |
 | `jobTitle` | string | contém, sem diferenciar maiúsculas/minúsculas |
 | `department` | string | contém, sem diferenciar maiúsculas/minúsculas |
 | `employmentType` | `EmployeeEmploymentType` | tipo de vínculo |
-| `compensationFrequency` | `MONTHLY`, `DAILY` ou `HOURLY` | modalidade da remuneração |
-| `compensationMin` | decimal | limite inferior inclusivo da remuneração |
-| `compensationMax` | decimal | limite superior inclusivo da remuneração; deve ser maior ou igual ao mínimo |
 | `currentlyEmployed` | boolean | empregado atualmente na empresa |
 | `active` | boolean | cadastro ativo |
 
-`compensationMin` e `compensationMax` devem usar decimal em texto, por exemplo `3500.00`; não use ponto flutuante no estado do frontend. Os filtros de documento e remuneração só funcionam dentro do tenant autenticado e com `EMPLOYEES.READ`.
+Por privacidade, a listagem não aceita filtros de documento, PIS ou remuneração. Não encaminhar esses valores para a URL, `history.state`, armazenamento do navegador, telemetria ou logs de frontend. A consulta do perfil autenticado continua sendo a fonte de dados de RH quando a tela tiver autorização para mostrá-los.
 
-Ordenação permitida: `fullName`, `jobTitle`, `department`, `employmentType`, `compensationAmount`, `compensationFrequency`, `currentlyEmployed`, `active`, `createdAt`, `updatedAt`.
+Ordenação permitida: `fullName`, `jobTitle`, `department`, `employmentType`, `currentlyEmployed`, `active`, `createdAt`, `updatedAt`.
 
 A foto é opcional e é destinada somente à identificação visual interna. Aceita PNG ou JPEG de até 2 MiB e 2048 × 2048 pixels; não há reconhecimento facial, uso biométrico ou URL pública. O `photoUrl` retornado em `EmployeeResponse` exige o mesmo Bearer JWT e deve ser baixado pelo cliente HTTP autenticado como Blob/object URL. Upload e remoção exigem `EMPLOYEES.UPDATE_DIRECT`; download exige `EMPLOYEES.READ`.
 
@@ -391,7 +523,9 @@ Base: `/api/v1/company/audit-events`
 |---|---|---|---|---|
 | GET | `/` | `page`, `size`, `sort` | `PageResponse<AuditEventResponse>` | `200`; exige `AUDIT.READ` |
 
-Para a linha do tempo, use exclusivamente `actorDisplayName` como identificação do responsável. Ele é um nome seguro e legível (por exemplo, o nome completo do funcionário vinculado), nunca e-mail ou UUID. `actorEmail` é um campo de contato separado, disponível quando houver usuário associado; para eventos `SYSTEM`, ambos `actorUserId` e `actorEmail` são nulos e `actorDisplayName` é `Sistema`. Não mostre os dados de `beforeData` ou `afterData`: eles não fazem parte do contrato.
+Para a linha do tempo, use `actorDisplayName` como identificação do responsável. A API prefere o nome do funcionário ligado à conta na mesma empresa. Quando a conta é de um proprietário sem vínculo, a identificação é `Proprietário da empresa`; para outro membro sem nome vinculado, `Usuário da empresa`. O e-mail de contato continua em `actorEmail`. Para eventos `SYSTEM`, a identificação é `Sistema` e `actorUserId` e `actorEmail` são nulos. Em eventos de cadastro de cliente, `entityDisplayName` é o nome do cliente da empresa. Rótulos legados indisponíveis podem ser preenchidos na leitura com dados da própria empresa, preservando o evento original. Os dados de `beforeData` e `afterData` são internos à auditoria.
+
+Em `Role` e `RolePermissions`, `entityDisplayName` identifica o papel. Em `User` e `UserRoles`, identifica a conta afetada pelo nome do funcionário vinculado na mesma empresa ou pelo rótulo da conta sem vínculo. O nome capturado no evento continua visível após renomeações.
 
 ### 2.10 Medições — JWT de empresa
 
@@ -582,14 +716,26 @@ Exemplo de item por unidade:
 
 ### 2.11 Controle de faturamento — JWT de empresa
 
+Atualização F05-30 validada e publicada somente em localhost:8081 em 27/10/2026: resumo da lista e detalhe acrescentam `receivedAmountAvailable` e `receivedAmount` (decimal canônico string ou null). O dinheiro confirmado líquido de estornos exige `RECEIVABLES.READ` adicional; sem ela false/null, não zero fictício. Não somar títulos/versões no cliente nem contar retenções/créditos/NFs como caixa. [Contrato e evidências](FRONTEND-RECEIPT-DATE-AND-BILLING-CASH.md).
+
 Base: `/api/v1/company/billing-control/contracts`
 
 | Método | Caminho | Entrada | Resposta | Status |
 |---|---|---|---|---|
 | GET | `/` | filtros + paginação | `PageResponse<BillingControlSummaryResponse>` | `200` |
 | GET | `/{contractId}` | path UUID | `ContractBillingControlResponse` | `200` |
+| GET | `/{contractId}/measurement-origins` | `measurementId`, `contractServiceId`, paginação, `sort=createdAt,desc` | `PageResponse<BillableMeasurementOriginResponse>` | `200`, `400`, `401`, `403`, `404` |
+| GET | `/{contractId}/report/pdf` | path UUID | PDF binário inline, filename UTF-8, no-store | `200`, `400`, `401`, `403`, `404`, `409` |
 
-Filtros: `contractId`, `status`, `query`. Ordenação: `name`, `reference`, `status`, `createdAt`.
+**Correção documental posterior àV91 publicada em8081 às14:49:55SãoPaulo em29/10/2026,JARCF376B05:** mantém a rotaHTTP; grade com nºcontrato, parcelasNF sequenciais, saldo porserviço, resumo contratado/faturado/saldo eNFtabular com saldo acumulado na base contratual atual por emissão/ID. Não usa snapshotcaixaV91 como saldoNF. Sem nova migration. [Guia atualizado](FRONTEND-CONTRACT-BILLING-PDF.md). [Ativação atual e provas](F07-04-DOCUMENTARY-LOCAL-ACTIVATION-2026-10-29.md). O parágrafo seguinte é registro da publicação anterior386004E6, agora substituída.
+
+**Relatório corrigido publicado na API local8081 em29/10/2026 às14:30:04SãoPaulo**, JAR386004E6.../V91 após autorização humana confirmada e backup privado verificado. Descrição completa, valor/saldo comercial líquido por serviço segundoF05-21, NFs emcolunas, resumo de dinheiroCONFIRMED líquido deestornos, histórico imutável de novasNFs no registro (antigas semcaptura) e cobranças abertas inclusive semNF. Quatro permissõesbase BILLING.READ+EXPORT/INVOICES.READ+EXPORT; RECEIVABLES.READ+EXPORT adicionais habilitam caixa/histórico/títulos. Sem ambas, indisponibilidade explícita e PDFbase disponível. Contratado menos caixa não é dívida dos títulos. Snapshot consistente, janelas limitadas, cache temporário e auditoria preservados. OpenAPIvivo200 e401anônimo conferidos. [Guia](FRONTEND-CONTRACT-BILLING-PDF.md). [Ativação](F07-04-REVISION-LOCAL-ACTIVATION-2026-10-29.md).
+
+Filtros: `contractId`, `status`, `query`. Ordenação: `name`, `reference`, `status`, `createdAt`, `openFirst`. Use `sort=openFirst,asc` para a mesma prioridade e o mesmo desempate da listagem de contratos.
+
+Na coluna **Número do contrato**, o PDF individual usa `reference`. Quando esse campo está vazio, o PDF individual continua exibindo `contractIdentifier` como fallback.
+
+A consulta `measurement-origins` tem filtros/ordenação próprios e exige `BILLING.READ` **e** `MEASUREMENTS.READ`. Retorna composições aceitas/aplicadas, não revertidas, sem redução não reconciliada e com capacidade positiva. Cada linha preserva `measurementContractCompositionId`, destino `contractServiceId` imutável, medição/versão/grupo e `availableToBillAmount` decimal string. Vários avanços do mesmo serviço permanecem linhas distintas. Não reserva saldo; o POST de parcela mantém suas validações transacionais. [Contrato completo e exemplo](FRONTEND-BILLABLE-MEASUREMENT-ORIGINS.md).
 
 No detalhe `GET /{contractId}`, todos os valores monetários são strings decimais canônicas, sem símbolo de moeda ou formatação local (por exemplo, `"99.90"`). Não os converta para `number` no cliente. Os totais oficiais do contrato são `serviceSubtotal` (subtotal dos serviços antes do ajuste contratual), `contractDiscountAmount` (desconto/ajuste oficial do contrato) e `contractNetAmount` (líquido após o ajuste). Também retornam `activeAllocatedAmount`, `availableAmount`, os valores de `services` e `allocations`, incluindo `registeredInvoiceAmount` e `availableInvoiceAmount`.
 
@@ -597,12 +743,20 @@ A listagem paginada também usa strings em `contractNetAmount`, `activeAllocated
 
 ### 2.12 Parcelas de faturamento — JWT de empresa
 
+Correção F05-20 publicada/verificada em localhost:8081 (05/11/2026 às12:08:09SãoPaulo): GET de lista/detalhe acrescenta `receivableFinancialStatusAvailable`, `receivableFinancialStatus` e `receivableReceivedWithWithholding`, com a semântica do título original e READ financeiro adicional, preservando `status` cadastral e `netAmount` histórico. ExportADD231B9, 151paths/263schemas, com nulabilidade e enum explícitos; testes/ativação no [guia de cobranças](FRONTEND-BILLING-INSTALLMENT-READ.md).
+
 Base: `/api/v1/company/billing-installments`
+
+> F05-21 concluída: novo fluxo com valor positivo líquido, sem desconto manual. Consulte `GET /api/v1/company/billing-control/contracts/{contractId}/net-capacity` e envie `POST /api/v1/company/billing-installments/net`, com `operationId`, `capacityVersion` e alocações de `netAmount`. [Guia completo, OpenAPI e provas](FRONTEND-NET-BILLING.md). O backend distribui somente o desconto não comprometido, por base/composição exata; não calcular capacidades no navegador. Export executável validado (127 paths/205 schemas), ainda sem publicação na instância. As rotas legadas abaixo continuam compatíveis.
 
 | Método | Caminho | Entrada | Resposta | Status |
 |---|---|---|---|---|
+| GET | `/` | `contractId`, `reference`, `status`, `dueFrom`, `dueTo`, paginação/ordenação controladas | `PageResponse<BillingInstallmentSummaryResponse>` | `200`, `400`, `401`, `403` |
+| GET | `/{installmentId}` | path UUID | `BillingInstallmentDetailsResponse` | `200`, `400`, `401`, `403`, `404` |
 | POST | `/` | `CreateApprovedBillingInstallmentRequest` | `BillingInstallmentApprovalResponse` | `201` ou `202` |
 | POST | `/{installmentId}/cancellation` | `CancelFinancialRecordRequest` | `FinancialCancellationResponse` | `200` ou `202` |
+
+As leituras exigem `BILLING.READ`, incluem histórico/canceladas e retornam `netAmount` oficial em string decimal, sem exigir soma no cliente. No detalhe, alocações preservam serviço/nome contratual e `measurementContractCompositionId`. Referências `{ id, reference }` de recebíveis exigem adicionalmente `RECEIVABLES.READ`; sem ela, `receivableReferencesAvailable=false` e `receivables=[]`. Não há saldo/baixas de recebíveis nessa resposta. [Filtros, ordenação, DTOs e regras completas](FRONTEND-BILLING-INSTALLMENT-READ.md). São contratos implementados/exportados; este recorte não publica/reinicia a API local.
 
 Regras importantes para a UI:
 
@@ -613,28 +767,51 @@ Regras importantes para a UI:
 - Alocações não podem exceder contrato, serviço ou desconto contratual.
 - Uma parcela aprovada cria um `Receivable` individual; `financialGroupId` agrupa títulos relacionados.
 
-`allocations[].allocatedAmount` e `receivable.originalAmount` são strings decimais canônicas com duas casas, inclusive ajustes negativos como `"-20.00"`. Serviço cancelado não admite novo faturamento (`409`). Edição/desconto de serviço não pode reduzi-lo abaixo do seu comprometimento aprovado, mesmo havendo saldo em outro serviço do contrato. Sua base negociada também precisa cobrir as alocações sem origem de medição; uma composição aceita não pode encobrir esse excesso. Desconto contratual não pode ser reduzido/revertido abaixo das alocações negativas ativas que ele sustenta; estorne/cancele primeiro essas alocações pelo fluxo oficial.
+`allocations[].allocatedAmount` e `receivable.originalAmount` são strings decimais canônicas com duas casas, inclusive ajustes negativos legados como `"-20.00"`. Serviço cancelado não admite novo faturamento (`409`). Edição/desconto de serviço não pode reduzi-lo abaixo da capacidade comprometida, mesmo havendo saldo em outro serviço. A base negociada cobre suas alocações sem origem; uma composição aceita não encobre esse excesso. Desconto contratual deve manter lastro dos ajustes negativos ativos e dos descontos congelados em alocações líquidas; estorne/cancele primeiro pelo fluxo oficial. No novo fluxo, `allocatedAmount` é positivo líquido e `netBillingGrossAmount`/`netBillingDiscountAmount` preservam a base/desconto; no legado esses metadados são nulos. O resumo da medição já retorna capacidade líquida e falta receber com esses ajustes; não recalcular no frontend.
 
 ### 2.13 Notas fiscais — JWT de empresa
 
+Complemento de cobrança por serviço F05-27: `GET /api/v1/company/billing-control/contracts/{contractId}/net-capacity/services` → `ServiceNetBillingCapacityResponse` com capacidade completa/versionada, cobertura e bloqueios separados, por BILLING.READ + MEASUREMENTS.READ; `POST /api/v1/company/billing-installments/net/by-service` recebe `CreateServiceNetBillingRequest` (`services[].mode=ALL_AVAILABLE|PARTIAL`, valor parcial string) e responde `BillingInstallmentApprovalResponse` (`201` direto/`200` replay/`202` proposta sem reserva). Resolução oficial base → aceite no backend, com origens preservadas até NF/título/baixa/estorno; não enviar composição/rateio manual. [Contrato completo](FRONTEND-SERVICE-BILLING-AND-TAX.md). As rotas abaixo continuam compatíveis.
+
 Base: `/api/v1/company/invoices`
+
+F05-35 validada/publicada somente em 8081 em 27/10/2026: `GET /contracts` → `PageResponseInvoiceContractResponse`, filtros `search/page/size/sort`; `GET /contracts/{contractId}` → contexto `InvoiceContractResponse`, ambos somente INVOICES.READ e com identificação mínima dos contratos que possuem NFs oficiais. Depois usar o `GET /` abaixo com `contractId` exato. [Contrato, campos, hashes e provas](FRONTEND-INVOICE-CONTRACT-INDEX.md).
+
+Complemento F05-34: os GETs de lista/detalhe acrescentam `receiptPosition` no cabeçalho, separado do status documental. Com F05-32/V90 publicada localmente em29/10, informa posição UNPAID/PARTIALLY_RECEIVED/RECEIVED/SETTLED_BY_ADJUSTMENTS somente com vínculo NF/item comprovável; legado sem prova mantém indisponibilidade/motivo e valores null; `INVOICES.READ` não concede acesso financeiro. [Guia aditivo, estado de validação/publicação e permissões](FRONTEND-RECEIVABLE-POSITION-AND-INVOICE-RECEIPTS.md).
 
 | Método | Caminho | Entrada | Resposta | Status |
 |---|---|---|---|---|
+| GET | `/` | `contractId`, `number`, `series`, `contractSearch`, `installmentReference`, `status`, `issuedFrom`, `issuedTo`, `page`, `size`, `sort` | `PageResponseInvoiceSummaryResponse` | `200` |
+| GET | `/{invoiceId}` | — | `InvoiceDetailsResponse` (`invoice`, `items`) | `200` |
+| GET | `/{invoiceId}/attachments` | `page`, `size`, `sort` | `PageResponseInvoiceAttachmentResponse` | `200` |
+| GET | `/{invoiceId}/attachments/{attachmentId}/download` | — | PDF/XML binário autenticado | `200` |
 | POST | `/` | `CreateRegisteredInvoiceRequest` | `InvoiceRegistrationResponse` | `201` ou `202` |
 | POST | `/{invoiceId}/cancellation` | `CancelFinancialRecordRequest` | `FinancialCancellationResponse` | `200` ou `202` |
-| POST | `/{invoiceId}/attachments` | multipart: `attachmentType`, `file` | `InvoiceAttachmentResponse` | `200` |
+| POST | `/{invoiceId}/attachments` | multipart: `attachmentType=PDF`, `file` PDF | `InvoiceAttachmentResponse` | `200`, `409 INVOICE_PDF_ALREADY_ATTACHED`, `415 INVOICE_ATTACHMENT_PDF_REQUIRED` |
 
-Anexos aceitos: `PDF`, `XML`. A NF pertence a um único contrato e cada item consome somente a capacidade da `BillingAllocation` informada. Registrar NF não registra recebimento.
+Correção F05-36 publicada/verificada somente em 8081 em 28/10/2026 sob nova autorização: upload força persistência antes da projeção para devolver `createdAt` UTC e os oito metadados completos; não aceitar null nem reenviar automaticamente após resposta inconclusiva. Cancelamento mantém a rota e `200/202`, mas valida também antes de propor e na aprovação: `409 BUSINESS_RULE_VIOLATION` com motivos `INVOICE_CANCELLATION_HAS_ACTIVE_RECEIPTS`, `INVOICE_CANCELLATION_HAS_TAX_PAYMENTS` ou `INVOICE_CANCELLATION_REQUIRES_REVIEW`, além de conflito concorrente padronizado. Mantém dívida e histórico, sem estorno automático. Hash ativo FCEEA62E.../OpenAPI vivo conferidos com export 976E9070...; F05-32 e novos recebimentos continuam bloqueados. [Contrato, diagnóstico, testes e publicação](FRONTEND-INVOICE-UPLOAD-AND-CANCELLATION-SAFETY.md).
+
+Anexos aceitos: `PDF`, `XML`, até 10 MiB. A API valida MIME/extensão e conteúdo antes de gravar: PDF legível, com páginas e não cifrado; XML bem formado sem DOCTYPE, entidades externas ou XInclude, com limites estruturais. Arquivo inválido retorna `400 application/problem+json` com `correlationId`, sem anexo/auditoria de sucesso. Upload exige alçada direta de criação em INVOICES (`403` sem ela; `404` para NF ausente/fora do tenant), sem mudança do HTTP `200` de sucesso. Validação estrutural não é antimalware nem autorização/validação fiscal. A NF pertence a um único contrato e cada item consome somente a capacidade da `BillingAllocation` informada. Registrar NF não registra recebimento.
+
+Os GETs de lista/detalhe da NF exigem `INVOICES.READ`, retornam somente o tenant da sessão e incluem histórico cancelado. Filtros são literais e não exigem pesquisa por UUID; a ordem padrão é `issuedOn desc, id asc`, com campos permitidos `number`, `series`, `issuedOn`, `status`, `createdAt`. O detalhe mantém os IDs de alocação/parcela/composição exatos por item e não expõe chave fiscal, anexos, impostos ou dados de baixa. Erros `400/401/403` e `404` no detalhe usam Problem Details. Parâmetros, nulabilidade, decimais e limites efetivos no [guia F05-22](FRONTEND-INVOICE-READ.md); publicação local não integra este recorte.
+
+A lista contextual de anexos exige `INVOICES.READ`, tamanho de página `1..100` (padrão `20`), ordem padrão `createdAt desc,id asc` e sort permitido `createdAt`, `attachmentType`, `originalFilename`, `contentSize`. Retorna os metadados do DTO atual, nunca storage ou conteúdo fiscal. Download exige **READ+EXPORT**, preserva arquivo existente de até 10 MiB, confere hash/tamanho e devolve `application/pdf`/`application/xml`, `Content-Disposition: attachment` seguro e `Cache-Control: no-store`; registra somente auditoria EXPORT segura, sem efeito financeiro. NFs canceladas continuam legíveis. Cadeia inválida/fora do tenant retorna `404`; conteúdo indisponível/corrompido retorna `503`, também Problem Details. [Contrato completo e provas F05-23](FRONTEND-INVOICE-ATTACHMENTS.md). Upload mantém suas regras; consulta de tributos é o recorte F05-24 abaixo.
 
 `invoice.totalAmount` e `invoice.items[].allocatedAmount` são strings decimais canônicas. A mesma alocação pode ser documentada parcialmente em várias NFs até seu limite; a NF não consome novamente o saldo contratual. A situação ativa e o saldo da alocação são verificados sob lock transacional, também na aprovação.
 
 ### 2.14 Impostos da NF — JWT de empresa
 
+Complemento F05-28: `POST /api/v1/company/invoices/{invoiceId}/tax-obligations/preview` → `InvoiceTaxCalculationResponse` (`200`, sem efeitos); `POST .../calculated` → `CalculatedTaxObligationCreationResponse` (`201` direto/`200` replay/`202` somente proposta); `GET .../{taxObligationId}/calculation` → `InvoiceTaxCalculationResponse` (`200`, histórico por INVOICES.READ). Prévia/criação exigem alçada INVOICES.CREATE/request, inputs explícitos por valor ou base/alíquota e confirmação oficial do valor, sem motor fiscal. [Requests, precisão, idempotência, status e provas](FRONTEND-SERVICE-BILLING-AND-TAX.md). Todos documentam `400/401/403/404/409` Problem Details; legado abaixo não muda.
+
 Base: `/api/v1/company/invoices/{invoiceId}/tax-obligations`
+
+Leitura: `GET /` retorna `PageResponseInvoiceTaxObligationResponse` com `INVOICES.READ`, somente no tenant e na cadeia NF/contrato/tributo/recebível validados. Aceita `page`/`size` (0/20, tamanho 1..100), `status` (`REGISTERED`/`CANCELLED`) e `treatment` opcionais; inclui todo histórico por padrão, inclusive NF cancelada. Sort controlado `createdAt`, `name`, `treatment`, `status`, com direção, padrão `createdAt desc,id asc`. Resposta `200 application/json`/`no-store`; NF existente sem tributos retorna página vazia, fora do tenant/inexistente retorna `404`; `400/401/403/404` usam Problem Details/correlationId.
+
+O item `InvoiceTaxObligationResponse` contém `id`, `invoiceId`, `contractId`, `name`, `description` opcional, `dueOn` opcional, `amount` string decimal, `treatment`, `status`, `currency`, `createdAt`, `updatedAt`. Não devolve IDs/detalhes de recebível/Payable, não recalcula nem reaplica retenções, não cria obrigação/saldo/baixa e não muda auditoria financeira; `202` continua só proposta. POST existente permanece com seu próprio DTO de criação. [Contrato completo, nulabilidade e provas F05-24](FRONTEND-INVOICE-TAXES.md).
 
 | Método | Caminho | Entrada | Resposta | Status |
 |---|---|---|---|---|
+| GET | `/` | `status`, `treatment`, `page`, `size`, `sort` | `PageResponseInvoiceTaxObligationResponse` | `200` |
 | POST | `/` | `CreateTaxObligationRequest` | `TaxObligationCreationResponse` | `201` ou `202` |
 
 Tratamentos:
@@ -649,8 +826,17 @@ Tratamentos:
 
 Base: `/api/v1/company/receivables`
 
+F05-32 implementada/validada e **publicada somente em8081 em29/10/2026, com V90 e nova autorização específica**: `GET /{receivableId}/invoice-settlement-options?page=&size=` retorna `InvoiceSettlementOptionsResponse` com página interna de origens exatas e limites oficiais; `POST /{receivableId}/invoice-settlements` aceita `CreateInvoiceSettlementRequest` com operationId e valores manuais por NF/InvoiceItem/alocação/composição. `201` novo, `200` replay, `202` somente `PendingInvoiceSettlementResponse`. Exige INVOICES.READ e leitura/alçada de RECEIVABLES correspondente. Flag e POST genéricos antigos continuam bloqueados. Estorno/histórico usam rotas já existentes; posição de NF evolui somente para vínculos comprováveis. Export executável27037B87... disponível para tipos,147paths/255schemas; 89 testes/11 suítes e Checkstyle aprovados. [DTOs, paginação, limites compartilhados e idempotência](FRONTEND-MANUAL-INVOICE-SETTLEMENTS.md). [Ativação local verificada](F05-32-LOCAL-ACTIVATION-2026-10-29.md): JAR0E25A12A..., V90 única aplicada com checksums, OpenAPI200 idêntico nos componentes/caminhos compartilhados ao export,401 anônimos, seeds/Flyway automático off e ledger vazio. Frontend pode habilitar apenas a configuração local autorizada; nenhum recebimento real executado.
+
+Histórico F05-37, anterior ao complemento de retenção proporcional descrito ao final deste guia: aditivo de leitura validado e publicado somente em8081 em29/10, após nova autorização específica e sem migrations: o mesmo GET de opções acrescenta totalSettlementProposal com total/linhas exatas somente quando a distribuição da cobrança pelas origens documentadas for única. Independente da página; sem reserva, proporção/FIFO ou cálculo oficial no frontend; parcial permanece manual. Indisponível retorna motivo/null/linhas vazias. Export atual7BF8E221.../147paths/257schemas; API8081 ativa no JAR B971C83C..., OpenAPI vivo200/componentes e caminhos compartilhados idênticos ao export7BF8E221..., schema90 e seeds/Flywayfalse preservados. [Publicação verificada](F05-37-LOCAL-ACTIVATION-2026-10-29.md). [Contrato, exemplos, motivos e22 testes aprovados](FRONTEND-TOTAL-INVOICE-SETTLEMENT-PROPOSAL.md).
+
+Complemento F05-33: `financialView` filtra a posição oficial antes de count/paginação; `financialPosition` separa dinheiro, crédito, retenção e saldo. UI operacional envia `OUTSTANDING`, enquanto omissão mantém `ALL` histórico. [Contrato aditivo e estado de validação/publicação](FRONTEND-RECEIVABLE-POSITION-AND-INVOICE-RECEIPTS.md). As descrições históricas abaixo sobre ausência de saldo na lista são substituídas por esse complemento, sem mudar o status persistido.
+
 | Método | Caminho | Entrada | Resposta | Status |
 |---|---|---|---|---|
+| GET | `/` | filtros comerciais, contexto opcional, status registrado, financialView=OUTSTANDING/RECEIVED/ALL, moeda, vencimento, page/size/sort | `PageResponseReceivableSummaryResponse` com financialPosition oficial | `200`; `400/401/403` Problem Details |
+| GET | `/{receivableId}` | path UUID | `ReceivableDetailsResponse` | `200`; `400/401/403/404` Problem Details |
+| GET | `/{receivableId}/settlements` | path UUID, entryType/status/paymentMethod, receivedFrom/receivedTo, page/size/sort | `PageResponseReceivableSettlementHistoryResponse` | `200`; `400/401/403/404` Problem Details |
 | POST | `/{receivableId}/settlements` | `CreateReceivableSettlementRequest` | `ReceivableSettlementApprovalResponse` | `201` ou `202` |
 | POST | `/{receivableId}/settlements/{settlementId}/reversal` | `CancelFinancialRecordRequest` | `FinancialCancellationResponse` | `201` ou `202` |
 | GET | `/{receivableId}/balance` | path UUID | `ReceivableBalanceResponse` | `200` |
@@ -660,9 +846,15 @@ Base: `/api/v1/company/receivables`
 | POST | `/{receivableId}/renegotiations` | `RenegotiateReceivableRequest` | `ReceivableRenegotiationResponse` | `200` ou `202`; somente saldo ainda devido |
 | POST | `/{receivableId}/renegotiations/reversal` | `CancelFinancialRecordRequest` | `ReceivableRenegotiationResponse` | `200` ou `202`; reabre original após reversão de efeitos descendentes |
 
-Recebimento pode ser parcial. Estorno cria lançamento reverso; não apaga a baixa original.
+F05-25 / FRONT-F08-11: lista/detalhe exigem somente `RECEIVABLES.READ`, com tenant exclusivo da sessão; não exigem `BILLING.READ`. Projeção mínima traz referências legíveis da parcela/contrato/obra/cliente, `originalAmount` histórico em string decimal e `currency`, preservando cancelados/renegociados e vínculo ao título anterior. `status` é **situação registrada**, não atraso calculado; consultar `/{receivableId}/balance` para saldo/situação financeira atuais, sem cálculo no frontend. Filtros literais `search`, `reference`, `contractSearch`, `workSearch`, `customerName`, `billingReference`, contextos UUID opcionais, `status`, `currency`, `dueFrom`, `dueTo`; página padrão 0/20, tamanho 1..100; sort controlado, padrão `dueOn asc,id asc`. Sem detalhes tributários/de baixa ou acesso implícito aos módulos relacionados. [Contrato completo, nulabilidade, validação e export](FRONTEND-RECEIVABLE-READ.md); sem publicação/reinício da instância. Histórico de baixas FRONT-F08-15 é o recorte próprio F05-26 abaixo.
 
-`settlement.amount` e os campos monetários de `ReceivableBalanceResponse` (`originalAmount`, `withheldAmount`, `creditedAmount`, `netReceivableAmount`, `confirmedSettlementAmount`, `outstandingAmount`) são strings decimais canônicas com duas casas. As rotas de criação de parcela, NF, imposto e baixa documentam `201` direto ou `202` pendente; cancelamentos de parcela/NF usam `200`/`202`, e estorno de baixa usa `201`/`202`. `400`, `403`, `404` e `409` usam Problem Details. O `202` não tem efeito financeiro oficial.
+F05-26 / FRONT-F08-15: histórico contextual exige somente `RECEIVABLES.READ`, preservando títulos cancelados/renegociados e lançamentos cancelados. `ReceivableSettlementHistoryResponse` traz ID opaco de seleção, título/referência, contrato, rótulo controlado, data, valor assinado decimal, moeda, método, situação persistida, instantes UTC e `reversalOfSettlementId`/`reversedBySettlementId` exatos. Não inclui observação livre/dados bancários/fiscais ou atribuições e não altera saldo/auditoria. Recebimento original permanece no histórico após estorno; não inferir correspondência por valor/data/serviço e não somar a página para obter saldo. Filtros são enums/datas inclusivas; sort permitido `receivedOn`, `createdAt`, `entryType`, `paymentMethod`, `status`, padrão `createdAt desc,id asc`; página 0/20, size 1..100. [Contrato, nulabilidade, export e provas](FRONTEND-RECEIVABLE-SETTLEMENT-HISTORY.md); comandos de estorno e publicação separados.
+
+Contenção F05-29/F05-31 validada e ativa em localhost:8081 desde 27/10/2026: novas baixas legadas estão temporariamente bloqueadas, inclusive com NF, em chamada direta/solicitação/aprovação, com `409 BUSINESS_RULE_VIOLATION` e `reason=SETTLEMENT_INVOICE_LINK_REQUIRED`. Não criam proposta/reserva/lançamento. O saldo existente acrescenta `maxReceivedOn` (dia UTC oficial), `settlementCreationAvailable=false` e `settlementCreationBlockReason` (string/null sem enum restritivo). Datas futuras são `400` com violação `receivedOn`, não agendamento. Consultas e estornos autorizados permanecem disponíveis; histórico não é reescrito. Publicação sem migrations, schema real V89 preservado. [Contrato e limitações](FRONTEND-RECEIPT-DATE-AND-BILLING-CASH.md).
+
+O modelo suporta recebimento parcial, mas novas baixas estão indisponíveis durante a contenção. Estorno cria lançamento reverso; não apaga a baixa original.
+
+`settlement.amount` e os campos monetários de `ReceivableBalanceResponse` (`originalAmount`, `withheldAmount`, `creditedAmount`, `netReceivableAmount`, `confirmedSettlementAmount`, `outstandingAmount`) são strings decimais canônicas com duas casas. Criação de parcela, NF e imposto mantém `201` direto ou `202` pendente. Os antigos schemas `201`/`202` da baixa permanecem por compatibilidade estrutural, mas não significam que o POST esteja disponível durante a contenção. Cancelamentos de parcela/NF usam `200`/`202`, e estorno de baixa usa `201`/`202`. `400`, `403`, `404` e `409` usam Problem Details. O `202` não tem efeito financeiro oficial.
 
 Crédito aparece em `balance.creditedAmount` e não representa recebimento nem libera faturamento. Renegociação preserva parcela, grupo financeiro e alocações de origem; não some valores originais de títulos históricos renegociados com os títulos descendentes para formar saldo. Use a projeção oficial de medição e o [guia de integração](FRONTEND-MEASUREMENT-CONTINUOUS.md).
 
@@ -886,7 +1078,7 @@ Os campos de cálculo exigidos variam conforme `chargeType`; o frontend deve mos
 ### Identidade e autorização
 
 - `AuthenticationTokensResponse`: `accessToken`, `tokenType`, `accessTokenExpiresInSeconds`; o refresh token existe somente no cookie seguro.
-- `AccessUserResponse`: `id`, `email`, `status`, `roleIds`, `companyOwner`, `createdAt`, `updatedAt`.
+- `AccessUserResponse`: `id`, `email`, `displayName` (opcional), `status`, `roleIds`, `companyOwner`, `createdAt`, `updatedAt`. O nome vem apenas do nome completo do funcionário associado pelo mesmo `userId` na empresa autenticada. Quando faltar essa associação, o campo é omitido e o e-mail continua disponível para identificar a conta.
 - `RoleResponse`: `id`, `name`, `description`, `active`, `systemProtected`, `permissionIds`, `createdAt`, `updatedAt`.
 - `PermissionResponse`: `id`, `module`, `action`, `code`, `active`.
 - `ChangeAuthorizationResponse`: `module`, `operation`, `mode`.
@@ -896,7 +1088,7 @@ Os campos de cálculo exigidos variam conforme `chargeType`; o frontend deve mos
 - `FinalCustomerResponse`: `id`, `customerType`, `name`, `document`, `active`.
 - `WorkResponse`: `id`, `finalCustomerId`, `name`, `reference`, `executionLocationType`, `executionAddress`, `status`, datas.
 - `ContractResponse`: `id`, `workId`, `reference`, `name`, `status`, datas.
-- `EmployeeResponse` operacional: perfil, `registrationNumber` gerada como `ABC-001` quando omitida (três primeiras letras da empresa assinante mais sequência), `documentType`, `documentNumber`, `currentlyEmployed`, `gender`, `ethnicity`, `compensationFrequency` (`MONTHLY`, `DAILY`, `HOURLY`) e `compensationAmount`. O documento é devolvido completo e normalizado somente nas rotas autenticadas da própria empresa. `documentNumberMasked` foi removido do contrato: listagem e detalhe devem usar `documentNumber`.
+- `EmployeeResponse` operacional (detalhe/criação/edição): perfil, `registrationNumber` gerada como `ABC-001` quando omitida (três primeiras letras da empresa assinante mais sequência), `documentType`, `documentNumber`, `currentlyEmployed`, `gender`, `ethnicity`, `compensationFrequency` (`MONTHLY`, `DAILY`, `HOURLY`) e `compensationAmount`. O documento é completo/normalizado no perfil autenticado da própria empresa; não existe `documentNumberMasked`. A listagem usa `EmployeeListItemResponse` separado, sem documento nem salário, e deve identificar pela matrícula/nome. Não declarar tipos manualmente; gerar do OpenAPI atualizado.
 
 ### Catálogo da plataforma
 
@@ -916,7 +1108,10 @@ Os campos de cálculo exigidos variam conforme `chargeType`; o frontend deve mos
 - `BillingInstallmentApprovalResponse`: `billingInstallment`, `receivable`, `changeRequestId`, `mode`.
 - `InvoiceRegistrationResponse`: `invoice`, `changeRequestId`, `mode`.
 - `ReceivableSettlementApprovalResponse`: `settlement`, `balance`, `changeRequestId`, `mode`.
-- `ReceivableBalanceResponse`: `originalAmount`, `withheldAmount`, `netReceivableAmount`, `confirmedSettlementAmount`, `outstandingAmount`, `status`.
+- `ReceivableSummaryResponse`: identificação do título, referências mínimas de parcela/contrato/obra/cliente, grupo/linhagem de renegociação, vencimento próprio, `originalAmount` histórico decimal, `currency`, `status` registrado e timestamps. [Campos e nulabilidade](FRONTEND-RECEIVABLE-READ.md).
+- `ReceivableDetailsResponse`: `receivable` (o resumo) e `description` opcional. Não inclui baixas nem saldo.
+- `ReceivableSettlementHistoryResponse`: lançamento histórico assinado, método/data/situação, rótulo e instantes de registro, moeda e vínculos exatos original/estorno; sem observação livre. Lista paginada, não saldo.
+- `ReceivableBalanceResponse`: `originalAmount`, `withheldAmount`, `creditedAmount`, `netReceivableAmount`, `confirmedSettlementAmount`, `outstandingAmount`, `status` atual e `currency`; autoridade financeira existente.
 - `FinancialCancellationResponse`: `entityId`, `reversalId`, `status`, `changeRequestId`, `mode`.
 
 ## 6. Enums necessários no frontend
@@ -958,13 +1153,8 @@ Os campos de cálculo exigidos variam conforme `chargeType`; o frontend deve mos
 Não existem endpoints atuais para:
 
 1. listar ou consultar detalhes individuais de parcelas;
-2. listar ou consultar NFs já registradas;
-3. listar anexos de NF ou baixar o anexo armazenado;
-4. listar contas a receber ou consultar seus dados básicos — existe apenas consulta de saldo por ID;
-5. listar baixas/recebimentos de uma conta a receber;
-6. listar impostos de uma NF;
 7. consultar/editar todos os dados cadastrais da própria empresa;
-8. endpoints de gastos/fornecedores/contas a pagar operacionais;
+8. edição/cancelamento geral de contas a pagar e projeções de lucro/caixa. [Guia de títulos](FRONTEND-PAYABLES.md) e [guia de baixas e estornos](FRONTEND-PAYABLE-SETTLEMENTS.md).
 9. relatórios gerais, exportação DOCX e envio de relatório por e-mail. As exportações PDF/XLSX de uma versão de medição já existem e não integram esta lacuna;
 10. consulta e PDF/XLSX/prévia acumulados da medição, com aceitos anteriores e avanço atual no mesmo corpo e totais separados;
 11. identidade de serviço contínuo entre avanços e escolha persistida de destino contratual antes do aceite;
@@ -972,6 +1162,10 @@ Não existem endpoints atuais para:
 13. extensão do resumo com saldo total `remainingToReceive`, disponibilidade e `asOf`, tratamento completo de correções/ajustes/estornos e origem obrigatória para faturamento de composições. O resumo atual com cinco campos não conclui essas lacunas.
 
 Essas lacunas devem virar backlog de API antes de fechar navegação, telas de listagem e carregamento inicial do frontend. O frontend não deve acessar banco, storage ou gateway diretamente para contorná-las.
+
+A antiga lacuna de listagem/detalhe básico de recebíveis está atendida no código/export pela F05-25 (seção 2.15); histórico de baixas continua separado. Isso não confirma publicação das rotas na instância local.
+
+A antiga lacuna de histórico contextual de recebimentos/estornos está atendida no código/export pela F05-26: 32 testes/7 suítes, Checkstyle e OpenAPI 3.1 validados (137 paths/234 schemas; hash no guia próprio). Sua publicação na instância e integração dos comandos do frontend são etapas separadas.
 
 ## 8. Sugestão de módulos do cliente HTTP
 
@@ -1006,3 +1200,70 @@ Centralizar no cliente HTTP:
 - download de `blob` para PDF/XLSX;
 - upload `multipart/form-data` sem definir manualmente o boundary;
 - distinção entre `201/200` direto e `202` aguardando aprovação.
+
+
+### Correção FRONT-F06-14 — desconto contratual ativo
+
+Publicado em8081 em29/10/2026 às18:44:52SãoPaulo,JARAF20D2D2: GET `/api/v1/company/contracts/{contractId}` inclui `hasActiveContractDiscount`, booleanoficial no detalhe e null(nãoavaliado) emlistagem/mutações. MesmaCONTRACTS.READ/tenant. Não inferir desconto pelo agregadofinanceiro. [Contrato e integração](FRONTEND-CONTRACT-DISCOUNT-STATE.md).
+
+
+### Situação financeira no detalhe do faturamento —29/10/2026
+
+Publicado em8081 em29/10/2026 às19:22:27SãoPaulo,JAR4A2D4980: allocations[].receivableFinancialStatusAvailable e receivableFinancialStatus(nullable) noGETcontroleporcontrato. ExigeRECEIVABLES.READ adicional;reutiliza posiçãooficial dotítulooriginal,sem sobrescreverinstallmentStatus,sem somarsucessores/inferir porNF. [Contrato](FRONTEND-BILLING-FINANCIAL-STATUS.md).
+
+
+### Rótulo recebido com imposto retido
+
+Publicado em8081 em29/10/2026 às20:01:42SãoPaulo,JARE09835F5: allocations[].receivableReceivedWithWithholding(requiredboolean|null) noGETbilling-controlporcontrato,mesmosREAD/tenant/indisponibilidade.Indicaquitaçãooficialcomcash+retençãosemcrédito,sem mudarposiçãofinanceira ou dinheiro. [Guia](FRONTEND-BILLING-WITHHOLDING-LABEL.md).
+
+#### Retenção proporcional por item de NF — complemento publicado localmente
+
+GET `receivables/{receivableId}/invoice-settlement-options` acrescenta `withheldItemAmount`, `netInvoicedItemAmount` e `netAvailableItemAmount` em cada opção: required nullable string decimal, origem exata e escopo de título comprovado. A proposta TOTAL usa líquidos oficiais; parciais manuais e202 sem efeitos. Não somar tetos, ratear no frontend ou converter imposto em dinheiro recebido. Autorizado pelo usuário em29/10; sem migration, reescrita histórica ou operação real. [Contrato e motivos de conciliação](FRONTEND-INVOICE-ITEM-WITHHOLDING.md). 50testes/4suítes e Checkstyle aprovados; export49F89DB0/148paths/257schemas. Conferido e publicado somente em8081 às23:42:22SãoPaulo, JARE97C650C/schema91 sem alteração. [Provas](F05-37-WITHHOLDING-ITEMS-LOCAL-ACTIVATION-2026-10-29.md).
+
+#### PUT de serviço preserva desconto — correção publicada localmente,30/10/2026
+
+`PUT /api/v1/company/contracts/{contractId}/services/{serviceId}` mantém200/202 e não apaga desconto por omissão/null dos dois campos. Aprovação preserva o desconto corrente no banco. Eco explícito igual é aceito; par diferente recebe409ProblemDetails com reason `SERVICE_DISCOUNT_CHANGE_REQUIRES_DEDICATED_OPERATION`, pois troca/reversão exige rota específica DISCOUNTS. Não enviar snapshot de desconto pelo formulário operacional nem compensar perdas no frontend. Criação inalterada; sem migration ou reparo real. [Guia](FRONTEND-SERVICE-UPDATE-DISCOUNT-PRESERVATION.md).
+
+Correção de preservação publicada/verificada somente em8081 às00:47:58SãoPaulo, JAR5E4601A1/export4BFEA6EB,16testes/4suítes eCheckstyle aprovados, sem migration ou reparo real. [Provas e retorno](F03-16-SERVICE-DISCOUNT-PRESERVATION-LOCAL-ACTIVATION-2026-10-30.md).
+
+
+## Contato de fornecedores e instruções para pagamento — F06-20/21
+
+Contrato detalhado e dependências: [FRONTEND-SUPPLIER-CONTACTS-AND-PAYMENT-INSTRUCTIONS.md](FRONTEND-SUPPLIER-CONTACTS-AND-PAYMENT-INSTRUCTIONS.md). Código e contrato validados, export atualizado (154 paths/268 schemas), ainda não publicados na instância local; [provas e plano de ativação](F06-20-21-VALIDATION-2026-11-06.md). Contatos opcionais (`contactName`, `contactPhone`, `contactEmail`) nas rotas existentes de fornecedor; alçada/versão/DIRECT/202 preservados.
+
+| Método | Rota | Uso |
+|---|---|---|
+| GET | `/api/v1/company/payables/{payableId}/payment-instructions` | Metadados; PAYABLES.READ, nunca dados para copiar/pagar. |
+| PUT | mesma base | Substituição integral com versão própria e `details`; READ+VIEW_PAYMENT_DETAILS e UPDATE; 200/202. |
+| POST | base + `/reveal` | Dados completos por ação explícita, auditada; READ+VIEW_PAYMENT_DETAILS; no-store. |
+| POST | base + `/boleto` | PDF multipart privado após título/BOLETO oficiais; versão própria; 200/202. |
+| GET | base + `/boleto` | PDF autenticado, sem URL pública; READ+VIEW_PAYMENT_DETAILS; no-store. |
+
+Reveal/download aceitam `changeRequestId` opcional para proposta pendente do mesmo título/tenant, restrita ao solicitante ou aprovador com permissões sensíveis. V92 e chave independente são pré-requisitos de publicação, ainda sem aplicação no banco persistente. Instrução/documento não registra baixa, não quita título, não emite boleto/Pix nem executa pagamento. Não reutilizar RH nem simular atomicidade com criação do título/lote.
+
+
+## FRONT-F08-34 — prévia XML e cobertura documental por serviço
+
+[Contrato efetivo F05-39/40/41](FRONTEND-INVOICE-XML-AND-COVERAGE.md); [provas/export/pacote](F05-39-41-VALIDATION-2026-11-06.md). Código testado e OpenAPI atualizado, **sem publicação na API local**.
+
+| Método | Rota | Contrato |
+|---|---|---|
+| POST | `/api/v1/company/invoices/xml/preview` | Multipart objeto com file; contractId query e billingInstallmentId query opcional. INVOICES.READ+alçada de criação; contexto de cobrança exige BILLING.READ.200 stateless/no-store, sem criar lançamento, anexo, tributo ou202. |
+| GET | `/api/v1/company/billing-installments/{billingInstallmentId}/invoice-coverage` | INVOICES.READ+BILLING.READ; grupos completos com origens, estados e totais oficiais documentados/faltantes em decimal textual, sem reserva. |
+| POST existente | `/api/v1/company/invoices` | Guarda comum direta/aprovação para serviços completos da cobrança, origens exatas e conflitos409. Campo opcional documentTotalAmount textual, obrigatório no cliente assistido após revisão para comparação oficial.201/202; nenhuma alteração oficial em202. |
+
+O registro documental aceita serviços completos por cobrança. Recebimentos parciais e registros legados permanecem disponíveis. DPS, retenções, líquido, percentuais informativos e substituição preservam proveniência para conferência. F05-39 a F05-41 estão publicados em localhost:8081. A confirmação fiscal abaixo depende da publicação separada da V94.
+
+| Método | Rota | Contrato da evidência fiscal F05-42 |
+| --- | --- | --- |
+| GET | `/api/v1/company/invoices/{invoiceId}/xml-fiscal-snapshot` | `INVOICES.READ`. Retorna a evidência registrada ou `404`. |
+| PUT | `/api/v1/company/invoices/{invoiceId}/xml-fiscal-snapshot` | `INVOICES.READ` e alçada direta de criação. Enviar `attachmentId` de XML privado já anexado à NF oficial. Primeira confirmação `201`, reenvio da mesma origem `200`, divergência `409`. |
+
+Anexação e tributos continuam operações separadas. [Detalhes da evidência e dos campos](FRONTEND-INVOICE-XML-FISCAL-SNAPSHOT.md).
+
+| Método | Rota | Contrato do faturamento por obra F05-43 |
+| --- | --- | --- |
+| GET | `/api/v1/company/billing-control/works/{workId}` | `WORKS.READ`, `BILLING.READ` e `INVOICES.READ`. Totais oficiais de toda a obra por moeda e lista paginada de contratos com link para detalhe. |
+| GET | `/api/v1/company/billing-control/works/{workId}/report/pdf` | Acrescenta `BILLING.EXPORT` e `INVOICES.EXPORT`. PDF privado inline com título, referência, tabela de contratos e totais por moeda. |
+
+[Guia do controle por obra](FRONTEND-WORK-BILLING-CONTROL.md).

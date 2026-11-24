@@ -7,5 +7,5 @@ import java.util.List;
 
 public record ContractBillingControl(Contract contract, ContractBillingBalance balance,
                                      List<BillingServiceControl> services,
-                                     List<BillingAllocationControl> allocations) {
+                                     List<BillingAllocationControl> allocations, java.math.BigDecimal receivedAmount) {
 }

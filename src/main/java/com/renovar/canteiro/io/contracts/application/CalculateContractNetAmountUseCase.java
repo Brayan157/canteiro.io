@@ -31,4 +31,14 @@ public class CalculateContractNetAmountUseCase {
                 measurementAdjustmentAmountProvider.approvedAmount(companyId, contractId)
         );
     }
+    @Transactional(readOnly = true)
+    public ContractNetAmount calculateWithServices(UUID companyId, UUID contractId,
+            java.util.List<com.renovar.canteiro.io.contracts.domain.ContractService> projected) {
+        contractRepository.findByIdAndCompanyId(contractId, companyId)
+                .orElseThrow(() -> new TenantResourceNotFoundException("Contract"));
+        return ContractNetAmountCalculator.calculate(projected,
+                contractDiscountRepository.findActiveByContractIdAndCompanyId(contractId, companyId).orElse(null),
+                measurementAdjustmentAmountProvider.approvedAmount(companyId, contractId));
+    }
+
 }

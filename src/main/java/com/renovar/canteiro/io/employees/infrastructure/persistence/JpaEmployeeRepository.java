@@ -40,6 +40,11 @@ public class JpaEmployeeRepository implements EmployeeRepository {
     }
 
     @Override
+    public Optional<String> findFullNameByUserIdAndCompanyId(UUID userId, UUID companyId) {
+        return jpaRepository.findFullNameByUserIdAndCompanyId(userId, companyId);
+    }
+
+    @Override
     public Page<Employee> findByCompanyId(UUID companyId, EmployeeFilter filter, Pageable pageable) {
         return jpaRepository.findAll(specification(companyId, filter), pageable).map(mapper::toDomain);
     }

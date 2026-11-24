@@ -14,6 +14,11 @@ public interface ContractRepository {
 
     Optional<Contract> findByIdAndCompanyIdWithBillingLock(UUID id, UUID companyId);
 
+    Optional<Contract> findByIdAndCompanyIdWithCancellationCheckLock(UUID id, UUID companyId);
+
+    boolean hasConflictingReferenceUnderWorkLock(UUID companyId, UUID workId, UUID contractId,
+                                                 String previousReference, String reference);
+
     Page<Contract> findByCompanyId(UUID companyId, Pageable pageable);
 
     Page<Contract> findByCompanyId(UUID companyId, ContractFilter filter, Pageable pageable);

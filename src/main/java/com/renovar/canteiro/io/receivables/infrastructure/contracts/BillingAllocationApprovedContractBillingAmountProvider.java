@@ -31,7 +31,7 @@ public class BillingAllocationApprovedContractBillingAmountProvider implements A
         return allocations.findByContractIdAndCompanyId(contractId, companyId).stream()
                 .filter(a -> a.getStatus() == BillingAllocationStatus.ACTIVE && a.getType() == BillingAllocationType.SERVICE)
                 .collect(Collectors.groupingBy(BillingAllocation::getContractServiceId,
-                        Collectors.reducing(BigDecimal.ZERO, BillingAllocation::getAllocatedAmount, BigDecimal::add)));
+                        Collectors.reducing(BigDecimal.ZERO, BillingAllocation::getCapacityAmount, BigDecimal::add)));
     }
 
     @Override
@@ -40,13 +40,14 @@ public class BillingAllocationApprovedContractBillingAmountProvider implements A
                 .filter(a -> a.getStatus() == BillingAllocationStatus.ACTIVE && a.getType() == BillingAllocationType.SERVICE
                         && a.getMeasurementContractCompositionId() == null)
                 .collect(Collectors.groupingBy(BillingAllocation::getContractServiceId,
-                        Collectors.reducing(BigDecimal.ZERO, BillingAllocation::getAllocatedAmount, BigDecimal::add)));
+                        Collectors.reducing(BigDecimal.ZERO, BillingAllocation::getCapacityAmount, BigDecimal::add)));
     }
 
     @Override
     public BigDecimal approvedDiscountAmount(UUID companyId, UUID contractId) {
         return allocations.findByContractIdAndCompanyId(contractId, companyId).stream()
-                .filter(a -> a.getStatus() == BillingAllocationStatus.ACTIVE && a.getType() == BillingAllocationType.CONTRACT_DISCOUNT)
-                .map(BillingAllocation::getAllocatedAmount).reduce(BigDecimal.ZERO, BigDecimal::add).abs();
+                .filter(a -> a.getStatus() == BillingAllocationStatus.ACTIVE)
+                .map(a -> a.getType() == BillingAllocationType.CONTRACT_DISCOUNT ? a.getAllocatedAmount().abs() : a.getAppliedContractDiscountAmount())
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 }

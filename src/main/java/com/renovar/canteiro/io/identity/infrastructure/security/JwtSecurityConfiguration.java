@@ -52,6 +52,7 @@ public class JwtSecurityConfiguration {
     private final PlatformOperatorAuthenticationFilter platformOperatorAuthenticationFilter;
     private final SupportTargetContextFilter supportTargetContextFilter;
     private final ApiCorsProperties apiCorsProperties;
+    private final ProblemAuthenticationEntryPoint problemAuthenticationEntryPoint;
 
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity httpSecurity) throws Exception {
@@ -76,7 +77,9 @@ public class JwtSecurityConfiguration {
                         ).permitAll()
                         .anyRequest().authenticated()
                 )
-                .oauth2ResourceServer(resourceServer -> resourceServer.jwt(Customizer.withDefaults()))
+                .exceptionHandling(exceptions -> exceptions.authenticationEntryPoint(problemAuthenticationEntryPoint))
+                .oauth2ResourceServer(resourceServer -> resourceServer.jwt(Customizer.withDefaults())
+                        .authenticationEntryPoint(problemAuthenticationEntryPoint))
                 .addFilterAfter(tenantContextAuthenticationFilter, BearerTokenAuthenticationFilter.class)
                 .addFilterAfter(subscriptionAccessFilter, TenantContextAuthenticationFilter.class)
                 .addFilterAfter(platformOperatorAuthenticationFilter, TenantContextAuthenticationFilter.class)

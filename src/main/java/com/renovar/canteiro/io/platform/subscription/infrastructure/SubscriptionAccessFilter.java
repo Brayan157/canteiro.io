@@ -46,9 +46,14 @@ public class SubscriptionAccessFilter extends OncePerRequestFilter {
             HttpServletResponse response,
             FilterChain filterChain
     ) throws ServletException, IOException {
-        SubscriptionAccessLevel accessLevel = companySubscriptionAccessService.resolveAccessLevel(
-                tenantContextHolder.requireCurrentTenant().companyId()
-        );
+        var tenant = tenantContextHolder.currentTenant();
+        if (tenant.isEmpty()) {
+            // Authentication/tenant filters and the protected-route authorization reject
+            // anonymous or invalid-context requests. Dunning must not turn them into 500s.
+            filterChain.doFilter(request, response);
+            return;
+        }
+        SubscriptionAccessLevel accessLevel = companySubscriptionAccessService.resolveAccessLevel(tenant.get().companyId());
         if (accessLevel == SubscriptionAccessLevel.BLOCKED) {
             writeAccessDenied(response, request, "Company access is blocked because of overdue subscription charges.");
             return;

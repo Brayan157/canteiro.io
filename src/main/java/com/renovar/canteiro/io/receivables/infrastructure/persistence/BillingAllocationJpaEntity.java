@@ -43,6 +43,11 @@ class BillingAllocationJpaEntity extends BaseJpaEntity {
     @Column(name = "allocated_amount", nullable = false, precision = 19, scale = 2)
     private BigDecimal allocatedAmount;
 
+    @Column(name = "net_billing_gross_amount", updatable = false, precision = 19, scale = 2)
+    private BigDecimal netBillingGrossAmount;
+    @Column(name = "net_billing_discount_amount", updatable = false, precision = 19, scale = 2)
+    private BigDecimal netBillingDiscountAmount;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 20)
     private BillingAllocationStatus status;
@@ -61,4 +66,9 @@ class BillingAllocationJpaEntity extends BaseJpaEntity {
     }
 
     void setStatus(BillingAllocationStatus status) { this.status = status; }
+
+    void initializeNetBasis(BigDecimal grossAmount, BigDecimal discountAmount) {
+        this.netBillingGrossAmount = grossAmount;
+        this.netBillingDiscountAmount = discountAmount;
+    }
 }

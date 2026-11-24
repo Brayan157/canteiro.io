@@ -27,6 +27,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import com.renovar.canteiro.io.access.domain.AccessModule;
+import com.renovar.canteiro.io.access.domain.AccessAction;
+import java.util.Map;
 
 @ExtendWith(MockitoExtension.class)
 class GetBillingControlUseCaseTest {
@@ -38,6 +43,8 @@ class GetBillingControlUseCaseTest {
     @Mock private BillingInstallmentRepository installmentRepository;
     @Mock private CalculateContractBillingBalanceUseCase balanceUseCase;
     @Mock private CalculateInvoiceAllocationBalanceUseCase invoiceBalanceUseCase;
+    @Mock private NetBillingCapacityService netCapacities;
+    @Mock private com.renovar.canteiro.io.receivables.domain.ReceivableSettlementRepository settlements;
 
     @Test
     void listsOnlyContractsReturnedForTheCurrentTenantWithDerivedBalances() {
@@ -55,12 +62,30 @@ class GetBillingControlUseCaseTest {
 
         assertEquals(1, result.getTotalElements());
         assertEquals(new BigDecimal("60.00"), result.getContent().getFirst().balance().availableAmount());
+        assertNull(result.getContent().getFirst().receivedAmount());
+        verifyNoInteractions(settlements);
         verify(contractRepository).findBillingControl(companyId,
                 new ContractBillingControlFilter(null, ContractStatus.ACTIVE, "electric"), PageRequest.of(0, 20));
     }
 
+    @Test
+    void readsCashInOneTenantScopedBatchOnlyWithAdditionalReadPermission() {
+        UUID company = UUID.randomUUID();
+        Contract contract = Contract.rehydrate(UUID.randomUUID(), company, UUID.randomUUID(), "C-02", "Obra",
+                ContractStatus.ACTIVE, null, null, null, Instant.now(), Instant.now());
+        when(tenantContextHolder.requireCurrentTenant()).thenReturn(new TenantContext(UUID.randomUUID(), company));
+        when(authorizationService.hasPermission(AccessModule.RECEIVABLES, AccessAction.READ)).thenReturn(true);
+        when(contractRepository.findBillingControl(any(), any(), any())).thenReturn(new PageImpl<>(List.of(contract)));
+        when(settlements.confirmedAmountsByContractIdsAndCompanyId(List.of(contract.getId()), company))
+                .thenReturn(Map.of(contract.getId(), new BigDecimal("12.34")));
+        var page = service().find(new ContractBillingControlFilter(null, null, null), PageRequest.of(0, 20));
+        assertEquals(new BigDecimal("12.34"), page.getContent().getFirst().receivedAmount());
+        verify(settlements).confirmedAmountsByContractIdsAndCompanyId(List.of(contract.getId()), company);
+    }
+
     private GetBillingControlUseCase service() {
         return new GetBillingControlUseCase(tenantContextHolder, authorizationService, contractRepository,
-                contractServiceRepository, allocationRepository, installmentRepository, balanceUseCase, invoiceBalanceUseCase);
+                contractServiceRepository, allocationRepository, installmentRepository, balanceUseCase, invoiceBalanceUseCase, netCapacities, settlements,
+                org.mockito.Mockito.mock(com.renovar.canteiro.io.receivables.domain.ReceivableRepository.class));
     }
 }

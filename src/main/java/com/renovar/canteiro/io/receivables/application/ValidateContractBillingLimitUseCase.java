@@ -96,13 +96,13 @@ public class ValidateContractBillingLimitUseCase {
         return allocations.stream()
                 .filter(allocation -> allocation.getType() == BillingAllocationType.SERVICE)
                 .collect(Collectors.groupingBy(BillingAllocation::getContractServiceId,
-                        Collectors.reducing(BigDecimal.ZERO, BillingAllocation::getAllocatedAmount, BigDecimal::add)));
+                        Collectors.reducing(BigDecimal.ZERO, BillingAllocation::getCapacityAmount, BigDecimal::add)));
     }
 
     private BigDecimal discountAmount(Collection<BillingAllocation> allocations) {
         return allocations.stream()
-                .filter(allocation -> allocation.getType() == BillingAllocationType.CONTRACT_DISCOUNT)
-                .map(BillingAllocation::getAllocatedAmount)
+                .map(allocation -> allocation.getType() == BillingAllocationType.CONTRACT_DISCOUNT
+                        ? allocation.getAllocatedAmount().abs() : allocation.getAppliedContractDiscountAmount())
                 .reduce(BigDecimal.ZERO, BigDecimal::add)
                 .abs().setScale(2, RoundingMode.HALF_UP);
     }

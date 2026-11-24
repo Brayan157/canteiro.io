@@ -65,10 +65,47 @@ class OpenApiContractIntegrationTest extends AbstractPostgresIntegrationTest {
         assertTrue(openApi.contains("\"CatalogPriceResponse\""));
         assertTrue(openApi.contains("\"amount\":{\"type\":\"string\""));
         assertEmployeeAndAccessUserSchemas(openApi);
+        assertInvoiceAttachmentValidationContract(openApi);
+        assertManualInvoiceSettlementContract(openApi);
+        var reportRoot=new ObjectMapper().readTree(openApi);
+        assertOperation(reportRoot,"/api/v1/company/invoices/xml/preview","post","200","400","401","403","404","413");
+        assertOperation(reportRoot,"/api/v1/company/billing-installments/{billingInstallmentId}/invoice-coverage","get","200","400","401","403","404","409");
+        assertEquals("string",reportRoot.at("/components/schemas/InvoiceCoverageOriginResponse/properties/amount/type").asText());
+        assertEquals("string",reportRoot.at("/components/schemas/InvoiceXmlSourceValue/properties/value/type").asText());
+        assertTrue(reportRoot.at("/components/schemas/CreateRegisteredInvoiceRequest/properties/documentTotalAmount/type").toString().contains("string"));
+        assertTrue("100.00".matches(reportRoot.at("/components/schemas/CreateRegisteredInvoiceRequest/properties/documentTotalAmount/pattern").asText()));
+        assertFalse(reportRoot.at("/components/schemas/InvoiceXmlPreviewResponse/properties").has("issuerDocument"));
+        String instructionPath="/api/v1/company/payables/{payableId}/payment-instructions";
+        assertOperation(reportRoot,instructionPath,"put","200","202","400","401","403","404","409");
+        assertOperation(reportRoot,instructionPath,"get","200","403","404");
+        assertOperation(reportRoot,instructionPath+"/reveal","post","200","403","404");
+        assertOperation(reportRoot,instructionPath+"/boleto","post","200","202","400","403","404","409");
+        assertOperation(reportRoot,instructionPath+"/boleto","get","200","403","404");
+        assertTrue(reportRoot.at("/components/schemas/SupplierResponse/properties/contactEmail/type").toString().contains("null"));
+        assertTrue(reportRoot.at("/components/schemas/PayablePaymentInstructionResponse/properties/type/anyOf").toString().contains("null"));
+        assertFalse(reportRoot.at("/components/schemas/PayableResponse/properties").has("pixKey"));
+        assertFalse(reportRoot.at("/components/schemas/PayablePaymentInstructionResponse/properties").has("ciphertext"));
+        String reportPath="/api/v1/company/billing-control/contracts/{contractId}/report/pdf";
+        assertOperation(reportRoot,reportPath,"get","200","400","401","403","404","409");
+        assertEquals("binary",reportRoot.path("paths").path(reportPath).at("/get/responses/200/content/application~1pdf/schema/format").asText());
+        String reportDescription=reportRoot.path("paths").path(reportPath).at("/get/description").asText();
+        assertTrue(reportDescription.contains("BILLING.EXPORT"));assertTrue(reportDescription.contains("INVOICES.EXPORT"));
         assertEmployeeProfilePathsAndSchemas(openApi);
         assertCustomerAndEmployeeListFilters(openApi);
         assertFinalCustomerContactAndAddressCrud(openApi);
         assertBillingControlAmountsUseCanonicalDecimalStrings(openApi);
+        assertBillableMeasurementOriginsContract(openApi);
+        assertBillingInstallmentReadContract(openApi);
+        assertInvoiceReadContract(openApi);
+        assertInvoiceTaxReadContract(openApi);
+        assertReceivableReadContract(openApi);
+        assertReceivableSettlementHistoryContract(openApi);
+        assertNetBillingContract(openApi);
+        assertServiceNetBillingAndCalculatedTaxContract(openApi);
+        assertPayableCatalogContract(openApi);
+        assertOperationalPayablesContract(openApi);
+        assertPayableSettlementContract(openApi);
+        assertRealizedCashContract(openApi);
         assertRevenueAmountsUseCanonicalDecimalStrings(openApi);
         assertContractServiceAndDiscountContract(openApi);
         assertWorkAndContractEditingAndListFilters(openApi);
@@ -81,12 +118,455 @@ class OpenApiContractIntegrationTest extends AbstractPostgresIntegrationTest {
         assertCurrencyContract(openApi);
         assertAuditEventSchema(openApi);
         assertChangeRequestApprovalInboxContract(openApi);
+        assertWorkDiaryContract(openApi);
 
         String exportPath = System.getenv("OPENAPI_EXPORT_PATH");
         if (exportPath != null && !exportPath.isBlank()) {
             Path target = Path.of(exportPath).toAbsolutePath().normalize();
             Files.createDirectories(target.getParent());
             Files.writeString(target, openApi);
+        }
+    }
+
+    private void assertWorkDiaryContract(String openApi) throws Exception {
+        var paths = new ObjectMapper().readTree(openApi).path("paths");
+        String diary = "/api/v1/company/works/{workId}/diary";
+        org.junit.jupiter.api.Assertions.assertTrue(paths.path(diary + "/{date}").path("post").path("responses").has("200"));
+        org.junit.jupiter.api.Assertions.assertTrue(paths.path(diary + "/{date}").path("post").path("responses").has("202"));
+        org.junit.jupiter.api.Assertions.assertTrue(paths.path(diary + "/{date}").has("get"));
+        org.junit.jupiter.api.Assertions.assertTrue(paths.path(diary + "/{date}/revisions/{revision}").has("get"));
+        org.junit.jupiter.api.Assertions.assertTrue(paths.path(diary + "/time-summary").has("get"));
+        org.junit.jupiter.api.Assertions.assertTrue(paths.path(diary + "/{date}/plan").path("put").path("responses").has("202"));
+        org.junit.jupiter.api.Assertions.assertTrue(paths.path(diary + "/{date}/comparison").has("get"));
+        org.junit.jupiter.api.Assertions.assertTrue(paths.path(diary + "/managerial-result").has("get"));
+        org.junit.jupiter.api.Assertions.assertTrue(paths.path(diary + "/operations").has("get"));
+        org.junit.jupiter.api.Assertions.assertTrue(paths.path("/api/v1/company/workforce/employments").has("get"));
+        org.junit.jupiter.api.Assertions.assertTrue(paths.path("/api/v1/company/workforce/assignments").has("get"));
+        org.junit.jupiter.api.Assertions.assertTrue(paths.path("/api/v1/company/workforce/grants").has("get"));
+        org.junit.jupiter.api.Assertions.assertTrue(paths.path("/api/v1/company/workforce/grants/{grantId}/revoke").has("put"));
+    }
+
+    private void assertServiceNetBillingAndCalculatedTaxContract(String openApi) throws Exception {
+        var root = new ObjectMapper().readTree(openApi);
+        String services = "/api/v1/company/billing-control/contracts/{contractId}/net-capacity/services";
+        String billing = "/api/v1/company/billing-installments/net/by-service";
+        String tax = "/api/v1/company/invoices/{invoiceId}/tax-obligations";
+        assertOperation(root, services, "get", "200", "400", "401", "403", "404", "409");
+        assertOperation(root, billing, "post", "200", "201", "202", "400", "401", "403", "404", "409");
+        assertOperation(root, tax + "/preview", "post", "200", "400", "401", "403", "404", "409");
+        assertOperation(root, tax + "/calculated", "post", "200", "201", "202", "400", "401", "403", "404", "409");
+        assertOperation(root, tax + "/{taxObligationId}/calculation", "get", "200", "400", "401", "403", "404", "409");
+        assertEquals("#/components/schemas/ServiceNetBillingCapacityResponse", responseSchemaReference(root, services, "get", "200"));
+        var grouped = root.at("/components/schemas/ServiceNetBillingCapacityItemResponse/properties");
+        for (String field : List.of("availableNetAmount", "baseNetAvailableAmount", "measurementNetAvailableAmount", "blockedNetAmount")) assertEquals("string", grouped.path(field).path("type").asText());
+        assertTrue(grouped.has("coverageComplete")); assertTrue(grouped.has("originCount"));
+        var calculation = root.at("/components/schemas/CalculateInvoiceTaxRequest/properties");
+        for (String field : List.of("amount", "baseAmount", "ratePercent")) assertTrue(calculation.path(field).toString().contains("string"));
+        assertTrue(calculation.path("ratePercent").path("pattern").asText().contains("1,4"));
+        assertEquals("string", root.at("/components/schemas/CreateCalculatedInvoiceTaxRequest/properties/confirmedAmount/type").asText());
+        assertEquals("string", root.at("/components/schemas/InvoiceTaxCalculationResponse/properties/amount/type").asText());
+        for (String field : List.of("reference", "description", "issuedOn", "financialGroupId", "justification")) assertTrue(root.at("/components/schemas/CreateServiceNetBillingRequest/properties/"+field).toString().contains("\"null\""));
+        for (String field : List.of("receivableId", "description", "dueOn", "justification")) assertTrue(root.at("/components/schemas/CreateCalculatedInvoiceTaxRequest/properties/"+field).toString().contains("\"null\""));
+    }
+
+    private void assertReceivableSettlementHistoryContract(String openApi) throws Exception {
+        JsonNode root = new ObjectMapper().readTree(openApi);
+        String path = "/api/v1/company/receivables/{receivableId}/settlements";
+        assertOperation(root, path, "get", "200", "400", "401", "403", "404");
+        assertOperation(root, path, "post", "201", "202", "400", "403", "404", "409");
+        assertEquals("#/components/schemas/PageResponseReceivableSettlementHistoryResponse", responseSchemaReference(root, path, "get", "200"));
+        assertEquals("#/components/schemas/ReceivableSettlementHistoryResponse", root.at("/components/schemas/PageResponseReceivableSettlementHistoryResponse/properties/items/items/$ref").asText());
+        var properties = root.at("/components/schemas/ReceivableSettlementHistoryResponse/properties");
+        assertCanonicalDecimalProperties(properties, "amount");
+        for (String field : List.of("receivableReference", "reversalOfSettlementId", "reversedBySettlementId")) assertTrue(properties.path(field).toString().contains("\"null\""));
+        for (String field : List.of("note", "reason", "bankAccount", "pixKey", "taxes", "allocations", "beforeData", "afterData", "outstandingAmount")) assertFalse(properties.has(field));
+        assertEquals(12, root.at("/components/schemas/ReceivableSettlementHistoryResponse/required").size());
+        Set<String> parameters = new TreeSet<>();
+        root.path("paths").path(path).path("get").path("parameters").forEach(parameter -> parameters.add(parameter.path("name").asText()));
+        assertEquals(Set.of("receivableId", "entryType", "status", "paymentMethod", "receivedFrom", "receivedTo", "page", "size", "sort"), parameters);
+        assertTrue(root.path("paths").path(path).path("get").path("description").asText().contains("RECEIVABLES.READ"));
+        assertTrue(properties.path("amount").path("pattern").asText().contains("^-?"));
+    }
+
+    private void assertReceivableReadContract(String openApi) throws Exception {
+        JsonNode root = new ObjectMapper().readTree(openApi);
+        String base = "/api/v1/company/receivables";
+        assertOperation(root, base, "get", "200", "400", "401", "403");
+        assertOperation(root, base + "/{receivableId}", "get", "200", "400", "401", "403", "404");
+        assertEquals("#/components/schemas/PageResponseReceivableSummaryResponse", responseSchemaReference(root, base, "get", "200"));
+        assertEquals("#/components/schemas/ReceivableDetailsResponse", responseSchemaReference(root, base + "/{receivableId}", "get", "200"));
+        assertEquals("#/components/schemas/ReceivableSummaryResponse", root.at("/components/schemas/PageResponseReceivableSummaryResponse/properties/items/items/$ref").asText());
+        Set<String> parameters = new TreeSet<>();
+        root.path("paths").path(base).path("get").path("parameters").forEach(parameter -> parameters.add(parameter.path("name").asText()));
+        assertEquals(Set.of("search", "reference", "contractSearch", "workSearch", "customerName", "billingReference", "contractId", "workId", "finalCustomerId",
+                "status", "financialView", "currency", "dueFrom", "dueTo", "page", "size", "sort"), parameters);
+        var views = new TreeSet<String>();
+        root.path("paths").path(base).path("get").path("parameters").forEach(parameter -> {
+            if (parameter.path("name").asText().equals("financialView")) parameter.path("schema").path("enum").forEach(value -> views.add(value.asText()));
+        });
+        assertEquals(Set.of("ALL", "OUTSTANDING", "RECEIVED"), views);
+        var properties = root.at("/components/schemas/ReceivableSummaryResponse/properties");
+        assertCanonicalDecimalProperties(properties, "originalAmount");
+        for (String field : List.of("reference", "contractReference", "contractIdentifier", "workReference", "billingInstallmentReference", "renegotiationSourceReceivableId", "renegotiationSourceReference", "issuedOn")) {
+            assertTrue(properties.path(field).toString().contains("\"null\""), field);
+        }
+        for (String field : List.of("document", "phone", "email", "taxes", "settlements", "allocations", "outstandingAmount", "accessKey", "storageKey")) assertFalse(properties.has(field));
+        assertTrue(root.path("paths").path(base).path("get").path("description").asText().contains("RECEIVABLES.READ"));
+        assertTrue(properties.path("status").toString().contains("Persisted"));
+        assertEquals("#/components/schemas/ReceivableFinancialPositionResponse", properties.at("/financialPosition/$ref").asText());
+        assertCanonicalDecimalProperties(root.at("/components/schemas/ReceivableFinancialPositionResponse/properties"),
+                "withheldAmount", "creditedAmount", "netReceivableAmount", "confirmedSettlementAmount", "outstandingAmount");
+    }
+
+    private void assertInvoiceTaxReadContract(String openApi) throws Exception {
+        JsonNode root = new ObjectMapper().readTree(openApi);
+        String path = "/api/v1/company/invoices/{invoiceId}/tax-obligations";
+        assertOperation(root, path, "get", "200", "400", "401", "403", "404");
+        assertEquals("#/components/schemas/PageResponseInvoiceTaxObligationResponse", responseSchemaReference(root, path, "get", "200"));
+        assertEquals("#/components/schemas/InvoiceTaxObligationResponse", root.at("/components/schemas/PageResponseInvoiceTaxObligationResponse/properties/items/items/$ref").asText());
+        Set<String> parameters = new TreeSet<>();
+        var operation = root.path("paths").path(path).path("get");
+        operation.path("parameters").forEach(parameter -> parameters.add(parameter.path("name").asText()));
+        assertEquals(Set.of("invoiceId", "status", "treatment", "page", "size", "sort"), parameters);
+        assertTrue(operation.path("description").asText().contains("INVOICES.READ"));
+        var properties = root.at("/components/schemas/InvoiceTaxObligationResponse/properties");
+        assertCanonicalDecimalProperties(properties, "amount");
+        for (String field : List.of("description", "dueOn")) assertTrue(properties.path(field).toString().contains("\"null\""));
+        for (String field : List.of("receivableId", "payableId", "outstandingAmount", "accessKey", "storageKey")) assertFalse(properties.has(field));
+        assertEquals(10, root.at("/components/schemas/InvoiceTaxObligationResponse/required").size());
+    }
+
+    private void assertInvoiceReadContract(String openApi) throws Exception {
+        JsonNode root = new ObjectMapper().readTree(openApi);
+        String base = "/api/v1/company/invoices";
+        assertOperation(root, base, "get", "200", "400", "401", "403");
+        assertOperation(root, base + "/{invoiceId}", "get", "200", "400", "401", "403", "404");
+        assertEquals("#/components/schemas/PageResponseInvoiceSummaryResponse", responseSchemaReference(root, base, "get", "200"));
+        assertEquals("#/components/schemas/InvoiceDetailsResponse", responseSchemaReference(root, base + "/{invoiceId}", "get", "200"));
+        assertOperation(root, base + "/contracts", "get", "200", "400", "401", "403");
+        assertOperation(root, base + "/contracts/{contractId}", "get", "200", "400", "401", "403", "404");
+        assertEquals("#/components/schemas/PageResponseInvoiceContractResponse", responseSchemaReference(root, base + "/contracts", "get", "200"));
+        assertEquals("#/components/schemas/InvoiceContractResponse", responseSchemaReference(root, base + "/contracts/{contractId}", "get", "200"));
+        var contractFields = root.at("/components/schemas/InvoiceContractResponse/properties");
+        assertEquals(4, contractFields.size());
+        for (String field : List.of("contractId", "contractName", "contractReference", "contractIdentifier")) assertTrue(contractFields.has(field));
+        for (String field : List.of("contractReference", "contractIdentifier")) assertTrue(contractFields.path(field).toString().contains("\"null\""));
+        Set<String> groupParameters = new TreeSet<>();
+        root.path("paths").path(base + "/contracts").path("get").path("parameters").forEach(p -> groupParameters.add(p.path("name").asText()));
+        assertEquals(Set.of("search", "page", "size", "sort"), groupParameters);
+        assertCanonicalDecimalProperties(root.at("/components/schemas/InvoiceSummaryResponse/properties"), "totalAmount");
+        assertCanonicalDecimalProperties(root.at("/components/schemas/InvoiceReadItemResponse/properties"), "allocatedAmount");
+        Set<String> filters = new TreeSet<>();
+        root.path("paths").path(base).path("get").path("parameters").forEach(p -> filters.add(p.path("name").asText()));
+        assertEquals(Set.of("contractId", "number", "series", "contractSearch", "installmentReference", "status", "issuedFrom", "issuedTo", "page", "size", "sort"), filters);
+        assertTrue(root.path("paths").path(base).path("get").path("description").asText().contains("INVOICES.READ"));
+        assertFalse(root.at("/components/schemas/InvoiceSummaryResponse/properties").has("accessKey"));
+        assertFalse(root.at("/components/schemas/InvoiceDetailsResponse/properties").has("attachments"));
+        assertEquals("#/components/schemas/InvoiceReceiptPositionResponse", root.at("/components/schemas/InvoiceSummaryResponse/properties/receiptPosition/$ref").asText());
+        var receipt = root.at("/components/schemas/InvoiceReceiptPositionResponse/properties");
+        for (String field : List.of("receivedAmount", "outstandingAmount")) {
+            assertTrue(receipt.path(field).toString().contains("\"null\""));
+            assertEquals("decimal", receipt.path(field).path("format").asText());
+        }
+        for (String field : List.of("contractServiceId", "contractServiceName", "measurementContractCompositionId", "description")) {
+            assertTrue(root.at("/components/schemas/InvoiceReadItemResponse/properties/" + field).toString().contains("\"null\""), field);
+        }
+    }
+
+    private void assertOperationalPayablesContract(String openApi) throws Exception {
+        JsonNode root=new ObjectMapper().readTree(openApi);String path="/api/v1/company/payables";
+        assertOperation(root,path,"post","200","201","202","400","401","403","404","409");
+        assertOperation(root,path,"get","200","400","401","403");
+        assertOperation(root,path+"/{payableId}","get","200","401","403","404");
+        assertEquals("#/components/schemas/PageResponsePayableResponse",responseSchemaReference(root,path,"get","200"));
+        var view = root.path("paths").path(path).path("get").path("parameters").valueStream()
+                .filter(parameter -> "view".equals(parameter.path("name").asText())).findFirst().orElseThrow();
+        assertEquals("query", view.path("in").asText());
+        assertFalse(view.path("required").asBoolean());
+        assertEquals(List.of("OUTSTANDING", "HISTORY"), view.at("/schema/enum").valueStream().map(JsonNode::asText).toList());
+        assertEquals("#/components/schemas/PayableResponse",responseSchemaReference(root,path+"/{payableId}","get","200"));
+        assertFalse(root.at("/components/schemas/PayableCreateRequest/properties").has("companyId"));
+        assertTrue(root.at("/components/schemas/PayableCreateRequest/required").toString().contains("financialScope"));
+        assertCanonicalDecimalProperties(root.at("/components/schemas/PayableTitleCreateRequest/properties"),"originalAmount");
+        assertCanonicalDecimalProperties(root.at("/components/schemas/PayableResponse/properties"),"originalAmount");
+        var list=root.at("/components/schemas/PayableCreationResponse/properties/payables/anyOf");
+        assertEquals("#/components/schemas/PayableResponse",list.at("/0/items/$ref").asText());assertEquals("null",list.at("/1/type").asText());
+        for(String field:List.of("work","contract","supplier","financialCategory")){
+            var union=root.at("/components/schemas/PayableResponse/properties/"+field+"/anyOf");
+            assertEquals("#/components/schemas/PayableReferenceResponse",union.at("/0/$ref").asText());assertEquals("null",union.at("/1/type").asText());
+        }
+    }
+
+    private void assertRealizedCashContract(String openApi) throws Exception {
+        var root = new ObjectMapper().readTree(openApi);
+        String base = "/api/v1/company/cash-flow";
+        assertOperation(root, base + "/report/pdf", "get", "200", "400", "401", "403");
+        assertOperation(root, base + "/works/{workId}/report/pdf", "get", "200", "400", "401", "403", "404");
+        var report = root.path("paths").path(base + "/report/pdf").path("get").path("responses").path("200");
+        assertEquals("binary", report.at("/content/application~1pdf/schema/format").asText());
+        assertTrue(report.path("headers").has("Content-Disposition"));
+        assertOperation(root, base + "/realized", "get", "200", "400", "401", "403");
+        assertOperation(root, base + "/works/{workId}/realized", "get", "200", "400", "401", "403", "404");
+        String accumulated = base + "/works/{workId}/realized/accumulated";
+        assertOperation(root, accumulated, "get", "200", "400", "401", "403", "404");
+        assertEquals("#/components/schemas/RealizedCashResponse", responseSchemaReference(root, accumulated, "get", "200"));
+        assertEquals("#/components/schemas/RealizedCashResponse",
+                responseSchemaReference(root, base + "/realized", "get", "200"));
+        assertCanonicalDecimalProperties(root.at("/components/schemas/RealizedCashComponent/properties"), "amount");
+        assertCanonicalDecimalProperties(root.at("/components/schemas/RealizedCashCurrencyPosition/properties"),
+                "netMovement", "cashResultPercentage");
+        String comparison = base + "/payments/comparison";
+        assertOperation(root, comparison, "get", "200", "400", "401", "403");
+        assertOperation(root, base + "/works/{workId}/payments/comparison", "get", "200", "400", "401", "403", "404");
+        assertEquals("#/components/schemas/CashPaymentsComparisonResponse", responseSchemaReference(root, comparison, "get", "200"));
+        assertCanonicalDecimalProperties(root.at("/components/schemas/CashPaymentsComparisonMovement/properties"),
+                "differenceAmount", "percentageChange");
+        assertCanonicalDecimalProperties(root.at("/components/schemas/CashPaymentsComparisonPeriodTotal/properties"), "amount");
+        String byCategory = comparison + "/by-category";
+        assertOperation(root, byCategory, "get", "200", "400", "401", "403");
+        assertOperation(root, base + "/works/{workId}/payments/comparison/by-category", "get", "200", "400", "401", "403", "404");
+        assertEquals("#/components/schemas/CashPaymentsByCategoryResponse", responseSchemaReference(root, byCategory, "get", "200"));
+        assertEquals("#/components/schemas/CashPaymentsCategoryComparison",
+                root.at("/components/schemas/CashPaymentsByCategoryResponse/properties/categories/items/$ref").asText());
+        assertOperation(root, base + "/due", "get", "200", "400", "401", "403");
+        assertOperation(root, base + "/works/{workId}/due", "get", "200", "400", "401", "403", "404");
+        assertEquals("#/components/schemas/CashDueResponse", responseSchemaReference(root, base + "/due", "get", "200"));
+        assertCanonicalDecimalProperties(root.at("/components/schemas/CashDueBucket/properties"), "amount");
+        for (String route : List.of(base + "/due", base + "/works/{workId}/due")) {
+            var parameters = root.path("paths").path(route).path("get").path("parameters");
+            var horizon = parameters.valueStream().filter(p -> "horizonDays".equals(p.path("name").asText()))
+                    .findFirst().orElseThrow().path("schema");
+            assertEquals("integer", horizon.path("type").asText());
+            assertEquals(1, horizon.path("minimum").asInt());
+            assertEquals(365, horizon.path("maximum").asInt());
+            assertEquals(30, horizon.path("default").asInt());
+        }
+    }
+
+    private void assertPayableSettlementContract(String openApi) throws Exception {
+        var root = new ObjectMapper().readTree(openApi);
+        String base = "/api/v1/company/payables/{payableId}";
+        assertOperation(root, base + "/balance", "get", "200", "401", "403", "404");
+        assertOperation(root, base + "/settlements", "get", "200", "400", "401", "403", "404");
+        assertEquals("#/components/schemas/PageResponsePayableSettlementResponse",
+                responseSchemaReference(root, base + "/settlements", "get", "200"));
+        for (String suffix : List.of("/settlements", "/settlements/{settlementId}/reversals")) {
+            assertOperation(root, base + suffix, "post", "200", "201", "202", "400", "401", "403", "404", "409");
+            assertEquals("#/components/schemas/PayableSettlementChangeResponse",
+                    responseSchemaReference(root, base + suffix, "post", "201"));
+            assertEquals("#/components/schemas/PendingPayableSettlementResponse",
+                    responseSchemaReference(root, base + suffix, "post", "202"));
+        }
+        assertCanonicalDecimalProperties(root.at("/components/schemas/PayableSettlementCreateRequest/properties"), "amount");
+        assertCanonicalDecimalProperties(root.at("/components/schemas/PayableSettlementResponse/properties"), "amount");
+        assertEquals("#/components/schemas/PayableBalanceResponse", root.at("/components/schemas/PayableResponse/properties/balance/$ref").asText());
+        for (String amount : List.of("paidAmount", "outstandingAmount", "overdueAmount")) {
+            var field = root.at("/components/schemas/PayableBalanceResponse/properties/" + amount);
+            assertTrue(field.path("type").valueStream().anyMatch(t -> t.asText().equals("string")));
+            assertTrue(field.path("type").valueStream().anyMatch(t -> t.asText().equals("null")));
+            assertEquals("decimal", field.path("format").asText());
+        }
+    }
+
+    private void assertInvoiceAttachmentValidationContract(String openApi) throws Exception {
+        JsonNode root = new ObjectMapper().readTree(openApi);
+        String path = "/api/v1/company/invoices/{invoiceId}/attachments";
+        assertOperation(root, path, "post", "200", "400", "401", "403", "404", "409", "415");
+        assertEquals("#/components/schemas/InvoiceAttachmentResponse", responseSchemaReference(root, path, "post", "200"));
+        var upload = root.path("paths").path(path).path("post");
+        var uploadTypes = new TreeSet<String>();
+        upload.path("parameters").forEach(parameter -> {
+            if ("attachmentType".equals(parameter.path("name").asText())) {
+                parameter.at("/schema/enum").forEach(type -> uploadTypes.add(type.asText()));
+            }
+        });
+        assertEquals(Set.of("PDF"), uploadTypes);
+        assertTrue(upload.path("description").asText().contains("INVOICE_PDF_ALREADY_ATTACHED"));
+        assertTrue(upload.path("description").asText().contains("INVOICE_ATTACHMENT_PDF_REQUIRED"));
+        assertTrue(root.path("paths").path("/api/v1/company/invoices/xml/preview")
+                .path("post").path("description").asText().contains("DTD"));
+        assertOperation(root, path, "get", "200", "400", "401", "403", "404");
+        assertEquals("#/components/schemas/PageResponseInvoiceAttachmentResponse", responseSchemaReference(root, path, "get", "200"));
+        Set<String> parameters = new TreeSet<>();
+        root.path("paths").path(path).path("get").path("parameters").forEach(parameter -> parameters.add(parameter.path("name").asText()));
+        assertEquals(Set.of("invoiceId", "page", "size", "sort"), parameters);
+        String download = path + "/{attachmentId}/download";
+        assertOperation(root, download, "get", "200", "400", "401", "403", "404", "503");
+        var operation = root.path("paths").path(download).path("get");
+        assertTrue(operation.path("description").asText().contains("INVOICES.READ"));
+        assertTrue(operation.path("description").asText().contains("INVOICES.EXPORT"));
+        for (String mime : List.of("application/pdf", "application/xml")) {
+            var schema = operation.path("responses").path("200").path("content").path(mime).path("schema");
+            assertEquals("string", schema.path("type").asText());
+            assertEquals("binary", schema.path("format").asText());
+        }
+        for (String header : List.of("Content-Disposition", "Cache-Control", "X-Content-Type-Options")) {
+            assertTrue(operation.at("/responses/200/headers").has(header));
+        }
+        var properties = root.at("/components/schemas/InvoiceAttachmentResponse/properties");
+        assertEquals(8, properties.size());
+        assertEquals(8, root.at("/components/schemas/InvoiceAttachmentResponse/required").size());
+        assertEquals("date-time", properties.path("createdAt").path("format").asText());
+        for (String secret : List.of("storageKey", "path", "url", "accessKey", "content")) assertFalse(properties.has(secret));
+        String cancellation = "/api/v1/company/invoices/{invoiceId}/cancellation";
+        assertOperation(root, cancellation, "post", "200", "202", "400", "403", "404", "409");
+        String description = root.path("paths").path(cancellation).path("post").path("description").asText();
+        for (String reason : List.of("INVOICE_CANCELLATION_HAS_ACTIVE_RECEIPTS", "INVOICE_CANCELLATION_HAS_TAX_PAYMENTS",
+                "INVOICE_CANCELLATION_REQUIRES_REVIEW")) assertTrue(description.contains(reason));
+    }
+
+    private void assertManualInvoiceSettlementContract(String openApi) throws Exception {
+        var root = new ObjectMapper().readTree(openApi);
+        String base = "/api/v1/company/receivables/{receivableId}";
+        assertOperation(root, base + "/invoice-settlement-options", "get", "200", "400", "401", "403", "404");
+        assertOperation(root, base + "/invoice-settlements", "post", "200", "201", "202", "400", "401", "403", "404", "409");
+        assertEquals("#/components/schemas/InvoiceSettlementOptionsResponse", responseSchemaReference(root, base + "/invoice-settlement-options", "get", "200"));
+        assertEquals("#/components/schemas/PendingInvoiceSettlementResponse", responseSchemaReference(root, base + "/invoice-settlements", "post", "202"));
+        var pending = root.at("/components/schemas/PendingInvoiceSettlementResponse/properties");
+        assertFalse(pending.has("settlement")); assertFalse(pending.has("balance")); assertFalse(pending.has("items"));
+        for (String name : List.of("CreateInvoiceSettlementRequest", "InvoiceSettlementLineRequest")) {
+            var amount = root.path("components").path("schemas").path(name).path("properties").path("amount");
+            assertEquals("string", amount.path("type").asText()); assertEquals("decimal", amount.path("format").asText());
+        }
+        assertEquals(1000, root.at("/components/schemas/CreateInvoiceSettlementRequest/properties/note/maxLength").asInt());
+        assertEquals("#/components/schemas/TotalInvoiceSettlementProposalResponse", root.at("/components/schemas/InvoiceSettlementOptionsResponse/properties/totalSettlementProposal/$ref").asText());
+        var optionSchema = root.at("/components/schemas/InvoiceSettlementOptionResponse");
+        for (String field : List.of("withheldItemAmount", "netInvoicedItemAmount", "netAvailableItemAmount")) {
+            assertTrue(optionSchema.path("required").valueStream().anyMatch(name -> name.asText().equals(field)));
+            var property = optionSchema.path("properties").path(field);
+            assertTrue(property.path("type").valueStream().anyMatch(type -> type.asText().equals("string")));
+            assertTrue(property.path("type").valueStream().anyMatch(type -> type.asText().equals("null")));
+            assertEquals("decimal", property.path("format").asText());
+            assertEquals("^[0-9]+\\.[0-9]{2}$", property.path("pattern").asText());
+        }
+        assertTrue(root.at("/components/schemas/TotalInvoiceSettlementProposalResponse/properties/amount").toString().contains("string"));
+        assertEquals("decimal", root.at("/components/schemas/TotalInvoiceSettlementProposalResponse/properties/amount/format").asText());
+        assertEquals("string", root.at("/components/schemas/TotalInvoiceSettlementProposalItem/properties/amount/type").asText());
+        assertTrue(root.at("/components/schemas/InvoiceReceiptPositionResponse/properties/status").toString().contains("PARTIALLY_RECEIVED"));
+    }
+
+    private void assertPayableCatalogContract(String openApi) throws Exception {
+        JsonNode root=new ObjectMapper().readTree(openApi);
+        for (String resource:List.of("suppliers","financial-categories")) {
+            String base="/api/v1/company/"+resource;
+            assertOperation(root,base,"get","200","400","401","403");
+            assertOperation(root,base,"post","201","202","400","401","403","409");
+            assertOperation(root,base+"/{id}","put","200","202","400","401","403","404","409");
+            assertOperation(root,base+"/{id}","delete","204","202","400","401","403","404","409");
+            String schema=resource.equals("suppliers")?"SupplierResponse":"FinancialCategoryResponse";
+            assertEquals("#/components/schemas/PageResponse"+schema,root.path("paths").path(base).at("/get/responses/200/content/application~1json/schema/$ref").asText());
+            assertEquals("#/components/schemas/"+schema,root.path("paths").path(base+"/{id}").at("/get/responses/200/content/application~1json/schema/$ref").asText());
+        }
+        for (String request:List.of("SupplierUpdateRequest","FinancialCategoryUpdateRequest")) {
+            assertTrue(root.at("/components/schemas/"+request+"/required").toString().contains("expectedVersion"));
+        }
+        assertFalse(root.at("/components/schemas/FinancialCategoryUpdateRequest/properties").has("code"));
+        assertFalse(root.at("/components/schemas/FinancialCategoryUpdateRequest/properties").has("type"));
+        for (String[] field:new String[][]{{"SupplierChangeResponse","supplier","SupplierResponse"},{"FinancialCategoryChangeResponse","category","FinancialCategoryResponse"}}) {
+            var union=root.at("/components/schemas/"+field[0]+"/properties/"+field[1]+"/anyOf");
+            assertEquals("#/components/schemas/"+field[2],union.at("/0/$ref").asText());
+            assertEquals("null",union.at("/1/type").asText());
+        }
+    }
+
+    private void assertNetBillingContract(String openApi) throws Exception {
+        JsonNode root = new ObjectMapper().readTree(openApi);
+        String read = "/api/v1/company/billing-control/contracts/{contractId}/net-capacity";
+        String create = "/api/v1/company/billing-installments/net";
+        assertOperation(root, read, "get", "200", "400", "401", "403", "404", "409");
+        assertOperation(root, create, "post", "200", "201", "202", "400", "401", "403", "404", "409");
+        assertEquals("#/components/schemas/NetBillingCapacityResponse",root.path("paths").path(read).at("/get/responses/200/content/application~1json/schema/$ref").asText());
+        for (String field : List.of("contractNetAmount", "activeAllocatedAmount", "remainingNetAmount", "remainingDiscountAmount")) {
+            JsonNode schema=root.at("/components/schemas/NetBillingCapacityResponse/properties/"+field);
+            assertEquals("string",schema.path("type").asText());assertEquals("decimal",schema.path("format").asText());
+        }
+        for (String field : List.of("grossAvailableAmount", "netAvailableAmount", "uncommittedDiscountAmount")) {
+            JsonNode schema=root.at("/components/schemas/NetBillingCapacityPositionResponse/properties/"+field);
+            assertEquals("string",schema.path("type").asText());assertEquals("decimal",schema.path("format").asText());
+        }
+        JsonNode request=root.at("/components/schemas/CreateNetBillingRequest");
+        assertEquals(1000,request.at("/properties/description/maxLength").asInt());
+        for (String required : List.of("operationId", "contractId", "capacityVersion", "dueOn", "allocations")) assertTrue(request.path("required").toString().contains(required), required);
+        assertFalse(root.at("/components/schemas/NetBillingAllocationRequest/properties").has("type"));
+        assertEquals("string",root.at("/components/schemas/NetBillingAllocationRequest/properties/netAmount/type").asText());
+        assertEquals("decimal",root.at("/components/schemas/NetBillingAllocationRequest/properties/netAmount/format").asText());
+        for (String schema : List.of("BillingAllocationResponse", "BillingInstallmentAllocationResponse")) {
+            for (String field : List.of("netBillingGrossAmount", "netBillingDiscountAmount")) {
+                var amount=root.at("/components/schemas/"+schema+"/properties/"+field);
+                assertTrue(amount.toString().contains("\"string\""));assertTrue(amount.toString().contains("\"null\""));assertEquals("decimal",amount.path("format").asText());
+            }
+        }
+        assertTrue(root.at("/components/schemas/BillingServiceControlResponse/properties").has("netAvailableToBillAmount"));
+        assertTrue(root.at("/components/schemas/BillableMeasurementOriginResponse/properties").has("netAvailableToBillAmount"));
+    }
+
+    private void assertBillingInstallmentReadContract(String openApi) throws Exception {
+        JsonNode root = new ObjectMapper().readTree(openApi);
+        String base = "/api/v1/company/billing-installments";
+        assertOperation(root, base, "get", "200", "400", "401", "403");
+        assertOperation(root, base + "/{installmentId}", "get", "200", "400", "401", "403", "404");
+        JsonNode list = root.path("paths").path(base).path("get");
+        assertEquals("#/components/schemas/PageResponseBillingInstallmentSummaryResponse",
+                list.at("/responses/200/content/application~1json/schema/$ref").asText());
+        assertEquals("#/components/schemas/BillingInstallmentSummaryResponse", root.at(
+                "/components/schemas/PageResponseBillingInstallmentSummaryResponse/properties/items/items/$ref").asText());
+        assertEquals("#/components/schemas/BillingInstallmentDetailsResponse", root.path("paths").path(base + "/{installmentId}")
+                .path("get").at("/responses/200/content/application~1json/schema/$ref").asText());
+        Set<String> filters = new TreeSet<>();
+        list.path("parameters").forEach(parameter -> filters.add(parameter.path("name").asText()));
+        assertEquals(Set.of("contractId", "reference", "status", "dueFrom", "dueTo", "page", "size", "sort"), filters);
+        for (String schema : List.of("BillingInstallmentSummaryResponse", "BillingInstallmentDetailsResponse", "BillingInstallmentAllocationResponse")) {
+            String field = schema.endsWith("AllocationResponse") ? "allocatedAmount" : "netAmount";
+            JsonNode amount = root.at("/components/schemas/" + schema + "/properties/" + field);
+            assertEquals("string", amount.path("type").asText(), schema);
+            assertEquals("decimal", amount.path("format").asText(), schema);
+        }
+        assertTrue(root.at("/components/schemas/BillingInstallmentAllocationResponse/properties").has("measurementContractCompositionId"));
+        assertTrue(root.at("/components/schemas/BillingInstallmentDetailsResponse/properties").has("receivableReferencesAvailable"));
+        for(String schema:List.of("BillingInstallmentSummaryResponse","BillingInstallmentDetailsResponse")) {
+            var model=root.at("/components/schemas/"+schema);
+            for(String field:List.of("receivableFinancialStatusAvailable","receivableFinancialStatus","receivableReceivedWithWithholding")) {
+                assertTrue(model.path("properties").has(field),schema+"/"+field);
+                assertTrue(model.path("required").toString().contains(field),schema+"/"+field);
+            }
+            for(String field:List.of("receivableFinancialStatus","receivableReceivedWithWithholding"))assertTrue(model.path("properties").path(field).path("type").toString().contains("null"));
+            var statuses=model.path("properties").path("receivableFinancialStatus").path("enum");
+            assertTrue(statuses.valueStream().anyMatch(JsonNode::isNull));
+            for(String state:List.of("OPEN","PARTIALLY_RECEIVED","RECEIVED","SETTLED_WITH_ADJUSTMENTS","CANCELLED","RENEGOTIATED"))assertTrue(statuses.valueStream().anyMatch(s->state.equals(s.asText())));
+            assertTrue(model.path("properties").path("status").path("description").asText().contains("Persisted"));
+        }
+        assertTrue(root.path("paths").path(base).path("get").path("description").asText().contains("RECEIVABLES.READ"));
+
+        for (String field : List.of("contractServiceId", "contractServiceName", "measurementContractCompositionId")) {
+            assertTrue(root.at("/components/schemas/BillingInstallmentAllocationResponse/properties/" + field).toString().contains("\"null\""), field);
+        }
+        assertTrue(root.at("/components/schemas/BillingInstallmentDetailsResponse/properties/issuedOn").toString().contains("\"null\""));
+        assertTrue(root.path("paths").path(base + "/{installmentId}").path("get").path("description").asText().contains("RECEIVABLES.READ"));
+    }
+
+    private void assertBillableMeasurementOriginsContract(String openApi) throws Exception {
+        JsonNode root = new ObjectMapper().readTree(openApi);
+        String path = "/api/v1/company/billing-control/contracts/{contractId}/measurement-origins";
+        assertOperation(root, path, "get", "200", "400", "401", "403", "404");
+        JsonNode operation = root.path("paths").path(path).path("get");
+        assertTrue(operation.path("description").asText().contains("BILLING.READ"));
+        assertTrue(operation.path("description").asText().contains("MEASUREMENTS.READ"));
+        Set<String> names = new TreeSet<>();
+        operation.path("parameters").forEach(parameter -> names.add(parameter.path("name").asText()));
+        assertEquals(Set.of("contractId", "measurementId", "contractServiceId", "page", "size", "sort"), names);
+        String pageSchema = operation.at("/responses/200/content/application~1json/schema/$ref").asText();
+        assertEquals("#/components/schemas/PageResponseBillableMeasurementOriginResponse", pageSchema);
+        assertEquals("#/components/schemas/BillableMeasurementOriginResponse", root.at(
+                "/components/schemas/PageResponseBillableMeasurementOriginResponse/properties/items/items/$ref").asText());
+        JsonNode properties = root.at("/components/schemas/BillableMeasurementOriginResponse/properties");
+        for (String field : List.of("acceptedAmount", "activeAllocatedAmount", "availableToBillAmount")) {
+            assertEquals("string", properties.path(field).path("type").asText(), field);
+            assertEquals("decimal", properties.path(field).path("format").asText(), field);
+        }
+        for (String field : List.of("measurementContractCompositionId", "contractId", "contractServiceId", "measurementId",
+                "measurementVersionId", "measurementServiceId", "continuousServiceId", "measurementTitle", "serviceTitle",
+                "measurementReference", "versionNumber", "status", "currency", "createdAt")) {
+            assertFalse(properties.path(field).isMissingNode(), field);
         }
     }
 
@@ -148,9 +628,17 @@ class OpenApiContractIntegrationTest extends AbstractPostgresIntegrationTest {
     private void assertEmployeeAndAccessUserSchemas(String openApi) throws Exception {
         JsonNode document = new ObjectMapper().readTree(openApi);
         assertEquals(
-                "#/components/schemas/PageResponseEmployeeResponse",
+                "#/components/schemas/PageResponseEmployeeListItemResponse",
                 responseSchemaReference(document, "/api/v1/company/employees", "get", "200")
         );
+        JsonNode listProperties = document.at("/components/schemas/EmployeeListItemResponse/properties");
+        for (String field : List.of("id", "fullName", "jobTitle", "registrationNumber", "active", "photoUrl")) {
+            assertTrue(listProperties.has(field), field);
+        }
+        for (String field : List.of("documentType", "documentNumber", "pisMasked", "phone", "birthDate", "gender",
+                "ethnicity", "compensationAmount", "compensationFrequency", "storageKey")) {
+            assertFalse(listProperties.has(field), field);
+        }
         assertEquals(
                 "#/components/schemas/PageResponseAccessUserResponse",
                 responseSchemaReference(document, "/api/v1/company/access/users", "get", "200")
@@ -251,9 +739,13 @@ class OpenApiContractIntegrationTest extends AbstractPostgresIntegrationTest {
             assertTrue(hasParameter(customerParameters, parameter), () -> "Customer query is missing " + parameter);
         }
         JsonNode employeeParameters = document.at("/paths/~1api~1v1~1company~1employees/get/parameters");
-        for (String parameter : Set.of("name", "document", "jobTitle", "department", "employmentType",
-                "compensationFrequency", "compensationMin", "compensationMax", "currentlyEmployed", "active")) {
+        for (String parameter : Set.of("name", "jobTitle", "department", "employmentType",
+                "currentlyEmployed", "active")) {
             assertTrue(hasParameter(employeeParameters, parameter), () -> "Employee query is missing " + parameter);
+        }
+        for (String sensitiveParameter : Set.of("document", "compensationFrequency", "compensationMin", "compensationMax")) {
+            assertFalse(hasParameter(employeeParameters, sensitiveParameter),
+                    () -> "Employee query must not accept sensitive parameter " + sensitiveParameter);
         }
         JsonNode updateCustomerRequired = document.at("/components/schemas/UpdateFinalCustomerRequest/required");
         for (String field : Set.of("customerType", "name", "document")) {
@@ -280,8 +772,19 @@ class OpenApiContractIntegrationTest extends AbstractPostgresIntegrationTest {
         }
         assertFalse(document.at("/components/schemas/UpdateWorkRequest/properties").has("finalCustomerId"));
 
-        assertOperation(document, contracts, "get", "200", "403");
-        assertOperation(document, contracts + "/{contractId}", "put", "200", "202", "400", "403", "404");
+        assertOperation(document, contracts, "get", "200", "400", "403");
+        assertOperation(document, contracts, "post", "201", "202", "400", "403", "404", "409");
+        for (String path : List.of(contracts, "/api/v1/company/billing-control/contracts")) {
+            JsonNode parameters = document.at("/paths/" + escapeJsonPointer(path) + "/get/parameters");
+            boolean documentsOpenFirst = false;
+            for (JsonNode parameter : parameters) {
+                if ("sort".equals(parameter.path("name").asText())) {
+                    documentsOpenFirst = parameter.path("description").asText().contains("openFirst,asc");
+                }
+            }
+            assertTrue(documentsOpenFirst, () -> "Missing openFirst sort documentation for " + path);
+        }
+        assertOperation(document, contracts + "/{contractId}", "put", "200", "202", "400", "403", "404", "409");
         assertEquals("#/components/schemas/PageResponseContractResponse",
                 responseSchemaReference(document, contracts, "get", "200"));
         JsonNode contractParameters = document.at("/paths/" + escapeJsonPointer(contracts) + "/get/parameters");
@@ -290,6 +793,12 @@ class OpenApiContractIntegrationTest extends AbstractPostgresIntegrationTest {
             assertTrue(hasParameter(contractParameters, parameter), () -> "Contract query is missing " + parameter);
         }
         JsonNode updateContractRequired = document.at("/components/schemas/UpdateContractRequest/required");
+        for (String request : List.of("CreateContractRequest", "UpdateContractRequest")) {
+            JsonNode schema = document.at("/components/schemas/" + request);
+            assertFalse(contains(schema.path("required"), "reference"));
+            assertEquals(100, schema.at("/properties/reference/maxLength").asInt());
+            assertTrue(schema.at("/properties/reference/description").asText().contains("unique per work"));
+        }
         for (String field : Set.of("name", "status")) {
             assertTrue(contains(updateContractRequired, field), () -> "UpdateContractRequest must require " + field);
         }
@@ -329,6 +838,23 @@ class OpenApiContractIntegrationTest extends AbstractPostgresIntegrationTest {
         assertOperation(document, contractBillingControl, "get", "200");
         assertCanonicalDecimalProperties(document.at("/components/schemas/ContractBillingControlResponse/properties"),
                 "serviceSubtotal", "contractDiscountAmount", "contractNetAmount", "activeAllocatedAmount", "availableAmount");
+        for (String schema : List.of("ContractBillingControlResponse", "BillingControlSummaryResponse")) {
+            var properties = document.path("components").path("schemas").path(schema).path("properties");
+            assertCanonicalDecimalProperties(properties, "receivedAmount");
+            assertTrue(properties.path("receivedAmount").path("type").toString().contains("null"), schema);
+            assertEquals("boolean", properties.at("/receivedAmountAvailable/type").asText());
+            assertTrue(properties.at("/receivedAmount/description").asText().contains("RECEIVABLES.READ"));
+        }
+        assertEquals("date", document.at("/components/schemas/ReceivableBalanceResponse/properties/maxReceivedOn/format").asText());
+        assertTrue(document.at("/components/schemas/ReceivableBalanceResponse/properties/maxReceivedOn/description").asText().contains("UTC"));
+        assertTrue(document.at("/components/schemas/CreateReceivableSettlementRequest/properties/receivedOn/description").asText().contains("UTC"));
+        assertEquals("boolean", document.at("/components/schemas/ReceivableBalanceResponse/properties/settlementCreationAvailable/type").asText());
+        assertTrue(document.at("/components/schemas/ReceivableBalanceResponse/properties/settlementCreationBlockReason").toString().contains("SETTLEMENT_INVOICE_LINK_REQUIRED"));
+        var blockReason = document.at("/components/schemas/ReceivableBalanceResponse/properties/settlementCreationBlockReason");
+        assertTrue(blockReason.path("type").toString().contains("null"));
+        assertFalse(blockReason.has("enum"));
+        assertEquals("string", document.at("/components/schemas/ProblemDetail/properties/reason/type").asText());
+        assertEquals("array", document.at("/components/schemas/ProblemDetail/properties/violations/type").asText());
         assertCanonicalDecimalProperties(document.at("/components/schemas/BillingServiceControlResponse/properties"),
                 "serviceNetAmount", "activeAllocatedAmount", "availableAmount", "issuedInInvoicesAmount");
         assertCanonicalDecimalProperties(document.at("/components/schemas/BillingAllocationControlResponse/properties"),
@@ -340,6 +866,21 @@ class OpenApiContractIntegrationTest extends AbstractPostgresIntegrationTest {
         String contract = "/api/v1/company/contracts/{contractId}";
         String services = contract + "/services";
         String service = services + "/{serviceId}";
+        assertOperation(document, contract + "/closure-eligibility", "get", "200", "400", "401", "403", "404");
+        assertOperation(document, contract + "/status", "put", "200", "202", "400", "403", "404", "409");
+        assertOperation(document, service + "/status", "put", "200", "202", "400", "403", "404", "409");
+        var contractStatusProperties = document.at("/components/schemas/UpdateContractStatusRequest/properties");
+        assertEquals(3, contractStatusProperties.size());
+        var serviceStatusProperties = document.at("/components/schemas/UpdateContractServiceStatusRequest/properties");
+        assertEquals(2, serviceStatusProperties.size());
+        for (String prohibited : List.of("companyId", "quantity", "unitPrice", "discountValue", "name")) {
+            assertFalse(contractStatusProperties.has(prohibited)); assertFalse(serviceStatusProperties.has(prohibited));
+        }
+        assertTrue(document.at("/components/schemas/ClosureDecisionResponse/properties/eligible/type").toString().contains("null"));
+        assertTrue(document.at("/components/schemas/ClosureDecisionResponse/properties/reason/description").asText().contains("financial blocking reason takes precedence"));
+        assertTrue(document.at("/components/schemas/ContractClosureEligibilityResponse/description").asText().contains("CONTRACT_FINANCIAL_RECONCILIATION_REQUIRED"));
+        assertTrue(document.at("/components/schemas/ClosureDecisionResponse/properties/authorizationMode/enum").valueStream().anyMatch(tools.jackson.databind.JsonNode::isNull));
+
         assertOperation(document, services, "post", "201", "202", "400", "403", "404", "409");
         assertOperation(document, service, "put", "200", "202", "400", "403", "404", "409");
         assertOperation(document, service + "/discount", "put", "200", "202", "400", "403", "404", "409");
@@ -350,7 +891,17 @@ class OpenApiContractIntegrationTest extends AbstractPostgresIntegrationTest {
         assertCanonicalDecimalProperties(document.at("/components/schemas/ContractServiceResponse/properties"),
                 "quantity", "unitPrice", "grossAmount", "discountValue", "discountAmount", "netAmount");
         assertTrue(document.at("/components/schemas/ContractResponse/properties").has("contractIdentifier"));
+        assertTrue(document.at("/components/schemas/BillingAllocationControlResponse/properties").has("receivableFinancialStatus"));
+        assertTrue(document.at("/components/schemas/BillingAllocationControlResponse/properties/receivableReceivedWithWithholding/type").toString().contains("boolean"));
+        assertTrue(document.at("/components/schemas/BillingAllocationControlResponse/required").toString().contains("receivableReceivedWithWithholding"));
+        assertTrue(document.at("/components/schemas/BillingAllocationControlResponse/properties/receivableFinancialStatus/enum").valueStream().anyMatch(tools.jackson.databind.JsonNode::isNull));
+        assertTrue(document.at("/components/schemas/BillingAllocationControlResponse/required").toString().contains("receivableFinancialStatusAvailable"));
+        assertTrue(document.at("/components/schemas/ContractResponse/properties/hasActiveContractDiscount/type").toString().contains("boolean"));
+        assertTrue(document.at("/components/schemas/ContractResponse/required").toString().contains("hasActiveContractDiscount"));
         assertTrue(document.at("/components/schemas/UpsertContractServiceRequest/properties").has("sourceServiceTemplateId"));
+        assertTrue(document.at("/components/schemas/UpsertContractServiceRequest/properties/discountType/description").asText().contains("preserves the current discount"));
+        assertTrue(document.path("paths").path(service).path("put").path("description").asText()
+                .contains("SERVICE_DISCOUNT_CHANGE_REQUIRES_DEDICATED_OPERATION"));
         assertTrue(document.at("/components/schemas/ReverseDiscountRequest/required").toString().contains("justification"));
         assertFalse(document.at("/components/schemas/UpsertContractServiceRequest/properties").has("contractId"));
     }

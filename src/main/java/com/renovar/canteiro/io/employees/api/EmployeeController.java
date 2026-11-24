@@ -11,6 +11,7 @@ import com.renovar.canteiro.io.employees.api.response.EmployeePaymentAccountResp
 import com.renovar.canteiro.io.employees.api.response.EmployeePaymentDetailsResponse;
 import com.renovar.canteiro.io.employees.api.response.EmployeeChangeResponse;
 import com.renovar.canteiro.io.employees.api.response.EmployeeResponse;
+import com.renovar.canteiro.io.employees.api.response.EmployeeListItemResponse;
 import com.renovar.canteiro.io.employees.application.CreateEmployeeCommand;
 import com.renovar.canteiro.io.employees.application.EmployeeAccessInvitationService;
 import com.renovar.canteiro.io.employees.application.EmployeeManagementService;
@@ -19,7 +20,6 @@ import com.renovar.canteiro.io.employees.application.EmployeePhotoService;
 import com.renovar.canteiro.io.employees.application.EmployeeFilter;
 import com.renovar.canteiro.io.employees.application.InviteEmployeeAccessCommand;
 import com.renovar.canteiro.io.employees.domain.Employee;
-import com.renovar.canteiro.io.employees.domain.EmployeeCompensationFrequency;
 import com.renovar.canteiro.io.employees.domain.EmployeeEmploymentType;
 import com.renovar.canteiro.io.shared.api.pagination.PageQuery;
 import com.renovar.canteiro.io.shared.api.pagination.PageResponse;
@@ -51,7 +51,6 @@ import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
-import java.math.BigDecimal;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -63,7 +62,7 @@ import java.util.UUID;
 public class EmployeeController {
 
     private static final Set<String> SORT_FIELDS = Set.of("fullName", "jobTitle", "department", "employmentType",
-            "compensationAmount", "compensationFrequency", "currentlyEmployed", "active", "createdAt", "updatedAt");
+            "currentlyEmployed", "active", "createdAt", "updatedAt");
     private static final Set<String> EMPLOYEE_PHOTO_TYPES = Set.of("image/png", "image/jpeg");
     private static final long MAX_EMPLOYEE_PHOTO_SIZE_BYTES = 2 * 1024 * 1024;
     private static final int MAX_EMPLOYEE_PHOTO_DIMENSION = 2048;
@@ -105,29 +104,25 @@ public class EmployeeController {
         return response(employeeManagementService.find(employeeId));
     }
 
-    @GetMapping
-    @Operation(summary = "Lists employees in the authenticated company")
+    @GetMapping(produces = MediaType.APPLICATION_JSON_VALUE)
+    @Operation(summary = "Lists employees in the authenticated company", description = "Minimal operational projection without personal documents, PIS, phone, birth date, gender, ethnicity or compensation. It intentionally does not accept document or compensation filters, preventing sensitive values from entering URLs and operational logs. Requires EMPLOYEES.READ; the full profile is a separate endpoint.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Paginated employee list", useReturnTypeSchema = true),
             @ApiResponse(responseCode = "403", ref = "#/components/responses/ProblemDetail")
     })
-    public PageResponse<EmployeeResponse> findAll(@RequestParam(required = false) Integer page,
+    public PageResponse<EmployeeListItemResponse> findAll(@RequestParam(required = false) Integer page,
                                                   @RequestParam(required = false) Integer size,
                                                   @RequestParam(required = false) List<String> sort,
                                                   @RequestParam(required = false) String name,
-                                                  @RequestParam(required = false) String document,
                                                   @RequestParam(required = false) String jobTitle,
                                                   @RequestParam(required = false) String department,
                                                   @RequestParam(required = false) EmployeeEmploymentType employmentType,
-                                                  @RequestParam(required = false) EmployeeCompensationFrequency compensationFrequency,
-                                                  @RequestParam(required = false) BigDecimal compensationMin,
-                                                  @RequestParam(required = false) BigDecimal compensationMax,
                                                   @RequestParam(required = false) Boolean currentlyEmployed,
                                                   @RequestParam(required = false) Boolean active) {
         return PageResponse.from(employeeManagementService.findAll(
-                new EmployeeFilter(name, document, jobTitle, department, employmentType, compensationFrequency,
-                        compensationMin, compensationMax, currentlyEmployed, active),
-                new PageQuery(page, size, sort).toPageable(SORT_FIELDS)), this::response);
+                new EmployeeFilter(name, null, jobTitle, department, employmentType, null,
+                        null, null, currentlyEmployed, active),
+                new PageQuery(page, size, sort).toPageable(SORT_FIELDS)), EmployeeListItemResponse::from);
     }
 
     @PostMapping("/{employeeId}/access-invitations")

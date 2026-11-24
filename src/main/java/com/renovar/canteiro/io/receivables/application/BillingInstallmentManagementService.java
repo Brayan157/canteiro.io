@@ -170,7 +170,7 @@ public class BillingInstallmentManagementService {
                     BigDecimal previouslyUnattributed = billingAllocationRepository.findByContractIdAndCompanyId(command.contractId(),companyId).stream()
                             .filter(line -> line.getStatus() == com.renovar.canteiro.io.receivables.domain.BillingAllocationStatus.ACTIVE
                                     && allocation.contractServiceId().equals(line.getContractServiceId()) && line.getMeasurementContractCompositionId()==null)
-                            .map(BillingAllocation::getAllocatedAmount).reduce(BigDecimal.ZERO,BigDecimal::add);
+                            .map(BillingAllocation::getCapacityAmount).reduce(BigDecimal.ZERO,BigDecimal::add);
                     if (targetService.getMeasurementCompositionAmount().signum()>0
                             && previouslyUnattributed.add(requested).compareTo(targetService.getNetAmount())>0) {
                         throw new IllegalArgumentException("Measurement-originated billing requires measurementContractCompositionId; untraced allocation exceeds the negotiated base");
@@ -207,7 +207,7 @@ public class BillingInstallmentManagementService {
         BigDecimal alreadyAllocated = billingAllocationRepository
                 .findByMeasurementContractCompositionIdAndCompanyId(composition.getId(), companyId).stream()
                 .filter(line -> line.getStatus() == com.renovar.canteiro.io.receivables.domain.BillingAllocationStatus.ACTIVE)
-                .map(BillingAllocation::getAllocatedAmount)
+                .map(BillingAllocation::getCapacityAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         if (alreadyAllocated.add(amountAlreadyRequestedInThisInstallment).add(allocation.allocatedAmount().setScale(2,RoundingMode.HALF_UP))
                 .compareTo(composition.getNetAmount()) > 0) {

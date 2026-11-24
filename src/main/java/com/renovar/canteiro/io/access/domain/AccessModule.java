@@ -7,6 +7,8 @@ public enum AccessModule {
     ROLES,
     CUSTOMERS,
     WORKS,
+    WORKFORCE,
+    WORK_DIARY,
     CONTRACTS,
     SERVICES,
     DISCOUNTS,

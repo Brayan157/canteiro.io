@@ -9,6 +9,7 @@ import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 
 import java.util.UUID;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -42,7 +43,7 @@ class SubscriptionAccessFilterTest {
         UUID companyId = UUID.randomUUID();
         TenantContextHolder tenantContextHolder = mock(TenantContextHolder.class);
         CompanySubscriptionAccessService accessService = mock(CompanySubscriptionAccessService.class);
-        when(tenantContextHolder.requireCurrentTenant()).thenReturn(new TenantContext(UUID.randomUUID(), companyId));
+        when(tenantContextHolder.currentTenant()).thenReturn(Optional.of(new TenantContext(UUID.randomUUID(), companyId)));
         when(accessService.resolveAccessLevel(companyId)).thenReturn(SubscriptionAccessLevel.BLOCKED);
         SubscriptionAccessFilter filter = new SubscriptionAccessFilter(
                 tenantContextHolder, accessService, mock(tools.jackson.databind.ObjectMapper.class)
@@ -63,7 +64,7 @@ class SubscriptionAccessFilterTest {
         UUID companyId = UUID.randomUUID();
         TenantContextHolder tenantContextHolder = mock(TenantContextHolder.class);
         CompanySubscriptionAccessService accessService = mock(CompanySubscriptionAccessService.class);
-        when(tenantContextHolder.requireCurrentTenant()).thenReturn(new TenantContext(UUID.randomUUID(), companyId));
+        when(tenantContextHolder.currentTenant()).thenReturn(Optional.of(new TenantContext(UUID.randomUUID(), companyId)));
         when(accessService.resolveAccessLevel(companyId)).thenReturn(SubscriptionAccessLevel.READ_ONLY);
         SubscriptionAccessFilter filter = new SubscriptionAccessFilter(
                 tenantContextHolder, accessService, mock(tools.jackson.databind.ObjectMapper.class)
@@ -105,5 +106,18 @@ class SubscriptionAccessFilterTest {
 
         assertTrue(endpointReached.get());
         verify(tenantContextHolder, never()).requireCurrentTenant();
+    }
+
+    @Test
+    void leavesAnonymousRequestsToTheProtectedRouteAuthenticationWithoutResolvingDunning() throws Exception {
+        TenantContextHolder tenants = mock(TenantContextHolder.class);
+        CompanySubscriptionAccessService access = mock(CompanySubscriptionAccessService.class);
+        SubscriptionAccessFilter filter = new SubscriptionAccessFilter(tenants, access, mock(tools.jackson.databind.ObjectMapper.class));
+        AtomicBoolean continued = new AtomicBoolean(false);
+        filter.doFilter(new MockHttpServletRequest("GET", "/api/v1/company/billing-control/contracts"),
+                new MockHttpServletResponse(), (request, response) -> continued.set(true));
+        assertTrue(continued.get());
+        verify(tenants, never()).requireCurrentTenant();
+        verify(access, never()).resolveAccessLevel(org.mockito.ArgumentMatchers.any());
     }
 }

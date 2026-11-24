@@ -17,11 +17,13 @@ public class JpaBillingAllocationRepository implements BillingAllocationReposito
 
     @Override
     public BillingAllocation save(BillingAllocation billingAllocation) {
-        return toDomain(billingAllocationJpaRepository.save(new BillingAllocationJpaEntity(
+        var entity = new BillingAllocationJpaEntity(
                 billingAllocation.getCompanyId(), billingAllocation.getBillingInstallmentId(), billingAllocation.getContractId(),
                 billingAllocation.getContractServiceId(), billingAllocation.getMeasurementContractCompositionId(), billingAllocation.getType(), billingAllocation.getAllocatedAmount(),
                 billingAllocation.getStatus()
-        )));
+        );
+        entity.initializeNetBasis(billingAllocation.getNetBillingGrossAmount(), billingAllocation.getNetBillingDiscountAmount());
+        return toDomain(billingAllocationJpaRepository.save(entity));
     }
 
     @Override
@@ -59,10 +61,10 @@ public class JpaBillingAllocationRepository implements BillingAllocationReposito
     }
 
     private BillingAllocation toDomain(BillingAllocationJpaEntity entity) {
-        return BillingAllocation.rehydrate(
+        return BillingAllocation.rehydrateNet(
                 entity.getId(), entity.getCompanyId(), entity.getBillingInstallmentId(), entity.getContractId(),
                 entity.getContractServiceId(), entity.getMeasurementContractCompositionId(), entity.getType(), entity.getAllocatedAmount(), entity.getStatus(), entity.getCreatedAt(),
-                entity.getUpdatedAt()
+                entity.getUpdatedAt(), entity.getNetBillingGrossAmount(), entity.getNetBillingDiscountAmount()
         );
     }
 }

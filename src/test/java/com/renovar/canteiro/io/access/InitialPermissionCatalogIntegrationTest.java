@@ -21,7 +21,7 @@ class InitialPermissionCatalogIntegrationTest extends AbstractPostgresIntegratio
 
     @Test
     void seedsControlledPermissionsForEachInitialAccessCategory() {
-        assertEquals(152, permissionCount());
+        assertEquals(163, permissionCount());
         assertPermission(AccessModule.CUSTOMERS, AccessAction.READ);
         assertPermission(AccessModule.CONTRACTS, AccessAction.CREATE_DIRECT);
         assertPermission(AccessModule.CONTRACTS, AccessAction.CANCEL_DIRECT);
@@ -34,6 +34,10 @@ class InitialPermissionCatalogIntegrationTest extends AbstractPostgresIntegratio
         assertPermission(AccessModule.EMPLOYEES, AccessAction.CREATE_DIRECT);
         assertPermission(AccessModule.EMPLOYEES, AccessAction.APPROVE);
         assertPermission(AccessModule.ROLES, AccessAction.MANAGE_ROLES);
+        assertPermission(AccessModule.WORKFORCE, AccessAction.MANAGE_USERS);
+        assertPermission(AccessModule.WORKFORCE, AccessAction.MANAGE_ROLES);
+        assertPermission(AccessModule.WORK_DIARY, AccessAction.REQUEST_CREATE);
+        assertPermission(AccessModule.WORK_DIARY, AccessAction.APPROVE);
     }
 
     @Test
@@ -48,6 +52,10 @@ class InitialPermissionCatalogIntegrationTest extends AbstractPostgresIntegratio
         ).isEmpty());
         assertTrue(permissionRepository.findByModuleAndAction(
                 AccessModule.CONTRACTS,
+                AccessAction.MANAGE_ROLES
+        ).isEmpty());
+        assertTrue(permissionRepository.findByModuleAndAction(
+                AccessModule.WORK_DIARY,
                 AccessAction.MANAGE_ROLES
         ).isEmpty());
     }

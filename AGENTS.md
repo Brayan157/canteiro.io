@@ -2,6 +2,8 @@
 
 Estas regras são obrigatórias para qualquer agente que analisar, modificar ou implementar este repositório.
 
+Comece pelo [Mapa do projeto](docs/MAPA-DO-PROJETO.md) para localizar o domínio, as classes e os trechos aplicáveis do SDD e deste arquivo. A autoridade e as invariantes continuam nas fontes indicadas na seção 1.
+
 ## 1. Fonte de verdade e autoridade
 
 1. Leia este arquivo e o documento [docs/SDD-MVP-Gestao-Financeira.md](docs/SDD-MVP-Gestao-Financeira.md) antes de iniciar tarefas de domínio.
@@ -139,6 +141,14 @@ Nunca substitua Work por Contract, nem mova faturamento de Contract para Work.
 11. Cada módulo novo deve ter teste negativo provando isolamento entre duas empresas.
 12. No onboarding público, o proprietário inicial da Company é criado como usuário pendente, vinculado à nova Company e recebe automaticamente o papel `Company Administrator` com todas as permissões ativas do catálogo controlado naquele momento. Após ativar a própria conta pelo token de convite, ele possui alçada direta efetiva; isso não dispensa autorização nem auditoria nas ações futuras.
 
+### 6.1 Privacidade de funcionário e dados de RH
+
+1. Listagens operacionais de funcionário usam projeção mínima. Não incluir documento/PIS, telefone, nascimento, gênero, etnia ou remuneração; não aceitar nem ordenar por documento ou remuneração quando a rota for uma lista operacional.
+2. Salário e perfil completo permanecem em endpoint de detalhe autenticado; redução da lista não autoriza limpar, mascarar ou sobrescrever campos do cadastro no PUT. Até haver permissão granular, não alegar que `EMPLOYEES.READ` separa RH de operação.
+3. Auditoria é imutável: não apagar eventos históricos. Novos snapshots e respostas de auditoria não devem copiar documentos, remuneração ou outros dados sensíveis sem necessidade explícita.
+4. Propostas de aprovação que precisem guardar dados para aplicação devem ter proteção/retenção própria; não remova campos de modo a quebrar aprovação. Cifragem adicional, descarte autorizado, proteção de documentos e antimalware continuam requisitos próprios, não efeitos de uma lista mínima.
+5. Antes da abertura pública, a identidade real do responsável, o canal de contato e a matriz de privacidade/retenção devem estar definidos. Nunca inventar contato, empresa responsável ou supor que somente pessoa jurídica possa ser controladora.
+
 ## 7. Papéis, alçadas, aprovação e auditoria — INVARIANTE
 
 1. A empresa monta perfis a partir de permissões granulares por módulo e ação; não usa permissões livres em texto.
@@ -163,13 +173,20 @@ Nunca substitua Work por Contract, nem mova faturamento de Contract para Work.
 - A obra concentra receita, custos, gastos vinculados e lucro de todos os seus contratos.
 - Contract mantém somente seu próprio valor, serviços, faturamento, saldo, parcelas, NFs e contas a receber.
 - O valor líquido de um Contract é o limite de faturamento líquido desse Contract; valores consolidados da Work nunca alteram esse limite.
-- Desconto de serviço altera o valor líquido do serviço e o subtotal do contrato.
-- Desconto de contrato é ajuste negativo separado, sem ContractService associado; não regrava, altera ou rateia o preço dos serviços.
+- Desconto de serviço altera o valor líquido do serviço e o subtotal do contrato. Edição operacional do serviço, inclusive mudança para COMPLETED, preserva o desconto vigente quando os campos forem omitidos ou ambos null, também na aprovação. Eco explícito igual é permitido; troca/reversão usa operação dedicada DISCOUNTS, nunca limpeza implícita pelo PUT de perfil.
+- Desconto de contrato permanece ajuste comercial separado e nunca regrava preços dos serviços ou aceites. Conforme autorização F05-21, o novo faturamento recebe apenas valores líquidos positivos: o backend distribui proporcionalmente o desconto ainda não consumido sobre capacidades ainda não comprometidas, por base/origem exata, e congela base bruta/desconto em cada alocação. Ajustes negativos legados são preservados; não redistribuir compromissos históricos.
 - Não permitir redução de contrato para valor líquido inferior ao faturamento líquido aprovado sem estorno, crédito ou renegociação auditada.
 - Não fazer exclusão física: use status, cancelamento, inativação ou estorno.
 - Contract possui `pricing_mode`: `FIXED` preserva o valor-base negociado; `MEASUREMENT_BASED` forma o valor comercial progressivamente por composições de versões de medição aceitas.
 - Composição de medição é imutável, idempotente por grupo estável de serviço/versão e auditável. Ela não substitui o valor-base de `ContractService`; a posição efetiva do serviço soma valor-base líquido e composições aceitas. `serviceTitle` não é chave financeira.
 - Correção posterior de origem já composta exige reversão/substituição rastreável. Redução que alcance valor faturado exige estorno, crédito ou renegociação antes de reduzir saldo.
+
+### Encerramento e desconto — decisão humana de30/10/2026
+
+- Concluir serviço exige quitação do líquido comercial da sua própria origem, com dinheiro e retenção oficial comprovados por item; crédito ou legado sem identidade requer conciliação. Líquido zero sem compromissos pode concluir.
+- DRAFT/ACTIVE impedem concluir contrato; COMPLETED/FINALIZED usam a mesma guarda. Cancelar exige todos os serviços CANCELLED e compromissos resolvidos, sem cascata. Contrato vazio pode encerrar. Reabrir explicitamente antes de criar/reativar serviços ou acrescentar composição em contrato encerrado.
+- Transição de cancelamento exige alçada CANCEL, também no PUT geral; aprovação revalida sob lock e202 não altera estado oficial. Alteração só de situação usa dados correntes no servidor, sem snapshots de preço/desconto do cliente.
+- Cobrança com saldo oficial aberto bloqueia novo desconto, mesmo semNF; parcela OPEN já recebida não é cobrança aberta. Líquido não pode ser menor que o caixa confirmado líquido de estornos, preservando limites anteriores mais restritivos. Não converter crédito/retenção em caixa nem limpar desconto vigente por atualização operacional. [Escopo e validação](docs/FRONTEND-CONTRACT-LIFECYCLE.md).
 
 ### 8.2 Medição
 
@@ -201,7 +218,7 @@ Nunca substitua Work por Contract, nem mova faturamento de Contract para Work.
 
 1. Faturamento, parcelas, saldo faturável, NFs e contas a receber pertencem exclusivamente a Contract.
 2. BillingInstallment/BillingAllocation é a fonte canônica de comprometimento do saldo do contrato. NF e Receivable referenciam a alocação; não podem consumi-lo novamente.
-3. Faturamento é alocado a serviços do mesmo Contract. Uma linha de desconto contratual é negativa e não possui serviço.
+3. Faturamento é alocado a serviços do mesmo Contract. Linhas legadas de desconto contratual são negativas e não possuem serviço. No fluxo líquido F05-21 não há linha negativa: alocações positivas preservam, como metadados imutáveis, a capacidade bruta consumida e o desconto contratual aplicado pelo backend. Limite global, NF e recebíveis usam o líquido; limites de serviço/origem usam a capacidade consumida, sem dupla contagem. Propostas 202 não reservam nem alteram capacidades.
 4. A soma líquida de alocações aprovadas/ativas nunca pode ultrapassar valor líquido do Contract, inclusive em requisições concorrentes.
 5. Invoice pertence a exatamente um Contract, pode ter vários InvoiceItem e cada item aponta para serviço/alocação do mesmo Contract.
 6. Registrar NF não equivale a receber. Recebimento é baixa separada e pode ser parcial.
@@ -209,6 +226,29 @@ Nunca substitua Work por Contract, nem mova faturamento de Contract para Work.
 8. Cancelar NF, parcela, recebimento ou pagamento gera cancelamento/estorno rastreável; não apagar histórico.
 9. Work consolida receita faturada, emitida em NF e recebida a partir de seus Contracts, sem possuir saldo, NF ou parcela própria.
 10. Uma alocação originada em medição preserva a composição específica, do mesmo tenant/contrato/serviço, ao longo de NF, recebível, recebimento parcial e estorno. A referência pode ser ausente para valores sem origem em medição, mas não pode ser omitida para ocultar/rastrear incorretamente uma origem de medição. Limite por composição e limite contratual são validados dentro da mesma transação e sob concorrência.
+
+### Guardrail de recebimentos confirmado em 26/10/2026
+
+- Novas baixas não aceitam `receivedOn` futura: comparar com o calendário UTC do Clock oficial, inclusive solicitação, aprovação e aplicação transacional. Expor `maxReceivedOn` no saldo para orientação do frontend, sem converter a data de negócio em timestamp nem alterar lançamentos antigos.
+- Contenção temporária autorizada: bloquear TODOS os novos recebimentos no fluxo legado, mesmo com NF, em aplicação direta, solicitação e aprovação. Usar `409 BUSINESS_RULE_VIOLATION` com motivo controlado `SETTLEMENT_INVOICE_LINK_REQUIRED`; não criar `202`, reserva ou lançamento. Consultas e estornos históricos autorizados continuam disponíveis. Nenhum bypass por configuração ou mera presença de NF no contrato.
+- O controle de faturamento pode expor recebido contratual oficial, confirmado e líquido de estornos, apenas com `RECEIVABLES.READ` adicional a `BILLING.READ`; sem a permissão, indisponível/null, não zero. Retenções, créditos, valor de NF e títulos de renegociação não são dinheiro recebido.
+- O futuro vínculo manual por NF/item/alocação/origem não está entregue pela contenção. Não ratear automaticamente recebimento entre itens/serviços/NFs, não reconstruir vínculo histórico fictício e não aplicar migration no banco real por autorização limitada a criar/testar. Registrar/cancelar NF não registra baixa nem cancela cobrança automaticamente; não orientar estorno fictício de recebimento verdadeiro para trocar documento.
+
+### Retenção por item de NF — decisão humana de 29/10/2026
+
+O usuário autorizou distribuir **imposto retido** proporcionalmente entre os InvoiceItems positivos da mesma NF, pelos valores brutos oficiais e com centavos determinísticos no backend. Essa autorização específica não permite ratear dinheiro parcial, distribuir entre títulos/cobranças, alterar atribuições históricas ou converter retenção em recebido de caixa. A proposta TOTAL usa os líquidos residuais oficiais e é confirmada explicitamente; POST e aprovação revalidam sob locks. Escopo de título ou base não comprovados e histórico incompatível exigem conciliação controlada, sem zeros fictícios. Não muda a contenção do POST genérico. [Contrato](docs/FRONTEND-INVOICE-ITEM-WITHHOLDING.md).
+
+### Prévia XML e cobertura de serviço cobrado — decisão humana/entrega de 06/11/2026
+
+- Novos registros de NF cobrem um ou mais serviços completos daquela cobrança; parcialidade é entre serviços, nunca fração livre de um serviço já cobrado. Recebimento parcial por NF/item continua permitido. A guarda é comum ao POST manual e à aprovação, revalidada sob lock;202 não reserva nem modifica dado oficial. Não criar bypass no frontend/XML.
+- O grupo projetado usa empresa/contrato/cobrança/serviço e TODAS as origens ativas oficiais de base/composição; identidade determinística não é chave financeira substituta. Não agrupar por nome/ContractService isolado entre cobranças nem deixar o cliente inventar subgrupos. GET não congela capacidade; registrar exige IDs/valores exatos atuais. Grupo antigo parcial exige conferência, sem reparo/reassociação/estorno ou reescrita do histórico.
+- Cobertura por cobrança considera somente seus InvoiceItems/BillingAllocations registrados, não o total integral da NF replicado. Uma NF pode abranger grupos de cobranças diferentes do mesmo contrato. Valores são comerciais antes de retenções, preservando desconto congelado; não converter imposto em caixa ou somar retenção novamente ao bruto.
+- O cliente assistido envia documentTotalAmount revisado em decimal textual; o backend compara com os grupos completos e preserva a confirmação na proposta. O campo é opcional para o cadastro manual anterior e não constitui prova criptográfica de origem do XML. Não calcular/ratear valores no frontend ou alterar dado fiscal para acomodar seleção.
+- F05-39/40/41 implementam prévia stateless e cobertura oficial. Ler XML não emite/consulta NF nem valida XSD/assinatura/autenticidade fiscal. Perfil nacional1.01, parser limitado/seguro sem DTD/XXE/XInclude/rede, BigDecimal e proveniência. Somente fixtures sintéticas; modelo real não entra em logs, documentação, fixtures ou repositório.
+- DPS tem número/série/emissão próprios. Ausência de dado da NF não autoriza copiá-lo da DPS. Assinatura presente não é assinatura validada. Referência de substituição gera aviso e mantém campos legíveis para conferência; não aciona cancelamento/substituição. Casos fiscais/IBSCBS não suportados e totais/moeda/partes incompatíveis são explicitamente sinalizados, sem confirmação fictícia.
+- Base/alíquota/montante/retenção/líquido são apresentados com proveniência quando disponíveis. Ausência não é zero/não retido. Total retido sem componentes não é rateado; percentual informativo não cria dívida. Prévia não cria NF/anexo/TaxObligation/Payable/baixa/reserva/ChangeRequest, apenas auditoria mínima segura de consulta.
+- Criação201/202, anexação e tributos permanecem operações separadas e permissionadas; REQUEST_CREATE não ganha upload direto. Pacote atômico/idempotente NF+XML+decisões tributárias F05-42 segue pendente, sem staging/persistência nova ou vários POSTs simulando transação.
+- Contrato executável e limites: [guia](docs/FRONTEND-INVOICE-XML-AND-COVERAGE.md). Código testado não significa runtime publicado. Este recorte não criou migration; V92/chave/ativação da outra entrega permanecem separadas, sem autorização implícita de banco persistente.
 
 ## 10. Gastos, impostos, lucro e fluxo de caixa — INVARIANTE
 
@@ -223,6 +263,22 @@ Nunca substitua Work por Contract, nem mova faturamento de Contract para Work.
 9. Resultado de caixa de Work = recebimentos dos seus Contracts − pagamentos de escopo WORK.
 10. Fluxo de caixa geral da empresa inclui títulos WORK e COMPANY; relatórios devem distingui-los.
 11. Não criar campo manualmente editável de saldo, receita ou lucro quando ele puder ser calculado de dados aprovados/efetivos.
+12. Resultado de Work e resultado corporativo são indicadores distintos. Gastos e tributos de escopo COMPANY entram somente no corporativo; não ratear implicitamente entre obras. Retenção, crédito ou compensação não é despesa definitiva universal e a mesma origem TaxObligation/Payable nunca pode reduzir resultado duas vezes.
+
+### Sequência da Fase 6 alinhada com o frontend — 12/11/2026
+
+- Usar a baixa e o estorno oficiais do `Payable` como fonte dos pagamentos. Entregar primeiro o caixa da empresa com detalhamento por obra, mantendo os escopos `WORK` e `COMPANY` explícitos. Calcular o realizado pela data efetiva de cada baixa e estorno e o previsto pelo vencimento dos saldos oficiais em aberto.
+- Comparar o pago líquido de estornos com o intervalo imediatamente anterior de igual duração, usando a mesma moeda, escopo e filtros. Se a cobertura dos períodos não for comparável, sinalizar a indisponibilidade. A sequência completa, o estado da ativação e as decisões em aberto sobre resultado gerencial e margem estão no [backlog da Fase 6](docs/CODEX-IMPLEMENTATION-BACKLOG.md#ordem-de-entrega-alinhada-com-a-fase-9-do-frontend-em-12112026).
+
+### Contatos de fornecedores e instruções de pagamento — 06/11/2026
+
+- Supplier possui um contato principal opcional (nome, telefone, e-mail), independente de RH. Auditoria não copia os dados do contato; o PUT de fornecedor é integral e deve receber os campos atuais para preservá-los.
+- Instruções de pagamento pertencem ao Payable individual e são distintas do meio efetivo da baixa. Cadastrar BOLETO/PIX/BANK_TRANSFER ou anexar PDF não altera saldo, valor, status, moeda, escopo ou pagamentos. Não emitir cobrança, resolver favorecido, gerar Pix/boleto ou executar pagamento a partir desse recurso.
+- Tenant vem da sessão. Leitura de metadados exige PAYABLES.READ; leitura completa/download/escrita exigem adicionalmente PAYABLES.VIEW_PAYMENT_DETAILS. Mutações seguem alçada UPDATE e aprovação. Aprovação revalida tenant, versão própria da instrução e título aberto; exigir também READ/VIEW. Não autorizar edição cega a partir de metadados.
+- Revisões de instrução são imutáveis e protegidas contra UPDATE/DELETE no banco; mudança é nova revisão, sob lock do título e versão esperada. Proposta 202 preserva todo dado oficial. Não levar PDF de favorecido anterior para uma substituição integral; novo anexo exige operação explícita.
+- Conteúdo/propostas/PDF usam chave independente de JWT/RH, cifragem autenticada e contexto tenant/título. Auditoria nunca armazena os dados bancários/Pix/códigos/conteúdo do PDF. Storage privado, download autenticado com no-store e sem URL pública. Inspeção pendente só para solicitante/approver autorizado, no título/tenant correto.
+- BOLETO pode ser registrado provisoriamente sem linha/barras para permitir anexo PDF-only. Sem código e sem PDF ainda não há referência utilizável; isso não cria estado financeiro novo. A validação estrutural de PDF não equivale a autenticidade bancária nem antimalware.
+- Criação de título e gravação de instrução são etapas separadas. Não presumir herança entre fornecedor/lote/títulos, nem pagamento ao anexar documento. V92 pode ser criada/testada em PostgreSQL descartável; sua aplicação no banco persistente depende de autorização específica, conforme 14.1.
 
 ## 11. Assinaturas, cobrança e acesso — INVARIANTE
 
@@ -238,10 +294,45 @@ Nunca substitua Work por Contract, nem mova faturamento de Contract para Work.
 
 - Geração de Excel, PDF e DOCX usa adapters testáveis.
 - Anexos permitidos incluem PDF, XLSX, CSV, DOCX e XML, com validação de tipo/tamanho, hash e auditoria.
+- Anexos PDF/XML de NF devem ser validados por conteúdo antes do storage, além de MIME/extensão/tamanho: PDF legível, com página e sem criptografia; XML sem DOCTYPE, entidades externas ou XInclude, com parser seguro e limites estruturais. Isso não substitui antimalware, validação fiscal, assinatura ou schema de NF.
 - Storage deve ser abstraído por StorageProvider; desenvolvimento pode usar disco local controlado e produção usa object storage.
 - Relatórios operacionais usam apenas dados aprovados/efetivos, salvo filtro explícito de pendências.
 - Relatórios mínimos: clientes finais ativos; valores a receber; contratos abertos/finalizados/a receber; controle de faturamento; gastos e resultado por obra; gastos gerais da empresa.
 - Não implementar emissão/consulta de NF municipal/SEFAZ sem autorização.
+
+### Planejamento de H.H., lotação e ponto
+
+- H.H., lotação por obra, transferência temporária, acesso por obra, apontamento e integração de ponto permanecem planejamento até tarefa explícita. Não criar endpoints, DTOs, migrations ou cálculos de faturamento fictícios a partir desse planejamento.
+- Priorização humana de 26/10/2026: simplificar as telas financeiras existentes, depois H.H. manual simples e vencimentos da equipe. É autorização de planejamento/prioridade, não de implementação ou publicação; a API backend não implementa telas. Referenciar SDD 3.4/5.7.1/5.9 e F10/F12 existentes, sem duplicar fases ou tarefas nem contornar gates de segurança.
+- O recorte manual planejado registra funcionário e vínculo histórico, obra, serviço, dia e horas explicitamente informadas; permite correção rastreável e resumo oficial por funcionário/período/serviço. Não depende de ponto, espelho, folha, diária ou fórmula de DSR. Mantém tenant, identidade estável, histórico, alçada/aprovação e autorização por obra; reduzir o recorte não concede acesso a RH/saúde nem dispensa a proteção necessária.
+- Horas apontadas, corrigidas ou resumidas não geram automaticamente aceite comercial, faturamento, folha ou pagamento. Não inventar intervalos, jornada, divisor salarial ou conversão de dia em horas. Quantidades pendentes não entram como efetivas; serviço/contrato devem ter cadeia validada quando vinculados, sem criar hierarquia financeira paralela.
+- Serviço por diária também permanece planejamento (SDD 5.7/F12-12), como modalidade comercial distinta de H.H. por horas efetivamente trabalhadas e da diária corrida de locação. Não presumir oito horas por diária, converter automaticamente em H.H. ou cobrar fins de semana de serviço sem regra definida.
+- H.H. comercial, custo trabalhista, preço de venda, marcação de ponto e quantidade aprovada/faturável são fatos distintos. O faturamento continua em Contract → ContractService; não alterar a hierarquia, o empregador ou criar título financeiro paralelo.
+- A intenção comercial relativa a DSR não autoriza fórmula: não presumir 1/6, semana, dia, elegibilidade, rateio, tratamento de semana parcial, múltiplos tomadores, atestado ou feriado. DSR de folha não se torna automaticamente item contratual nem descanso vira hora trabalhada.
+- Sistema de ponto futuro preserva marcações originais e trata ausência de cadastro/alocação como divergência conciliável, não como descarte/bloqueio silencioso. Atestado não é hora trabalhada/faturável. Validar CLT, Portaria 671 e CCT/ACT aplicável antes de anunciar conformidade.
+
+### Planejamento do Diário de Obra
+
+- Aplicar o [contrato funcional F13-01](docs/SDD-MVP-Gestao-Financeira.md#contrato-funcional-f13-01) nos recortes de implementação da [Fase 13 do backlog](docs/CODEX-IMPLEMENTATION-BACKLOG.md#fase-13--diário-de-obra). Reaproveitar lotação, autorização por obra e a fonte de apontamentos manuais de H.H. da Fase 12. O contrato funcional é documental. A publicação de contratos HTTP depende da implementação correspondente.
+- A lotação funcionário–obra é opcional na empresa. Quando usada, validar tenant, obra, vigência e vínculo de trabalho histórico, preservando readmissão e correções. A participação avulsa no dia exige validação da mesma cadeia e registro explícito. Nenhuma associação operacional concede acesso ao usuário.
+- Exigir permissão por operação e atribuição explícita à obra para preencher, consultar, corrigir, decidir e exportar. Aplicar o escopo no backend, inclusive nas seleções, pendências e auditoria. Revalidar a autorização nas mutações e decisões. Manter RH, saúde e custos com permissões próprias e projeções mínimas. Não conceder `EMPLOYEES.READ` ao apontador apenas para selecionar a equipe.
+- Suportar vários funcionários na mesma atividade/serviço e contribuições distintas por pessoa. Validar o serviço contratado pela cadeia `ContractService → Contract → Work` da empresa. Atividade geral pode ter referência operacional sem atribuição contratual. Preservar planejado e realizado com origens próprias, motivos de atraso e impacto quando comprovado. Não duplicar horas por presença, serviço ou ocorrência, nem inventar intervalos, jornada ou plano.
+- Corrigir de forma rastreável com versão, alçada, idempotência e proteção contra concorrência. Proposta `202` não modifica execução ou resumo efetivo. Registros do Diário não geram aceite comercial, faturamento, folha, títulos ou baixas.
+- Apuração por serviço, contrato e obra depende de fonte, data-base, moeda, atribuição comprovada, cobertura e permissão financeira. Preservar as fórmulas de obra da §10. Contar cada origem econômica uma vez na base aprovada, inclusive quando estimativa H.H., folha e conta a pagar representarem o mesmo custo. Deduplicar TaxObligation/Payable por vínculo oficial. Manter custos sem atribuição no nível comprovado, valores COMPANY no corporativo, e lacunas de cobertura explícitas. Não inferir custo-hora de salário nem ratear por horas sem regra autorizada.
+
+### Planejamento de vencimentos da equipe
+
+- O mínimo priorizado em 26/10/2026 abrange contrato/vínculo de trabalho do funcionário com a Company, cursos/certificados e exames periódicos, não apenas contrato comercial ou lotação em obra. Reutilizar F10-01 a F10-10, com metadados/datas primeiro; documentos privados completos e canais externos são expansões, sem dispensar proteção de RH/saúde.
+- Usar somente datas explicitamente cadastradas. Planejar painel de próximos, vencidos e sem data, com antecedência configurável e alertas internos idempotentes para destinatários autorizados. Não presumir prazo legal, periodicidade, renovação, aptidão médica, efetivação, desligamento ou bloqueio automático. Sem data não significa vencido, irregular ou inapto.
+- Não incluir diagnóstico, prontuário ou resultado clínico. Conhecer/apontar horas de um funcionário não concede acesso a seus dados de RH/saúde, inclusive no painel/alerta. Definir granularidade e projeções mínimas antes da implementação; não alegar que EMPLOYEES.READ já separa esses acessos.
+- Precisão das horas, identidade do serviço, critérios de duplicidade/correção, fuso, limites dos períodos/vencimentos, tratamento de sem data, destinatários e cadência interna permanecem decisões a detalhar. Não publicar endpoint/enum/DTO fictício, enviar notificações externas, iniciar módulos/infraestrutura ou aplicar migrations por este planejamento.
+
+### Planejamento de locações e lembretes
+
+- Locações mensais fixas ou por diária/quantidade de equipamentos e lembretes de contas de aluguel permanecem somente planejamento (SDD 5.5.1/F06-15 a F06-19). Não criar rotas, DTOs, enums, migrations, recorrência, pagamentos ou envios a partir desse registro.
+- Diária de ferramenta/equipamento considera dias corridos durante a locação, inclusive fins de semana. Inclusão de entrega/devolução, frações, proporcionalidade mensal, fechamento e devoluções parciais exigem definição antes de implementar. Essa regra não se transfere automaticamente ao serviço por diária.
+- Encerrar locação não quita nem apaga títulos anteriores. Geração e lembretes futuros exigem regras oficiais, tenant, alçada/aprovação, idempotência e auditoria; canais, destinatários, antecedências, cadência e fuso ainda devem ser definidos. Não reutilizar dunning da assinatura SaaS como política de contas de aluguel.
+- No planejamento de aluguel/serviço e contas correspondentes, forma prevista de cobrança/pagamento inclui boleto e outras formas ainda a definir; ela é distinta da unidade/periodicidade e do meio efetivo da baixa. Catálogo, obrigatoriedade, herança/alteração no título, instruções/anexos e pagamentos parciais por meios distintos continuam pendentes. Registrar boleto não autoriza emissão, integração bancária, pagamento ou confirmação automática, nem reutilização do enum de recebimentos como contrato fictício de Payable.
 
 ## 13. Qualidade, migrations e entrega
 
@@ -271,4 +362,10 @@ Antes de considerar uma tarefa concluída:
 - criar emissão fiscal, integração bancária, frontend, app móvel ou portal de aceite;
 - trocar gateway, banco, stack, arquitetura modular ou estratégia Flyway;
 - fazer migration destrutiva, reset de dados ou alteração irreversível.
+
+### 14.1 Atualização local necessária ao pedido humano — decisão de 29/10/2026
+
+O usuário determinou: **“pode mudar isso, se foi eu quem pediu atualize”**. Pedidos humanos de implementação ou correção também autorizam atualizar/reiniciar os componentes **locais** necessários para disponibilizar o mesmo recorte, inclusive a API em `localhost:8081`, após implementação, testes adequados, pacote concreto revisado, conferência da referência ativa, preservação de versão compatível para retorno e verificação das evidências. Não pedir nova confirmação apenas porque o pacote mudou dentro do trabalho solicitado.
+
+Essa autorização não se aplica a pedidos somente de análise/documentação, mudanças não relacionadas, aplicação de migrations/seeds ou alteração do banco persistente do usuário, operações reais de negócio, publicação remota/produção ou infraestrutura não incluída explicitamente. Criar/testar uma migration em banco temporário não autoriza aplicá-la no banco real. Restrições humanas específicas continuam prevalecendo, assim como as invariantes e os demais limites da seção14. Se a referência ativa divergir da revisada, diagnosticar e revisar o escopo antes de substituir; não trocar uma versão desconhecida por inferência. Permissões técnicas do ambiente não substituem autorização de domínio.
 

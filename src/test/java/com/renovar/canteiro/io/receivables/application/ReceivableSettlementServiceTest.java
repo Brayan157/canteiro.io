@@ -32,6 +32,10 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verifyNoInteractions;
+import com.renovar.canteiro.io.shared.api.error.ApiException;
+import com.renovar.canteiro.io.shared.api.error.ErrorCode;
+import java.time.ZoneId;
 
 @ExtendWith(MockitoExtension.class)
 class ReceivableSettlementServiceTest {
@@ -82,7 +86,43 @@ class ReceivableSettlementServiceTest {
         assertThrows(IllegalStateException.class, () -> fixture.service().settle(command(fixture.receivableId(), "20.00")));
     }
 
+    @Test
+    void acceptsTheCurrentUtcDateEvenWhenTheClockZoneStillHasThePreviousDay() {
+        var fixture = fixture(BigDecimal.ZERO, Clock.fixed(Instant.parse("2026-08-10T00:15:00Z"), ZoneId.of("America/Sao_Paulo")));
+        assertEquals(new BigDecimal("60.00"), fixture.service().settle(command(fixture.receivableId(), "40.00")).balance().outstandingAmount());
+    }
+
+    @Test
+    void rejectsFutureDatesBeforeAnyProposalSettlementOrAuditAndRevalidatesApprovedProposals() {
+        UUID company = UUID.randomUUID(), id = UUID.randomUUID();
+        when(tenantContextHolder.requireCurrentTenant()).thenReturn(new TenantContext(UUID.randomUUID(), company));
+        Receivable title = Receivable.rehydrate(id, company, UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
+                "REC", null, null, LocalDate.of(2026, 9, 1), new BigDecimal("100.00"), ReceivableStatus.OPEN, null, null);
+        when(receivableRepository.findByIdAndCompanyId(id, company)).thenReturn(Optional.of(title));
+        var service = new ReceivableSettlementService(tenantContextHolder, accessAuthorizationService, receivableRepository,
+                receivableSettlementRepository, org.mockito.Mockito.mock(CalculateReceivableBalanceUseCase.class),
+                changeRequestService, auditEventRecorder, Clock.fixed(Instant.parse("2026-08-09T23:59:59Z"), ZoneOffset.UTC),
+                org.mockito.Mockito.mock(com.renovar.canteiro.io.receivables.domain.ReceivableOriginRepository.class),
+                org.mockito.Mockito.mock(ReceivableSettlementAttributionService.class),
+                org.mockito.Mockito.mock(ReceivableSettlementCreationPolicy.class));
+        ApiException error = assertThrows(ApiException.class, () -> service.settle(command(id, "10.00")));
+        assertEquals(ErrorCode.VALIDATION_FAILED, error.getErrorCode());
+        assertEquals("receivedOn", error.getViolations().getFirst().field());
+        var proposal = com.renovar.canteiro.io.governance.domain.ChangeRequest.create(company, UUID.randomUUID(),
+                com.renovar.canteiro.io.governance.domain.AuditModule.RECEIVABLES,
+                com.renovar.canteiro.io.governance.domain.ChangeRequestOperation.CREATE, "ReceivableSettlement", id, 0,
+                new com.renovar.canteiro.io.governance.domain.ChangeRequestSnapshot(null,
+                        new com.renovar.canteiro.io.governance.domain.AuditPayload(java.util.Map.of("receivableId", id.toString(),
+                                "receivedOn", "2026-08-10", "amount", "10.00", "paymentMethod", "PIX"))), null);
+        assertThrows(ApiException.class, () -> service.applyApprovedSettlement(proposal));
+        verifyNoInteractions(accessAuthorizationService, receivableSettlementRepository, changeRequestService, auditEventRecorder);
+    }
+
     private Fixture fixture(BigDecimal confirmedAmount, LocalDate currentDate) {
+        return fixture(confirmedAmount, Clock.fixed(currentDate.atStartOfDay().toInstant(ZoneOffset.UTC), ZoneOffset.UTC));
+    }
+
+    private Fixture fixture(BigDecimal confirmedAmount, Clock clock) {
         UUID companyId = UUID.randomUUID();
         UUID receivableId = UUID.randomUUID();
         Receivable receivable = Receivable.rehydrate(
@@ -107,13 +147,13 @@ class ReceivableSettlementServiceTest {
                     settlement.getStatus(), Instant.now(), Instant.now());
         });
         lenient().when(receivableRepository.updateStatus(any())).thenAnswer(invocation -> invocation.getArgument(0));
-        Clock clock = Clock.fixed(currentDate.atStartOfDay().toInstant(ZoneOffset.UTC), ZoneOffset.UTC);
         var financialOrigins=org.mockito.Mockito.mock(com.renovar.canteiro.io.receivables.domain.ReceivableOriginRepository.class);
         org.mockito.Mockito.lenient().when(financialOrigins.effectiveCredits(org.mockito.ArgumentMatchers.any(),org.mockito.ArgumentMatchers.any())).thenReturn(BigDecimal.ZERO);
         return new Fixture(receivableId, new ReceivableSettlementService(
                 tenantContextHolder, accessAuthorizationService, receivableRepository, receivableSettlementRepository,
                 new CalculateReceivableBalanceUseCase(receivableRepository, receivableSettlementRepository, taxObligationRepository,financialOrigins),
-                changeRequestService, auditEventRecorder, clock, financialOrigins, org.mockito.Mockito.mock(ReceivableSettlementAttributionService.class)
+                changeRequestService, auditEventRecorder, clock, financialOrigins, org.mockito.Mockito.mock(ReceivableSettlementAttributionService.class),
+                org.mockito.Mockito.mock(ReceivableSettlementCreationPolicy.class)
         ));
     }
 

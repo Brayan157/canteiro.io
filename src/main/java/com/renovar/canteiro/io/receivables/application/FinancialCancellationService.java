@@ -62,6 +62,8 @@ public class FinancialCancellationService {
     private final AuditEventRecorder auditEventRecorder;
     private final Clock clock;
     private final ReceivableSettlementAttributionService attribution;
+    private final InvoiceCancellationSafetyGuard invoiceCancellationSafetyGuard;
+    private final InvoiceSettlementService invoiceSettlements;
 
     @Transactional
     public FinancialCancellationResult cancelInstallment(UUID installmentId, CancelFinancialRecordCommand command) {
@@ -80,7 +82,8 @@ public class FinancialCancellationService {
         Invoice invoice = invoiceRepository.findByIdAndCompanyId(invoiceId, companyId)
                 .orElseThrow(() -> new TenantResourceNotFoundException("Invoice"));
         return authorizeOrApply(AccessModule.INVOICES, AuditModule.INVOICES, "Invoice", invoiceId,
-                invoice.getStatus().name(), command, () -> persistInvoiceCancellation(companyId, invoiceId, command.reason(), "direct", null));
+                invoice.getStatus().name(), command, () -> persistInvoiceCancellation(companyId, invoiceId, command.reason(), "direct", null),
+                () -> invoiceCancellationSafetyGuard.requireSafe(lockInvoiceForCancellation(companyId, invoiceId)));
     }
 
     @Transactional
@@ -115,8 +118,17 @@ public class FinancialCancellationService {
                                                           String entityType, UUID entityId, String previousStatus,
                                                           CancelFinancialRecordCommand command,
                                                           java.util.function.Supplier<FinancialCancellationResult> action) {
+        return authorizeOrApply(accessModule, auditModule, entityType, entityId, previousStatus, command, action, () -> { });
+    }
+
+    private FinancialCancellationResult authorizeOrApply(AccessModule accessModule, AuditModule auditModule,
+                                                          String entityType, UUID entityId, String previousStatus,
+                                                          CancelFinancialRecordCommand command,
+                                                          java.util.function.Supplier<FinancialCancellationResult> action,
+                                                          Runnable validateProposal) {
         ChangeAuthorizationMode mode = authorizationService.requireChangeAuthorization(accessModule, ChangeOperation.CANCEL);
         if (mode == ChangeAuthorizationMode.DIRECT) return action.get();
+        validateProposal.run();
         Map<String, Object> after = new LinkedHashMap<>();
         after.put("reason", command.reason().trim());
         if (entityType.equals("ReceivableSettlement")) {
@@ -164,10 +176,8 @@ public class FinancialCancellationService {
 
     private FinancialCancellationResult persistInvoiceCancellation(UUID companyId, UUID invoiceId, String reason,
                                                                    String origin, UUID changeRequestId) {
-        Invoice invoice = invoiceRepository.findByIdAndCompanyIdWithLock(invoiceId, companyId)
-                .orElseThrow(() -> new TenantResourceNotFoundException("Invoice"));
-        contractRepository.findByIdAndCompanyIdWithBillingLock(invoice.getContractId(), companyId)
-                .orElseThrow(() -> new TenantResourceNotFoundException("Contract"));
+        Invoice invoice = lockInvoiceForCancellation(companyId, invoiceId);
+        invoiceCancellationSafetyGuard.requireSafe(invoice);
         for (TaxObligation tax : taxObligationRepository.findByInvoiceIdAndCompanyId(invoiceId, companyId)) {
             if(tax.getReceivableId()!=null&&receivableRepository.findByIdAndCompanyId(tax.getReceivableId(),companyId)
                 .filter(r->r.getStatus()==ReceivableStatus.RENEGOTIATED).isPresent())
@@ -194,6 +204,15 @@ public class FinancialCancellationService {
         return new FinancialCancellationResult(invoiceId, null, cancelled.getStatus().name(), null, ChangeAuthorizationMode.DIRECT);
     }
 
+    private Invoice lockInvoiceForCancellation(UUID companyId, UUID invoiceId) {
+        Invoice invoice = invoiceRepository.findByIdAndCompanyId(invoiceId, companyId)
+                .orElseThrow(() -> new TenantResourceNotFoundException("Invoice"));
+        contractRepository.findByIdAndCompanyIdWithCancellationCheckLock(invoice.getContractId(), companyId)
+                .orElseThrow(() -> new TenantResourceNotFoundException("Contract"));
+        return invoiceRepository.findByIdAndCompanyIdWithLock(invoiceId, companyId)
+                .orElseThrow(() -> new TenantResourceNotFoundException("Invoice"));
+    }
+
     private void refreshAffectedReceivables(UUID invoiceId, UUID companyId) {
         taxObligationRepository.findByInvoiceIdAndCompanyId(invoiceId, companyId).stream()
                 .map(TaxObligation::getReceivableId).filter(java.util.Objects::nonNull).distinct().forEach(receivableId -> {
@@ -206,6 +225,10 @@ public class FinancialCancellationService {
 
     private FinancialCancellationResult persistSettlementReversal(UUID companyId, UUID receivableId, UUID settlementId,
                                                                   String reason, String origin, UUID changeRequestId) {
+        ReceivableSettlement source = settlementRepository.findByIdAndCompanyId(settlementId, companyId)
+                .filter(value -> value.getReceivableId().equals(receivableId))
+                .orElseThrow(() -> new TenantResourceNotFoundException("Receivable settlement"));
+        invoiceSettlements.lockForReversal(companyId, source);
         Receivable receivable = receivableRepository.findByIdAndCompanyIdWithSettlementLock(receivableId, companyId)
                 .orElseThrow(() -> new TenantResourceNotFoundException("Receivable"));
         if(receivable.getStatus()==ReceivableStatus.RENEGOTIATED||receivable.getStatus()==ReceivableStatus.CANCELLED)
@@ -219,6 +242,7 @@ public class FinancialCancellationService {
         ReceivableSettlement reversal = settlementRepository.save(ReceivableSettlement.reverse(
                 original, LocalDate.now(clock), reason));
         attribution.attribute(reversal);
+        invoiceSettlements.recordReversal(companyId, original, reversal);
         ReceivableBalance balance = calculateReceivableBalanceUseCase.calculate(companyId, receivableId);
         Receivable updated = receivableRepository.updateStatus(receivable.withStatus(balance.statusOn(receivable, LocalDate.now(clock))));
         auditEventRecorder.recordDirectAction(AuditModule.RECEIVABLES, AuditAction.CANCEL, "ReceivableSettlement",

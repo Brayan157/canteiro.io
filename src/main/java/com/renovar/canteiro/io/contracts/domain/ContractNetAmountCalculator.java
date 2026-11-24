@@ -20,6 +20,13 @@ public final class ContractNetAmountCalculator {
                 .map(ContractService::getEffectiveNetAmount)
                 .reduce(BigDecimal.ZERO.setScale(2), BigDecimal::add)
                 .setScale(2, RoundingMode.HALF_UP);
+        return calculateSubtotal(subtotal, contractDiscount, measurementAdjustmentAmount);
+    }
+
+    /** Same financial rule for a bounded/aggregated read without materializing all services. */
+    public static ContractNetAmount calculateSubtotal(BigDecimal subtotal, ContractDiscount contractDiscount,
+                                                       BigDecimal measurementAdjustmentAmount) {
+        subtotal = nonNegativeMoney(subtotal, "Service subtotal must not be negative");
         BigDecimal discountAmount = calculateDiscountAmount(subtotal, contractDiscount)
                 .add(nonNegativeMoney(measurementAdjustmentAmount, "Measurement adjustment amount must not be negative"))
                 .setScale(2, RoundingMode.HALF_UP);

@@ -46,6 +46,7 @@ public class GetMeasurementFinancialSummaryUseCase {
     private final ReceivableSettlementRepository settlements;
     private final TaxObligationRepository taxes;
     private final ReceivableOriginRepository financialOrigins;
+    private final com.renovar.canteiro.io.receivables.application.NetBillingCapacityService netCapacities;
     private final com.renovar.canteiro.io.measurements.domain.MeasurementItemContractServiceConversionRepository legacyConversions;
     @Transactional(readOnly=true,isolation=org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
     public MeasurementFinancialSummary get(UUID mid) {
@@ -67,6 +68,9 @@ public class GetMeasurementFinancialSummaryUseCase {
         if(!availability.equals("AVAILABLE")) return new MeasurementFinancialSummary(mid,m.getContractId(),accepted,null,null,null,null,
             List.of(),availability,Instant.now(),null,null,null,m.getCurrency());
         try {
+        com.renovar.canteiro.io.receivables.application.NetBillingCapacityService.State netCapacity;
+        try { netCapacity=netCapacities.calculate(company,m.getContractId()); }
+        catch(IllegalStateException e) { throw new UnreconciledFinancialOriginException(); }
         List<MeasurementCompositionFinancialSource> active=compositions.findActiveFinancialSources(mid,company);
         List<MeasurementCompositionFinancialPosition> positions=new ArrayList<>();
         BigDecimal uncomposed=zero();
@@ -81,8 +85,10 @@ public class GetMeasurementFinancialSummaryUseCase {
             for(MeasurementCompositionFinancialSource c:source) {
                 List<BillingAllocation> lines=allocations.findByMeasurementContractCompositionIdAndCompanyId(c.getId(),company).stream()
                     .filter(a->a.getStatus()==BillingAllocationStatus.ACTIVE&&a.getType()==BillingAllocationType.SERVICE).toList();
-                BigDecimal grossBilled=lines.stream().map(BillingAllocation::getAllocatedAmount).reduce(zero(),BigDecimal::add);
-                free=free.add(c.getNetAmount().subtract(grossBilled).max(zero()));
+                var capacity=netCapacity.positions().stream().filter(p->p.origin()!=null&&p.origin().id().equals(c.getId())).findFirst();
+                if(capacity.isEmpty())throw new UnreconciledFinancialOriginException();
+                free=free.add(capacity.get().eligible()?capacity.get().netAvailableAmount():zero());
+                adjustment=adjustment.add(capacity.get().uncommittedDiscountAmount());
                 for(BillingAllocation a:lines) {
                     Attributed amounts=attribution(company,a);
                     billed=billed.add(amounts.billed());received=received.add(amounts.received());
@@ -134,7 +140,7 @@ public class GetMeasurementFinancialSummaryUseCase {
         Map<UUID,BigDecimal> adjustmentShares=ProportionalMoneyAllocation.allocate(deductions.setScale(2),remaining);
         BigDecimal billed=billedShares.get(allocation.getId());
         BigDecimal received=receipts.getOrDefault(allocation.getId(),zero());
-        BigDecimal contractAdjustment=allocation.getAllocatedAmount().subtract(billed);
+        BigDecimal contractAdjustment=allocation.getAllocatedAmount().subtract(billed).add(allocation.getAppliedContractDiscountAmount());
         BigDecimal adjustment=adjustmentShares.get(allocation.getId());
         return new Attributed(billed,received,contractAdjustment.add(adjustment),billed.subtract(adjustment).subtract(received));
     }

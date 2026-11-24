@@ -20,6 +20,9 @@ import com.renovar.canteiro.io.governance.domain.AuditPayload;
 import com.renovar.canteiro.io.governance.domain.ChangeRequest;
 import com.renovar.canteiro.io.governance.domain.ChangeRequestOperation;
 import com.renovar.canteiro.io.governance.domain.ChangeRequestSnapshot;
+import com.renovar.canteiro.io.shared.api.error.ApiException;
+import com.renovar.canteiro.io.shared.api.error.ErrorCode;
+import com.renovar.canteiro.io.shared.api.error.FieldViolation;
 import com.renovar.canteiro.io.tenancy.application.TenantContextHolder;
 import com.renovar.canteiro.io.works.domain.WorkRepository;
 import com.renovar.canteiro.io.shared.domain.CurrencyCode;
@@ -27,11 +30,14 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpStatus;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 
 @Service
@@ -45,6 +51,7 @@ public class ContractManagementService {
     private final ContractServiceRepository contractServiceRepository;
     private final ChangeRequestService changeRequestService;
     private final AuditEventRecorder auditEventRecorder;
+    private final ContractLifecycleService lifecycle;
 
     @Transactional
     public ContractChangeResult create(CreateContractCommand command) {
@@ -53,6 +60,8 @@ public class ContractManagementService {
         ChangeAuthorizationMode mode = accessAuthorizationService.requireChangeAuthorization(
                 AccessModule.CONTRACTS, ChangeOperation.CREATE
         );
+        requireAvailableReference(companyId, command.workId(), null, null, Contract.normalizeReference(command.reference()));
+        // No children or financial commitments exist yet for a new contract, including terminal empty records.
         if (mode == ChangeAuthorizationMode.REQUEST_APPROVAL) {
             ChangeRequest changeRequest = changeRequestService.create(new CreateChangeRequestCommand(
                     AuditModule.CONTRACTS,
@@ -89,23 +98,44 @@ public class ContractManagementService {
 
     @Transactional
     public ContractChangeResult update(UUID contractId, UpdateContractCommand command) {
-        UUID companyId = tenantContextHolder.requireCurrentTenant().companyId();
-        Contract current = contractRepository.findByIdAndCompanyId(contractId, companyId)
+        return update(contractId, command, false, null);
+    }
+
+    @Transactional
+    public ContractChangeResult updateStatus(UUID contractId, ContractStatus status, LocalDate completedOn, String justification) {
+        UUID company = tenantContextHolder.requireCurrentTenant().companyId();
+        var current = contractRepository.findByIdAndCompanyIdWithCancellationCheckLock(contractId, company)
                 .orElseThrow(() -> new TenantResourceNotFoundException("Contract"));
+        return update(contractId, statusCommand(current, status, completedOn, justification), true, completedOn);
+    }
+
+    private UpdateContractCommand statusCommand(Contract current, ContractStatus status, LocalDate completedOn, String justification) {
+        return new UpdateContractCommand(current.getContractIdentifier(), current.getReference(), current.getName(), status,
+                current.getStartedOn(), current.getExpectedCompletionOn(), completedOn == null ? current.getCompletedOn() : completedOn,
+                justification, current.getCurrency());
+    }
+
+    private ContractChangeResult update(UUID contractId, UpdateContractCommand command, boolean statusOnly, LocalDate requestedCompletedOn) {
+        UUID companyId = tenantContextHolder.requireCurrentTenant().companyId();
+        Contract current = contractRepository.findByIdAndCompanyIdWithCancellationCheckLock(contractId, companyId)
+                .orElseThrow(() -> new TenantResourceNotFoundException("Contract"));
+        boolean cancelling = command.status() == ContractStatus.CANCELLED && current.getStatus() != ContractStatus.CANCELLED;
         ChangeAuthorizationMode mode = accessAuthorizationService.requireChangeAuthorization(
-                AccessModule.CONTRACTS, ChangeOperation.UPDATE);
+                AccessModule.CONTRACTS, cancelling ? ChangeOperation.CANCEL : ChangeOperation.UPDATE);
         if (command.currency() != null) current.getCurrency().requireSame(command.currency());
         Contract proposed = current.updateProfile(command.contractIdentifier(), command.reference(), command.name(), command.status(), command.startedOn(),
                 command.expectedCompletionOn(), command.completedOn());
+        lifecycle.requireContractStatus(current, proposed.getStatus());
+        requireAvailableReference(companyId, current.getWorkId(), contractId, current.getReference(), proposed.getReference());
         if (mode == ChangeAuthorizationMode.REQUEST_APPROVAL) {
             ChangeRequest request = changeRequestService.create(new CreateChangeRequestCommand(AuditModule.CONTRACTS,
-                    ChangeRequestOperation.UPDATE, "Contract", current.getId(), 0,
-                    new ChangeRequestSnapshot(new AuditPayload(auditData(current)), new AuditPayload(proposal(command))),
+                    cancelling ? ChangeRequestOperation.CANCEL : ChangeRequestOperation.UPDATE, "Contract", current.getId(), 0,
+                    new ChangeRequestSnapshot(new AuditPayload(auditData(current)), new AuditPayload(statusOnly ? statusProposal(command, requestedCompletedOn) : proposal(command))),
                     command.justification()));
             return new ContractChangeResult(null, request, mode);
         }
         Contract saved = contractRepository.save(proposed);
-        auditEventRecorder.recordDirectAction(AuditModule.CONTRACTS, AuditAction.UPDATE, "Contract", saved.getId(),
+        auditEventRecorder.recordDirectAction(AuditModule.CONTRACTS, cancelling ? AuditAction.CANCEL : AuditAction.UPDATE, "Contract", saved.getId(),
                 auditData(current), auditData(saved), Map.of("origin", "direct"));
         return new ContractChangeResult(saved, null, mode);
     }
@@ -123,6 +153,8 @@ public class ContractManagementService {
     public void applyApprovedCreation(ChangeRequest changeRequest) {
         CreateContractCommand command = fromProposal(changeRequest.getSnapshot().proposedData().values());
         requireCurrentTenantWork(command.workId(), changeRequest.getCompanyId());
+        requireAvailableReference(changeRequest.getCompanyId(), command.workId(), null, null,
+                Contract.normalizeReference(command.reference()));
         Contract contract = persist(changeRequest.getCompanyId(), command);
         auditEventRecorder.recordDirectAction(
                 AuditModule.CONTRACTS, AuditAction.CREATE, "Contract", contract.getId(), null, auditData(contract),
@@ -132,14 +164,34 @@ public class ContractManagementService {
 
     @Transactional
     public void applyApprovedUpdate(ChangeRequest changeRequest) {
-        Contract current = contractRepository.findByIdAndCompanyId(changeRequest.getEntityId(), changeRequest.getCompanyId())
+        Contract current = contractRepository.findByIdAndCompanyIdWithCancellationCheckLock(changeRequest.getEntityId(), changeRequest.getCompanyId())
                 .orElseThrow(() -> new TenantResourceNotFoundException("Contract"));
-        UpdateContractCommand command = updateFromProposal(changeRequest.getSnapshot().proposedData().values());
+        var values = changeRequest.getSnapshot().proposedData().values();
+        UpdateContractCommand command = Boolean.TRUE.equals(values.get("statusOnly"))
+                ? statusCommand(current, ContractStatus.valueOf((String) values.get("status")), date((String) values.get("completedOn")), null)
+                : updateFromProposal(values);
         if (command.currency() != null) current.getCurrency().requireSame(command.currency());
-        Contract saved = contractRepository.save(current.updateProfile(command.contractIdentifier(), command.reference(), command.name(), command.status(),
-                command.startedOn(), command.expectedCompletionOn(), command.completedOn()));
-        auditEventRecorder.recordDirectAction(AuditModule.CONTRACTS, AuditAction.UPDATE, "Contract", saved.getId(),
+        if (current.getStatus() != ContractStatus.CANCELLED && command.status() == ContractStatus.CANCELLED
+                && changeRequest.getOperation() != ChangeRequestOperation.CANCEL) ContractLifecycleService.reject("CANCELLATION_REQUIRES_CANCEL_AUTHORIZATION");
+        lifecycle.requireContractStatus(current, command.status());
+        Contract proposed = current.updateProfile(command.contractIdentifier(), command.reference(), command.name(), command.status(),
+                command.startedOn(), command.expectedCompletionOn(), command.completedOn());
+        requireAvailableReference(current.getCompanyId(), current.getWorkId(), current.getId(), current.getReference(), proposed.getReference());
+        Contract saved = contractRepository.save(proposed);
+        auditEventRecorder.recordDirectAction(AuditModule.CONTRACTS, changeRequest.getOperation() == ChangeRequestOperation.CANCEL ? AuditAction.CANCEL : AuditAction.UPDATE, "Contract", saved.getId(),
                 auditData(current), auditData(saved), Map.of("origin", "approved-change-request", "changeRequestId", changeRequest.getId().toString()));
+    }
+
+    private void requireAvailableReference(UUID companyId, UUID workId, UUID contractId,
+                                           String previousReference, String reference) {
+        if (reference == null || Objects.equals(previousReference, reference)) {
+            return;
+        }
+        if (contractRepository.hasConflictingReferenceUnderWorkLock(companyId, workId, contractId, previousReference, reference)) {
+            String message = "Já existe um contrato com esse número nesta obra.";
+            throw new ApiException(HttpStatus.CONFLICT, ErrorCode.BUSINESS_RULE_VIOLATION, message,
+                    List.of(new FieldViolation("reference", message)), "CONTRACT_REFERENCE_ALREADY_EXISTS");
+        }
     }
 
     private void requireCurrentTenantWork(UUID workId, UUID companyId) {
@@ -168,6 +220,13 @@ public class ContractManagementService {
         proposal.put("expectedCompletionOn", dateValue(command.expectedCompletionOn()));
         proposal.put("completedOn", dateValue(command.completedOn()));
         return proposal;
+    }
+
+    private Map<String, Object> statusProposal(UpdateContractCommand command, LocalDate requestedCompletedOn) {
+        Map<String, Object> result = new HashMap<>();
+        result.put("statusOnly", true); result.put("status", command.status().name());
+        result.put("completedOn", dateValue(requestedCompletedOn));
+        return result;
     }
 
     private Map<String, Object> proposal(UpdateContractCommand command) {

@@ -10,6 +10,12 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class ContractNetAmountCalculatorTest {
+    @Test void aggregatedSubtotalUsesExactlyTheSameDiscountAndAdjustmentRule() {
+        var service=ContractService.create(UUID.randomUUID(),UUID.randomUUID(),"Synthetic",null,ContractServiceStatus.ACTIVE,BigDecimal.ONE,new BigDecimal("1250.50"));
+        var discount=ContractDiscount.create(service.getCompanyId(),service.getContractId(),DiscountType.PERCENTAGE,new BigDecimal("7.25"));
+        assertEquals(ContractNetAmountCalculator.calculate(List.of(service),discount,new BigDecimal("3.00")),
+            ContractNetAmountCalculator.calculateSubtotal(service.getEffectiveNetAmount(),discount,new BigDecimal("3.00")));
+    }
 
     @Test
     void calculatesTheNetAmountWithoutDistributingContractDiscountToServices() {

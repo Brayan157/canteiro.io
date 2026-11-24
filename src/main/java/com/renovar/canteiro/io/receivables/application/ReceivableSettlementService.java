@@ -28,6 +28,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.LocalDate;
+import java.time.ZoneOffset;
+import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -46,6 +48,7 @@ public class ReceivableSettlementService {
     private final Clock clock;
     private final com.renovar.canteiro.io.receivables.domain.ReceivableOriginRepository origins;
     private final ReceivableSettlementAttributionService attribution;
+    private final ReceivableSettlementCreationPolicy creationPolicy;
 
     @Transactional
     public ReceivableSettlementResult settle(CreateReceivableSettlementCommand command) {
@@ -54,6 +57,7 @@ public class ReceivableSettlementService {
         ChangeAuthorizationMode mode = accessAuthorizationService.requireChangeAuthorization(
                 AccessModule.RECEIVABLES, ChangeOperation.CREATE
         );
+        creationPolicy.requireAvailable();
         if (mode == ChangeAuthorizationMode.REQUEST_APPROVAL) {
             ChangeRequest changeRequest = changeRequestService.create(new CreateChangeRequestCommand(
                     AuditModule.RECEIVABLES,
@@ -77,6 +81,7 @@ public class ReceivableSettlementService {
     public void applyApprovedSettlement(ChangeRequest changeRequest) {
         CreateReceivableSettlementCommand command = fromProposal(changeRequest.getSnapshot().proposedData().values());
         validate(command, changeRequest.getCompanyId());
+        creationPolicy.requireAvailable();
         Settlement settlement = persist(changeRequest.getCompanyId(), command);
         record(settlement, "approved-change-request", changeRequest.getId());
     }
@@ -88,6 +93,8 @@ public class ReceivableSettlementService {
         Receivable receivable = receivableRepository.findByIdAndCompanyIdWithSettlementLock(command.receivableId(), companyId)
                 .orElseThrow(() -> new TenantResourceNotFoundException("Receivable"));
         validateReceivableStatus(receivable);
+        validateReceivedDate(command.receivedOn());
+        creationPolicy.requireAvailable();
         ReceivableBalance currentBalance = calculateReceivableBalanceUseCase.calculate(companyId, command.receivableId());
         if (!currentBalance.canSettle(command.amount())) {
             throw new IllegalStateException("Receivable settlement exceeds the outstanding amount");
@@ -110,6 +117,7 @@ public class ReceivableSettlementService {
         }
         Receivable receivable = receivableRepository.findByIdAndCompanyId(command.receivableId(), companyId)
                 .orElseThrow(() -> new TenantResourceNotFoundException("Receivable"));
+        validateReceivedDate(command.receivedOn());
         if (receivable.getIssuedOn() != null && command.receivedOn().isBefore(receivable.getIssuedOn())) {
             throw new IllegalArgumentException("Receivable settlement date must not precede its issue date");
         }
@@ -117,6 +125,17 @@ public class ReceivableSettlementService {
             throw new IllegalArgumentException("Receivable settlement amount must be positive");
         }
         validateReceivableStatus(receivable);
+    }
+
+    private void validateReceivedDate(LocalDate receivedOn) {
+        if (receivedOn.isAfter(LocalDate.now(clock.withZone(ZoneOffset.UTC)))) {
+            throw new com.renovar.canteiro.io.shared.api.error.ApiException(
+                    org.springframework.http.HttpStatus.BAD_REQUEST,
+                    com.renovar.canteiro.io.shared.api.error.ErrorCode.VALIDATION_FAILED,
+                    "The received date must not be in the future (UTC).",
+                    List.of(new com.renovar.canteiro.io.shared.api.error.FieldViolation(
+                            "receivedOn", "Must not be later than the current UTC calendar date.")));
+        }
     }
 
     private void validateReceivableStatus(Receivable receivable) {

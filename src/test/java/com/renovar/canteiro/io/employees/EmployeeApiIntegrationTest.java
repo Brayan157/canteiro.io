@@ -56,6 +56,63 @@ class EmployeeApiIntegrationTest extends AbstractPostgresIntegrationTest {
     @Autowired private AuditEventRepository auditEventRepository;
 
     @Test
+    void listUsesMinimalProjectionAndNewAuditSnapshotsExcludeSensitiveProfileValues() throws Exception {
+        Company company = createCompany("minimal-list");
+        Company other = createCompany("minimal-list-other");
+        User manager = createUser(company, "minimal-list@example.com");
+        User observer = createUser(company, "minimal-observer@example.com");
+        User otherManager = createUser(other, "minimal-other@example.com");
+        grant(manager, company, AccessAction.CREATE_DIRECT, AccessAction.UPDATE_DIRECT, AccessAction.READ);
+        grant(observer, company, AccessAction.READ);
+        grant(otherManager, other, AccessAction.CREATE_DIRECT, AccessAction.READ);
+        String request = employeeRequestJson().replace("\"gender\":\"FEMALE\"", "\"gender\":\"FEMALE\",\"ethnicity\":\"WHITE\"");
+        mockMvc.perform(post("/api/v1/company/employees").with(jwt().jwt(t -> t.subject(manager.getId().toString())))
+                .contentType("application/json").content(request)).andExpect(status().isCreated());
+        mockMvc.perform(post("/api/v1/company/employees").with(jwt().jwt(t -> t.subject(otherManager.getId().toString())))
+                .contentType("application/json").content(request.replace("Ana da Silva", "Other tenant employee")))
+                .andExpect(status().isCreated());
+        UUID id = employeeRepository.findByCompanyId(company.getId(), org.springframework.data.domain.Pageable.unpaged())
+                .getContent().getFirst().getId();
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put("/api/v1/company/employees/{id}", id)
+                .with(jwt().jwt(t -> t.subject(manager.getId().toString())))
+                .contentType("application/json").content(request.replace("Montadora", "Encarregada")))
+                .andExpect(status().isOk());
+        String body = mockMvc.perform(get("/api/v1/company/employees").with(jwt().jwt(t -> t.subject(observer.getId().toString()))))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.totalItems").value(1))
+                .andExpect(jsonPath("$.items[0].id").value(id.toString()))
+                .andExpect(jsonPath("$.items[0].jobTitle").value("Encarregada"))
+                .andExpect(jsonPath("$.items[0].registrationNumber").isNotEmpty())
+                .andReturn().getResponse().getContentAsString();
+        var item = new tools.jackson.databind.ObjectMapper().readTree(body).path("items").get(0);
+        for (String field : java.util.List.of("documentType", "documentNumber", "pisMasked", "phone", "birthDate", "gender",
+                "ethnicity", "compensationFrequency", "compensationAmount", "storageKey")) {
+            org.junit.jupiter.api.Assertions.assertFalse(item.has(field), field);
+        }
+        var events = auditEventRepository.findByCompanyId(company.getId(), org.springframework.data.domain.Pageable.unpaged())
+                .getContent().stream().filter(e -> "Employee".equals(e.getEntityType())).toList();
+        org.junit.jupiter.api.Assertions.assertEquals(2, events.size());
+        for (var event : events) {
+            var snapshots = new java.util.ArrayList<com.renovar.canteiro.io.governance.domain.AuditPayload>();
+            if (event.getBeforeData() != null) snapshots.add(event.getBeforeData());
+            snapshots.add(event.getAfterData());
+            for (var snapshot : snapshots) {
+                for (String field : java.util.List.of("gender", "ethnicity", "documentNumber", "pis", "birthDate", "phone", "compensationAmount")) {
+                    org.junit.jupiter.api.Assertions.assertFalse(snapshot.values().containsKey(field), field);
+                }
+                org.junit.jupiter.api.Assertions.assertEquals(true, snapshot.values().get("hasDocument"));
+            }
+        }
+    }
+
+    @Test
+    void listStillRequiresEmployeeReadPermission() throws Exception {
+        Company company = createCompany("minimal-denied");
+        User user = createUser(company, "minimal-denied@example.com");
+        mockMvc.perform(get("/api/v1/company/employees").with(jwt().jwt(t -> t.subject(user.getId().toString()))))
+                .andExpect(status().isForbidden()).andExpect(jsonPath("$.correlationId").isNotEmpty());
+    }
+
+    @Test
     void createsEmployeeWithAnOperationalProfileWithoutEmailOrUserWhenAuthorized() throws Exception {
         Company company = createCompany("first");
         User manager = createUser(company, "manager-first@example.com");

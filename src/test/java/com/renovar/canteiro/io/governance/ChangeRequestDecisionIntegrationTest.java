@@ -91,6 +91,9 @@ class ChangeRequestDecisionIntegrationTest extends AbstractPostgresIntegrationTe
 
     @Autowired
     private EmployeeRepository employeeRepository;
+    @Autowired private com.renovar.canteiro.io.customers.domain.FinalCustomerRepository customers;
+    @Autowired private com.renovar.canteiro.io.works.domain.WorkRepository works;
+    @Autowired private com.renovar.canteiro.io.contracts.domain.ContractRepository contracts;
 
     @AfterEach
     void clearTenantContext() {
@@ -114,6 +117,8 @@ class ChangeRequestDecisionIntegrationTest extends AbstractPostgresIntegrationTe
         assertEquals(ChangeRequestStatus.APPROVED, approvedRequest.getStatus());
         assertEquals(approver.getId(), approvedRequest.getDecidedByUserId());
         assertEquals("Verified by contract manager", approvedRequest.getDecisionReason());
+        assertEquals(com.renovar.canteiro.io.contracts.domain.ContractStatus.ACTIVE,
+                contracts.findByIdAndCompanyId(approvalRequest.getEntityId(),company.getId()).orElseThrow().getStatus());
         assertTrue(auditEventRepository.findByCompanyId(company.getId(), PageRequest.of(0, 20)).getContent().stream()
                 .anyMatch(event -> event.getAction() == AuditAction.APPROVE
                         && event.getEntityId().equals(approvalRequest.getId())));
@@ -127,6 +132,8 @@ class ChangeRequestDecisionIntegrationTest extends AbstractPostgresIntegrationTe
         assertEquals(ChangeRequestStatus.REJECTED, rejectedRequest.getStatus());
         assertEquals("The supporting document is missing", rejectedRequest.getDecisionReason());
         assertEquals(approver.getId(), rejectedRequest.getDecidedByUserId());
+        assertEquals(com.renovar.canteiro.io.contracts.domain.ContractStatus.ACTIVE,
+                contracts.findByIdAndCompanyId(rejectionRequest.getEntityId(),company.getId()).orElseThrow().getStatus());
     }
 
     @Test
@@ -183,16 +190,25 @@ class ChangeRequestDecisionIntegrationTest extends AbstractPostgresIntegrationTe
     }
 
     private ChangeRequest createPendingContractChangeRequest(User requester, Company company, String beforeStatus, String afterStatus) {
+        var customer=customers.save(com.renovar.canteiro.io.customers.domain.FinalCustomer.create(company.getId(),
+                com.renovar.canteiro.io.customers.domain.FinalCustomerType.LEGAL,"Cliente da decisão",
+                String.format("%014d",Math.floorMod(UUID.randomUUID().getLeastSignificantBits(),100_000_000_000_000L))));
+        var work=works.save(com.renovar.canteiro.io.works.domain.Work.create(company.getId(),customer.getId(),"Obra da decisão",null,
+                com.renovar.canteiro.io.works.domain.WorkExecutionLocationType.FINAL_CUSTOMER_LOCATION,null,
+                com.renovar.canteiro.io.works.domain.WorkStatus.ACTIVE,null,null,null));
+        var contract=contracts.save(com.renovar.canteiro.io.contracts.domain.Contract.create(company.getId(),work.getId(),null,
+                com.renovar.canteiro.io.contracts.domain.ContractPricingMode.FIXED,null,"Contrato da decisão",
+                com.renovar.canteiro.io.contracts.domain.ContractStatus.valueOf(beforeStatus),null,null,null));
         tenantContextHolder.setCurrentTenant(new TenantContext(requester.getId(), company.getId()));
         return changeRequestService.create(new CreateChangeRequestCommand(
                 AuditModule.CONTRACTS,
                 ChangeRequestOperation.UPDATE,
                 "Contract",
-                UUID.randomUUID(),
-                2,
+                contract.getId(),
+                0,
                 new ChangeRequestSnapshot(
-                        new AuditPayload(Map.of("status", beforeStatus)),
-                        new AuditPayload(Map.of("status", afterStatus))
+                        new AuditPayload(Map.of("status", beforeStatus,"name",contract.getName())),
+                        new AuditPayload(Map.of("status", afterStatus,"name",contract.getName()))
                 ),
                 "Contract status adjustment"
         ));

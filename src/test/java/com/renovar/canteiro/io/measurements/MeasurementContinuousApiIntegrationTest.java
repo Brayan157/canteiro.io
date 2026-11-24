@@ -78,6 +78,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @AutoConfigureMockMvc
 class MeasurementContinuousApiIntegrationTest extends AbstractPostgresIntegrationTest {
+    // Allows synthetic historical cash fixtures for continuity/attribution regressions, not a production bypass.
+    // Unmocked REST containment is tested separately by BillingReceiptsAndSettlementDateApiIntegrationTest.
+    @org.springframework.test.context.bean.override.mockito.MockitoBean
+    private com.renovar.canteiro.io.receivables.application.ReceivableSettlementCreationPolicy legacyFixturePolicy;
     @Autowired MockMvc mvc;
     @Autowired CompanyRepository companies;
     @Autowired FinalCustomerRepository customers;
@@ -696,7 +700,10 @@ class MeasurementContinuousApiIntegrationTest extends AbstractPostgresIntegratio
             call(f,post("/api/v1/company/billing-installments/"+installment+"/cancellation"),Map.of("reason","Correção da parcela"),200);
             assertEquals("240.00",officialBilling(f).path("availableAmount").asText());
             assertOfficialService(f,existing.getId(),"100.00","100.00","200.00");
-            assertEquals("100.00",accumulated(f,a).at("/financialSummary/acceptedAvailableToBill").asText());
+            // F05-21: cancellation restores documentary gross capacity, but its uncommitted
+            // contract discount remains in the official NET availability (100 - 20).
+            assertEquals("100.00",netPosition(netCapacity(f),ca.getId()).path("grossAvailableAmount").asText());
+            assertEquals("80.00",accumulated(f,a).at("/financialSummary/acceptedAvailableToBill").asText());
         }
     }
 
@@ -808,6 +815,575 @@ class MeasurementContinuousApiIntegrationTest extends AbstractPostgresIntegratio
         call(other,get(base(mid)+"/accumulated"),null,404);
     }
 
+    @Test
+    void billableOriginsSeparateAdvancesOnTheSameContractServiceAndKeepReadOnlyCanonicalCapacity() throws Exception {
+        Fixture f=fixture(true);UUID a=measurement(f,true),av=version(f,a),as=service(f,a,"Mesmo título","CREATE_NEW_SERVICE",null);
+        item(f,a,av,as,1,"Origem A","4.0000","25.00");accept(f,a,av);
+        var first=compositions.findByMeasurementIdAndCompanyId(a,f.company.getId()).getFirst();
+        UUID b=measurement(f,true),bv=version(f,b),bs=service(f,b,"Mesmo título","ADD_TO_EXISTING_SERVICE",first.getContractServiceId());
+        item(f,b,bv,bs,1,"Origem B","2.0000","25.00");accept(f,b,bv);
+        UUID av2=revision(f,a);item(f,a,av2,as,1,"Avanço A","1.0000","25.00");accept(f,a,av2);
+        JsonNode bill=bill(f,first,"40.00");
+        String path=originsPath(f);
+        long auditBefore=jdbc.queryForObject("select count(*) from audit_event where company_id=?",Long.class,f.company.getId());
+        JsonNode before=officialBilling(f),list=call(f,get(path),null,200);
+        assertEquals(3,list.path("totalItems").asInt());
+        JsonNode origin=null;
+        for(JsonNode row:list.path("items")) {
+            assertEquals(first.getContractServiceId().toString(),row.path("contractServiceId").asText());
+            assertEquals("AVAILABLE",row.path("status").asText());assertEquals("BRL",row.path("currency").asText());
+            assertTrue(row.path("availableToBillAmount").isString());assertTrue(row.path("acceptedAmount").isString());
+            if(first.getId().toString().equals(row.path("measurementContractCompositionId").asText()))origin=row;
+        }
+        assertNotNull(origin);assertEquals("100.00",origin.path("acceptedAmount").asText());
+        assertEquals("40.00",origin.path("activeAllocatedAmount").asText());assertEquals("60.00",origin.path("availableToBillAmount").asText());
+        assertEquals(av.toString(),origin.path("measurementVersionId").asText());assertEquals(as.toString(),origin.path("continuousServiceId").asText());
+        assertEquals(before,officialBilling(f));
+        assertEquals(auditBefore,jdbc.queryForObject("select count(*) from audit_event where company_id=?",Long.class,f.company.getId()));
+        assertEquals(2,call(f,get(path).param("measurementId",a.toString()),null,200).path("totalItems").asInt());
+        Fixture requester=actor(f,Map.of(AccessModule.BILLING,List.of(AccessAction.READ,AccessAction.REQUEST_CREATE),
+                AccessModule.MEASUREMENTS,List.of(AccessAction.READ)));
+        JsonNode proposal=call(requester,post("/api/v1/company/billing-installments"),Map.of("contractId",f.contract.getId(),"dueOn","2026-11-01",
+                "allocations",List.of(Map.of("contractServiceId",first.getContractServiceId(),"measurementContractCompositionId",first.getId(),"type","SERVICE","allocatedAmount","10.00"))),202);
+        assertFalse(proposal.path("changeRequestId").asText().isBlank());
+        assertEquals(list,call(f,get(path),null,200));
+        bill(f,first,"60.00");assertEquals(2,call(f,get(path),null,200).path("totalItems").asInt());
+        call(f,post("/api/v1/company/billing-installments/"+bill.at("/billingInstallment/id").asText()+"/cancellation"),Map.of("reason","Liberar somente origem cancelada"),200);
+        JsonNode restored=call(f,get(path).param("measurementId",a.toString()),null,200);
+        for(JsonNode row:restored.path("items"))if(first.getId().toString().equals(row.path("measurementContractCompositionId").asText())) {
+            assertEquals("60.00",row.path("activeAllocatedAmount").asText());assertEquals("40.00",row.path("availableToBillAmount").asText());
+        }
+    }
+
+    @Test
+    void billableOriginsRequireBothPermissionsAndNeverExposeForeignTenantsOrFilters() throws Exception {
+        Fixture f=fixture(true),other=fixture(true);UUID mid=measurement(f,true),vid=version(f,mid),sid=service(f,mid,"Privado","CREATE_NEW_SERVICE",null);
+        item(f,mid,vid,sid,1,"Origem","1.0000","25.00");accept(f,mid,vid);
+        String path=originsPath(f);
+        mvc.perform(get(path)).andExpect(status().isUnauthorized());
+        for(var grants:List.of(Map.of(AccessModule.BILLING,List.of(AccessAction.READ)),Map.of(AccessModule.MEASUREMENTS,List.of(AccessAction.READ)))) {
+            JsonNode denied=call(actor(f,grants),get(path),null,403);
+            assertFalse(denied.path("correlationId").asText().isBlank());
+        }
+        call(other,get(path),null,404);call(f,get(originsPath(other)),null,404);
+        call(f,get("/api/v1/company/billing-control/contracts/"+UUID.randomUUID()+"/measurement-origins"),null,404);
+        assertEquals(0,call(f,get(path).param("measurementId",UUID.randomUUID().toString()),null,200).path("totalItems").asInt());
+        assertEquals(0,call(f,get(path).param("contractServiceId",UUID.randomUUID().toString()),null,200).path("totalItems").asInt());
+        assertEquals(1,call(f,get(path).param("companyId",other.company.getId().toString()),null,200).path("totalItems").asInt());
+        assertEquals(0,call(other,get(originsPath(other)).param("measurementId",mid.toString()),null,200).path("totalItems").asInt());
+        var origin=compositions.findByMeasurementIdAndCompanyId(mid,f.company.getId()).getFirst();
+        assertEquals(1,call(f,get(path).param("contractServiceId",origin.getContractServiceId().toString()),null,200).path("totalItems").asInt());
+    }
+
+    @Test
+    void billableOriginsPageAndSortDeterministicallyAndRejectInvalidParameters() throws Exception {
+        Fixture f=fixture(true);UUID mid=measurement(f,true),vid=version(f,mid);
+        for(int index=1;index<=3;index++) {
+            UUID sid=service(f,mid,"Mesmo título","CREATE_NEW_SERVICE",null);
+            item(f,mid,vid,sid,index,"Origem "+index,"1.0000","25.00");
+        }
+        accept(f,mid,vid);
+        String path=originsPath(f);
+        JsonNode all=call(f,get(path),null,200);
+        assertEquals(3,all.path("totalItems").asInt());assertEquals(20,all.path("size").asInt());
+        for(int page=0;page<3;page++) {
+            JsonNode result=call(f,get(path).param("size","1").param("page",Integer.toString(page)),null,200);
+            assertEquals(3,result.path("totalPages").asInt());assertEquals(all.path("items").get(page),result.at("/items/0"));
+        }
+        assertEquals(0,call(f,get(path).param("size","1").param("page","3"),null,200).path("items").size());
+        JsonNode asc=call(f,get(path).param("sort","createdAt,asc"),null,200);
+        for(int index=0;index<3;index++)assertEquals(all.path("items").get(index),asc.path("items").get(2-index));
+        for(String[] invalid:new String[][]{{"page","-1"},{"size","0"},{"size","101"},{"page","2147483647"},
+                {"sort","amount,asc"},{"sort","createdAt,invalid"},{"sort","createdAt"},{"measurementId","invalid"}}) {
+            JsonNode error=call(f,get(path).param(invalid[0],invalid[1]),null,400);
+            assertFalse(error.path("correlationId").asText().isBlank());
+        }
+    }
+
+    @Test
+    void billableOriginsExcludeDraftSentPendingRejectedAndCompositionApprovalUntilOfficial() throws Exception {
+        Fixture f=fixture(true);UUID mid=measurement(f,true),vid=version(f,mid),sid=service(f,mid,"Pendente","CREATE_NEW_SERVICE",null);
+        item(f,mid,vid,sid,1,"Origem","4.0000","25.00");
+        assertEquals(0,call(f,get(originsPath(f)),null,200).path("totalItems").asInt());
+        workflow(f,mid,vid,"SEND",null);
+        assertEquals(0,call(f,get(originsPath(f)),null,200).path("totalItems").asInt());
+        workflow(f,mid,vid,"AWAIT_EXTERNAL_ACCEPTANCE",null);
+        assertEquals(0,call(f,get(originsPath(f)),null,200).path("totalItems").asInt());
+        call(f,post(base(mid)+"/versions/"+vid+"/workflow"),Map.of("action","RECORD_EXTERNAL_ACCEPTANCE","externallyAccepted",false,
+                "externalAcceptanceOn","2026-10-11","externalAcceptanceNotes","Conferir execução"),200);
+        assertEquals(0,call(f,get(originsPath(f)),null,200).path("totalItems").asInt());
+        UUID revision=revision(f,mid);
+        Fixture requester=actor(f,Map.of(AccessModule.MEASUREMENTS,List.of(AccessAction.READ,AccessAction.UPDATE_DIRECT),
+                AccessModule.SERVICES,List.of(AccessAction.REQUEST_CREATE)));
+        accept(requester,mid,revision);
+        String pending=call(f,get(base(mid)+"/contract-compositions"),null,200).get(0).path("changeRequestId").asText();
+        assertEquals(0,call(f,get(originsPath(f)),null,200).path("totalItems").asInt());
+        call(actor(f,Map.of(AccessModule.SERVICES,List.of(AccessAction.APPROVE))),post("/api/v1/company/change-requests/"+pending+"/approve"),Map.of(),200);
+        assertEquals(1,call(f,get(originsPath(f)),null,200).path("totalItems").asInt());
+    }
+
+    @Test
+    void billableOriginsExcludeUnreconciledReductionsAndReplacedOriginsButKeepTheNewAcceptedSource() throws Exception {
+        Fixture f=fixture(true);UUID mid=measurement(f,true),vid=version(f,mid),sid=service(f,mid,"Correção","CREATE_NEW_SERVICE",null);
+        UUID item=item(f,mid,vid,sid,1,"Origem","4.0000","25.00");accept(f,mid,vid);
+        var original=compositions.findByMeasurementIdAndCompanyId(mid,f.company.getId()).getFirst();
+        JsonNode correction=call(f,post(base(mid)+"/versions/"+vid+"/items/"+item+"/corrective-revision"),
+                Map.of("action","REPLACE","itemNumber",1,"serviceTitle","Correção","activity","Corrigida","measuredOn","2026-10-11",
+                        "chargeType","LINEAR_METER","linearMeters",2,"unitPrice","25.00","justification","Metragem conferida"),201);
+        UUID cv=UUID.fromString(correction.at("/version/id").asText());
+        assertEquals(1,call(f,get(originsPath(f)),null,200).path("totalItems").asInt());
+        Fixture requester=actor(f,Map.of(AccessModule.MEASUREMENTS,List.of(AccessAction.READ,AccessAction.UPDATE_DIRECT),
+                AccessModule.SERVICES,List.of(AccessAction.REQUEST_UPDATE)));
+        accept(requester,mid,cv);
+        assertTrue(continuity.hasUnreconciledReduction(f.company.getId(),original.getId()));
+        assertEquals(0,call(f,get(originsPath(f)),null,200).path("totalItems").asInt());
+        String pending=null;for(JsonNode row:call(f,get(base(mid)+"/contract-compositions"),null,200))
+            if(row.path("state").asText().equals("AWAITING_APPROVAL"))pending=row.path("changeRequestId").asText();
+        assertNotNull(pending);
+        call(actor(f,Map.of(AccessModule.SERVICES,List.of(AccessAction.APPROVE))),post("/api/v1/company/change-requests/"+pending+"/approve"),Map.of(),200);
+        JsonNode selected=call(f,get(originsPath(f)),null,200);
+        assertEquals(1,selected.path("totalItems").asInt());assertEquals("50.00",selected.at("/items/0/availableToBillAmount").asText());
+        assertFalse(original.getId().toString().equals(selected.at("/items/0/measurementContractCompositionId").asText()));
+        assertEquals(cv.toString(),selected.at("/items/0/measurementVersionId").asText());
+        assertTrue(continuity.isReversed(f.company.getId(),original.getId()));
+    }
+
+    @Test
+    void billableOriginsExportTheExecutableContractWithoutEnablingThePaymentGateway() throws Exception {
+        String specification=mvc.perform(get("/v3/api-docs")).andExpect(status().isOk())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON)).andReturn().getResponse().getContentAsString();
+        JsonNode document=json.readTree(specification);
+        assertEquals("3.1.0",document.path("openapi").asText());
+        assertTrue(document.path("paths").has("/api/v1/company/billing-control/contracts/{contractId}/measurement-origins"));
+        assertTrue(document.path("paths").has("/api/v1/company/billing-control/contracts/{contractId}/net-capacity"));
+        assertTrue(document.path("paths").has("/api/v1/company/billing-installments/net"));
+        assertFalse(document.path("paths").has("/api/v1/webhooks/payments"));
+        JsonNode schema=document.at("/components/schemas/BillableMeasurementOriginResponse");
+        assertTrue(schema.path("required").toString().contains("measurementContractCompositionId"));
+        String export=System.getenv("BILLABLE_ORIGINS_OPENAPI_EXPORT_PATH");
+        if(export!=null&&!export.isBlank()) {
+            Path target=Path.of(export).toAbsolutePath().normalize();
+            Files.createDirectories(target.getParent());Files.writeString(target,specification);
+        }
+    }
+
+    @Test
+    void billingInstallmentReadsPreserveDiscountsAndDistinctOriginsOnTheSameServiceWithoutChangingOfficialData() throws Exception {
+        Fixture f=fixture(true);UUID a=measurement(f,true),av=version(f,a),as=service(f,a,"Execução","CREATE_NEW_SERVICE",null);
+        item(f,a,av,as,1,"Origem A","4.0000","25.00");accept(f,a,av);
+        var ca=compositions.findByMeasurementIdAndCompanyId(a,f.company.getId()).getFirst();
+        UUID b=measurement(f,true),bv=version(f,b),bs=service(f,b,"Execução","ADD_TO_EXISTING_SERVICE",ca.getContractServiceId());
+        item(f,b,bv,bs,1,"Origem B","2.0000","25.00");accept(f,b,bv);
+        var cb=compositions.findByMeasurementIdAndCompanyId(b,f.company.getId()).getFirst();
+        call(f,put("/api/v1/company/contracts/"+f.contract.getId()+"/discount"),Map.of("discountType","FIXED","discountValue","10.00","justification","Desconto negociado"),200);
+        JsonNode created=call(f,post("/api/v1/company/billing-installments"),Map.of("contractId",f.contract.getId(),"reference","PARC-01",
+                "description","Primeira parcela oficial","issuedOn","2026-10-11","dueOn","2026-11-01","allocations",List.of(
+                Map.of("contractServiceId",ca.getContractServiceId(),"measurementContractCompositionId",ca.getId(),"type","SERVICE","allocatedAmount","100.00"),
+                Map.of("contractServiceId",cb.getContractServiceId(),"measurementContractCompositionId",cb.getId(),"type","SERVICE","allocatedAmount","50.00"),
+                Map.of("type","CONTRACT_DISCOUNT","allocatedAmount","-10.00"))),201);
+        String id=created.at("/billingInstallment/id").asText();
+        long events=jdbc.queryForObject("select count(*) from audit_event where company_id=?",Long.class,f.company.getId());
+        JsonNode billing=officialBilling(f),list=call(f,get("/api/v1/company/billing-installments"),null,200),detail=call(f,get("/api/v1/company/billing-installments/"+id),null,200);
+        assertEquals(1,list.path("totalItems").asInt());assertEquals(id,list.at("/items/0/id").asText());
+        assertEquals("140.00",list.at("/items/0/netAmount").asText());assertEquals("140.00",detail.path("netAmount").asText());
+        assertTrue(detail.path("netAmount").isString());assertEquals("BRL",detail.path("currency").asText());
+        assertEquals("PARC-01",detail.path("reference").asText());assertEquals("Primeira parcela oficial",detail.path("description").asText());
+        assertEquals("2026-10-11",detail.path("issuedOn").asText());assertEquals("2026-11-01",detail.path("dueOn").asText());
+        assertEquals("OPEN",detail.path("status").asText());assertEquals(3,detail.path("allocations").size());
+        java.util.Set<String> origins=new java.util.HashSet<>();
+        for(JsonNode line:detail.path("allocations")) {
+            assertFalse(line.path("allocationId").asText().isBlank());assertTrue(line.path("allocatedAmount").isString());
+            if(line.path("type").asText().equals("SERVICE")) {
+                assertEquals(ca.getContractServiceId().toString(),line.path("contractServiceId").asText());
+                assertFalse(line.path("contractServiceName").asText().isBlank());origins.add(line.path("measurementContractCompositionId").asText());
+            } else {
+                assertEquals("-10.00",line.path("allocatedAmount").asText());assertTrue(line.path("contractServiceId").isNull());
+                assertTrue(line.path("measurementContractCompositionId").isNull());
+            }
+        }
+        assertEquals(java.util.Set.of(ca.getId().toString(),cb.getId().toString()),origins);
+        assertTrue(detail.path("receivableReferencesAvailable").asBoolean());
+        assertEquals(created.at("/receivable/id").asText(),detail.at("/receivables/0/id").asText());
+        assertEquals(java.util.Set.of("id","reference"),fieldNames(detail.at("/receivables/0")));
+        assertEquals(events,jdbc.queryForObject("select count(*) from audit_event where company_id=?",Long.class,f.company.getId()));
+        assertEquals(billing,officialBilling(f));
+    }
+
+    @Test
+    void billingInstallmentReadsRequireBillingAndGateReceivableReferencesWithoutMeasurementPermission() throws Exception {
+        Fixture f=fixture(true),other=fixture(true);UUID mid=measurement(f,true),vid=version(f,mid),sid=service(f,mid,"Origem","CREATE_NEW_SERVICE",null);
+        item(f,mid,vid,sid,1,"Execução","1.0000","100.00");accept(f,mid,vid);
+        var origin=compositions.findByMeasurementIdAndCompanyId(mid,f.company.getId()).getFirst();
+        JsonNode created=bill(f,origin,"50.00");String base="/api/v1/company/billing-installments",detail=base+"/"+created.at("/billingInstallment/id").asText();
+        Fixture billingOnly=actor(f,Map.of(AccessModule.BILLING,List.of(AccessAction.READ)));
+        JsonNode allowed=call(billingOnly,get(detail),null,200);call(billingOnly,get(base),null,200);
+        assertFalse(allowed.path("receivableReferencesAvailable").asBoolean());assertEquals(0,allowed.path("receivables").size());
+        assertEquals(origin.getId().toString(),allowed.at("/allocations/0/measurementContractCompositionId").asText());
+        assertFalse(allowed.toString().contains(created.at("/receivable/id").asText()));
+        Fixture denied=actor(f,Map.of(AccessModule.RECEIVABLES,List.of(AccessAction.READ)));
+        for(String route:List.of(base,detail)) {
+            mvc.perform(get(route)).andExpect(status().isUnauthorized());
+            JsonNode error=call(denied,get(route),null,403);assertFalse(error.path("correlationId").asText().isBlank());
+        }
+        call(other,get(detail),null,404);call(f,get(base+"/"+UUID.randomUUID()),null,404);
+        assertEquals(0,call(other,get(base).param("contractId",f.contract.getId().toString()),null,200).path("totalItems").asInt());
+        JsonNode own=call(f,get(base).param("companyId",other.company.getId().toString()),null,200);
+        assertEquals(1,own.path("totalItems").asInt());assertEquals(f.contract.getId().toString(),own.at("/items/0/contractId").asText());
+    }
+
+    @Test
+    void billingInstallmentReadsKeepCancelledHistoryAndDoNotPublishApprovalProposals() throws Exception {
+        Fixture f=fixture(true);UUID mid=measurement(f,true),vid=version(f,mid),sid=service(f,mid,"Origem","CREATE_NEW_SERVICE",null);
+        item(f,mid,vid,sid,1,"Execução","1.0000","100.00");accept(f,mid,vid);
+        var origin=compositions.findByMeasurementIdAndCompanyId(mid,f.company.getId()).getFirst();
+        String base="/api/v1/company/billing-installments";
+        Fixture requester=actor(f,Map.of(AccessModule.BILLING,List.of(AccessAction.REQUEST_CREATE,AccessAction.READ)));
+        JsonNode proposal=call(requester,post(base),Map.of("contractId",f.contract.getId(),"reference","Ainda pendente","dueOn","2026-11-01",
+                "allocations",List.of(Map.of("contractServiceId",origin.getContractServiceId(),"measurementContractCompositionId",origin.getId(),"type","SERVICE","allocatedAmount","20.00"))),202);
+        assertEquals(0,call(requester,get(base),null,200).path("totalItems").asInt());
+        call(requester,get(base+"/"+proposal.path("changeRequestId").asText()),null,404);
+        JsonNode created=bill(f,origin,"40.00");String id=created.at("/billingInstallment/id").asText();
+        call(f,post(base+"/"+id+"/cancellation"),Map.of("reason","Cancelamento preservado"),200);
+        JsonNode detail=call(f,get(base+"/"+id),null,200),list=call(f,get(base).param("status","CANCELLED"),null,200);
+        assertEquals("CANCELLED",detail.path("status").asText());assertEquals("40.00",detail.path("netAmount").asText());
+        assertEquals("CANCELLED",detail.at("/allocations/0/status").asText());assertEquals("40.00",detail.at("/allocations/0/allocatedAmount").asText());
+        assertEquals(1,list.path("totalItems").asInt());assertEquals("40.00",list.at("/items/0/netAmount").asText());
+        assertEquals(0,call(f,get(base).param("status","OPEN"),null,200).path("totalItems").asInt());
+    }
+
+    @Test
+    void billingInstallmentReadsFilterLiteralReferencesDatesContractsAndPageWithControlledSort() throws Exception {
+        Fixture f=fixture(true);UUID mid=measurement(f,true),vid=version(f,mid),sid=service(f,mid,"Origem","CREATE_NEW_SERVICE",null);
+        item(f,mid,vid,sid,1,"Execução","1.0000","100.00");accept(f,mid,vid);
+        var origin=compositions.findByMeasurementIdAndCompanyId(mid,f.company.getId()).getFirst();String base="/api/v1/company/billing-installments";
+        for(int n=1;n<=3;n++)call(f,post(base),Map.of("contractId",f.contract.getId(),"reference",n==1?"AbC%_1":"PARC-"+n,
+                "issuedOn","2026-10-11","dueOn","2026-11-0"+n,"allocations",List.of(Map.of("contractServiceId",origin.getContractServiceId(),
+                "measurementContractCompositionId",origin.getId(),"type","SERVICE","allocatedAmount","10.00"))),201);
+        JsonNode all=call(f,get(base),null,200);assertEquals(3,all.path("totalItems").asInt());
+        for(int page=0;page<3;page++) {
+            JsonNode result=call(f,get(base).param("page",Integer.toString(page)).param("size","1"),null,200);
+            assertEquals(3,result.path("totalPages").asInt());assertEquals(all.path("items").get(page),result.at("/items/0"));
+        }
+        assertEquals(0,call(f,get(base).param("page","3").param("size","1"),null,200).path("items").size());
+        assertEquals("2026-11-03",call(f,get(base).param("sort","dueOn,desc"),null,200).at("/items/0/dueOn").asText());
+        assertEquals(1,call(f,get(base).param("reference","abc%_"),null,200).path("totalItems").asInt());
+        assertEquals(1,call(f,get(base).param("reference","%"),null,200).path("totalItems").asInt());
+        assertEquals(1,call(f,get(base).param("dueFrom","2026-11-02").param("dueTo","2026-11-02"),null,200).path("totalItems").asInt());
+        assertEquals(3,call(f,get(base).param("contractId",f.contract.getId().toString()),null,200).path("totalItems").asInt());
+        assertEquals(0,call(f,get(base).param("contractId",UUID.randomUUID().toString()),null,200).path("totalItems").asInt());
+        for(String[] invalid:new String[][]{{"page","-1"},{"size","0"},{"size","101"},{"page","2147483647"},{"sort","netAmount,asc"},
+                {"sort","dueOn,invalid"},{"sort","dueOn"},{"contractId","invalid"},{"dueFrom","2026-99-01"},{"status","INVALID"},{"reference","x".repeat(101)}}) {
+            JsonNode error=call(f,get(base).param(invalid[0],invalid[1]),null,400);assertFalse(error.path("correlationId").asText().isBlank());
+        }
+        call(f,get(base).param("dueFrom","2026-11-03").param("dueTo","2026-11-01"),null,400);
+    }
+
+    @Test
+    void billingInstallmentReadsKeepTheContractCurrencyWithoutConversion() throws Exception {
+        Fixture f=fixture(true);
+        Contract usd=contracts.save(Contract.create(f.company.getId(),f.work.getId(),null,ContractPricingMode.FIXED,null,"Contrato USD",
+                ContractStatus.ACTIVE,null,null,null,com.renovar.canteiro.io.shared.domain.CurrencyCode.USD));
+        var service=contractServices.save(ContractService.create(f.company.getId(),usd.getId(),"Base USD",null,ContractServiceStatus.ACTIVE,BigDecimal.ONE,new BigDecimal("100.00")));
+        JsonNode created=call(f,post("/api/v1/company/billing-installments"),Map.of("contractId",usd.getId(),"dueOn","2026-11-01",
+                "allocations",List.of(Map.of("contractServiceId",service.getId(),"type","SERVICE","allocatedAmount","99.90"))),201);
+        String id=created.at("/billingInstallment/id").asText();
+        assertEquals("USD",call(f,get("/api/v1/company/billing-installments/"+id),null,200).path("currency").asText());
+        JsonNode list=call(f,get("/api/v1/company/billing-installments"),null,200);
+        assertEquals("USD",list.at("/items/0/currency").asText());assertEquals("99.90",list.at("/items/0/netAmount").asText());
+    }
+
+    @Test
+    void netBillingDistributesDiscountAndPreservesOriginThroughInvoiceReceiptAndReversal() throws Exception {
+        Fixture f=fixture(true);UUID mid=measurement(f,true),vid=version(f,mid),sid=service(f,mid,"Origem líquida","CREATE_NEW_SERVICE",null);
+        item(f,mid,vid,sid,1,"Execução","1.0000","100.00");accept(f,mid,vid);
+        var origin=compositions.findByMeasurementIdAndCompanyId(mid,f.company.getId()).getFirst();
+        setNetDiscount(f,"FIXED","10.00");
+        var before=accumulated(f,mid).path("financialSummary");
+        assertEquals("100.00",before.path("acceptedAmount").asText());assertEquals("90.00",before.path("acceptedAvailableToBill").asText());
+        assertEquals("90.00",before.path("remainingToReceive").asText());assertEquals("10.00",before.path("financialAdjustmentAmount").asText());
+        JsonNode capacity=netCapacity(f);long auditCount=jdbc.queryForObject("select count(*) from audit_event where company_id=?",Long.class,f.company.getId());
+        assertEquals(capacity,netCapacity(f));assertEquals(auditCount,jdbc.queryForObject("select count(*) from audit_event where company_id=?",Long.class,f.company.getId()));
+        Map<String,Object> payload=netPayload(f,capacity,origin.getContractServiceId(),origin.getId(),"90.00");
+        JsonNode created=call(f,post("/api/v1/company/billing-installments/net"),payload,201);
+        String allocation=created.at("/billingInstallment/allocations/0/id").asText(),rid=created.at("/receivable/id").asText();
+        assertEquals(1,created.at("/billingInstallment/allocations").size());assertEquals("SERVICE",created.at("/billingInstallment/allocations/0/type").asText());
+        assertEquals("90.00",created.at("/receivable/originalAmount").asText());
+        assertEquals("100.00",created.at("/billingInstallment/allocations/0/netBillingGrossAmount").asText());
+        assertEquals("10.00",created.at("/billingInstallment/allocations/0/netBillingDiscountAmount").asText());
+        var replay=call(f,post("/api/v1/company/billing-installments/net"),payload,200);
+        assertEquals(created,replay);assertEquals("0.00",netCapacity(f).path("remainingNetAmount").asText());
+        assertEquals("0.00",officialBilling(f).at("/services/0/availableAmount").asText());
+        assertEquals("0.00",officialBilling(f).at("/services/0/netAvailableToBillAmount").asText());
+        assertEquals(0,call(f,get(originsPath(f)),null,200).path("totalItems").asInt());
+        var detail=call(f,get("/api/v1/company/billing-installments/"+created.at("/billingInstallment/id").asText()),null,200);
+        assertEquals("100.00",detail.at("/allocations/0/netBillingGrossAmount").asText());
+        var invoice=call(f,post("/api/v1/company/invoices"),Map.of("contractId",f.contract.getId(),"number",UUID.randomUUID().toString(),"issuedOn","2026-10-13",
+                "items",List.of(Map.of("billingAllocationId",allocation,"allocatedAmount","90.00"))),201);
+        call(f,post("/api/v1/company/invoices"),Map.of("contractId",f.contract.getId(),"number",UUID.randomUUID().toString(),"issuedOn","2026-10-13",
+                "items",List.of(Map.of("billingAllocationId",allocation,"allocatedAmount","0.01"))),409);
+        var receipt=call(f,post("/api/v1/company/receivables/"+rid+"/settlements"),Map.of("receivedOn","2026-10-13","amount","45.00","paymentMethod","PIX"),201);
+        assertEquals("45.00",accumulated(f,mid).at("/financialSummary/receivedAmount").asText());
+        assertEquals("45.00",accumulated(f,mid).at("/financialSummary/remainingToReceive").asText());
+        call(f,post("/api/v1/company/receivables/"+rid+"/settlements"),Map.of("receivedOn","2026-10-13","amount","45.00","paymentMethod","PIX"),201);
+        assertEquals("0.00",accumulated(f,mid).at("/financialSummary/remainingToReceive").asText());
+        call(f,post("/api/v1/company/receivables/"+rid+"/settlements/"+receipt.at("/settlement/id").asText()+"/reversal"),Map.of("reason","Estorno parcial"),201);
+        assertEquals("45.00",accumulated(f,mid).at("/financialSummary/remainingToReceive").asText());
+        assertEquals("0.00",netCapacity(f).path("remainingNetAmount").asText());
+        assertOfficialService(f,origin.getContractServiceId(),"0.00","100.00","100.00");
+        org.junit.jupiter.api.Assertions.assertThrows(org.springframework.dao.DataAccessException.class,()->jdbc.update("update billing_allocation set net_billing_gross_amount=101 where id=?",UUID.fromString(allocation)));
+        org.junit.jupiter.api.Assertions.assertThrows(org.springframework.dao.DataAccessException.class,()->jdbc.update("delete from billing_allocation where id=?",UUID.fromString(allocation)));
+        assertFalse(invoice.at("/invoice/id").asText().isBlank());
+    }
+
+    @Test
+    void netBillingKeepsTwoOriginsOnOneServiceSeparateAndRedistributesOnlyNewUncommittedCapacity() throws Exception {
+        Fixture f=fixture(true);UUID a=measurement(f,true),av=version(f,a),as=service(f,a,"Mesmo título","CREATE_NEW_SERVICE",null);
+        item(f,a,av,as,1,"A","1.0000","100.00");accept(f,a,av);var ca=compositions.findByMeasurementIdAndCompanyId(a,f.company.getId()).getFirst();
+        UUID b=measurement(f,true),bv=version(f,b),bs=service(f,b,"Mesmo título","ADD_TO_EXISTING_SERVICE",ca.getContractServiceId());
+        item(f,b,bv,bs,1,"B","1.0000","100.00");accept(f,b,bv);var cb=compositions.findByMeasurementIdAndCompanyId(b,f.company.getId()).getFirst();
+        setNetDiscount(f,"FIXED","20.00");
+        JsonNode quote=netCapacity(f);
+        assertEquals("90.00",netPosition(quote,ca.getId()).path("netAvailableAmount").asText());
+        assertEquals("90.00",netPosition(quote,cb.getId()).path("netAvailableAmount").asText());
+        var first=call(f,post("/api/v1/company/billing-installments/net"),netPayload(f,quote,ca.getContractServiceId(),ca.getId(),"90.00"),201);
+        call(f,post("/api/v1/company/receivables/"+first.at("/receivable/id").asText()+"/settlements"),Map.of("receivedOn","2026-10-13","amount","90.00","paymentMethod","PIX"),201);
+        assertEquals("90.00",accumulated(f,a).at("/financialSummary/receivedAmount").asText());
+        assertEquals("0.00",accumulated(f,b).at("/financialSummary/receivedAmount").asText());
+        UUID next=revision(f,b);item(f,b,next,bs,1,"Novo avanço","1.0000","100.00");accept(f,b,next);
+        JsonNode after=netCapacity(f);assertEquals("190.00",after.path("remainingNetAmount").asText());
+        assertEquals("10.00",after.path("remainingDiscountAmount").asText());
+        assertEquals("95.00",netPosition(after,cb.getId()).path("netAvailableAmount").asText());
+        var saved=allocations.findByIdAndCompanyId(UUID.fromString(first.at("/billingInstallment/allocations/0/id").asText()),f.company.getId()).orElseThrow();
+        assertEquals(new BigDecimal("10.00"),saved.getNetBillingDiscountAmount());assertEquals(new BigDecimal("100.00"),saved.getCapacityAmount());
+        assertEquals("0.00",accumulated(f,a).at("/financialSummary/remainingToReceive").asText());
+        assertEquals("190.00",accumulated(f,b).at("/financialSummary/remainingToReceive").asText());
+    }
+
+    @Test
+    void netBillingPreservesLegacyNegativeRowsAndClosesPartialBasisCentsAndCancellation() throws Exception {
+        Fixture f=fixture(true,ContractPricingMode.FIXED);
+        var one=contractServices.save(ContractService.create(f.company.getId(),f.contract.getId(),"Um",null,ContractServiceStatus.ACTIVE,BigDecimal.ONE,new BigDecimal("100.00")));
+        var two=contractServices.save(ContractService.create(f.company.getId(),f.contract.getId(),"Dois",null,ContractServiceStatus.ACTIVE,BigDecimal.ONE,new BigDecimal("100.00")));
+        setNetDiscount(f,"PERCENTAGE","10.00");
+        var legacy=call(f,post("/api/v1/company/billing-installments"),Map.of("contractId",f.contract.getId(),"dueOn","2026-11-01","allocations",List.of(
+                Map.of("contractServiceId",one.getId(),"type","SERVICE","allocatedAmount","100.00"),Map.of("type","CONTRACT_DISCOUNT","allocatedAmount","-10.00"))),201);
+        var first=call(f,post("/api/v1/company/billing-installments/net"),netPayload(f,netCapacity(f),two.getId(),null,"44.99"),201);
+        assertEquals("49.98",first.at("/billingInstallment/allocations/0/netBillingGrossAmount").asText());
+        var last=call(f,post("/api/v1/company/billing-installments/net"),netPayload(f,netCapacity(f),two.getId(),null,"45.01"),201);
+        assertEquals("50.02",last.at("/billingInstallment/allocations/0/netBillingGrossAmount").asText());
+        assertEquals("0.00",netCapacity(f).path("remainingNetAmount").asText());
+        String contract="/api/v1/company/contracts/"+f.contract.getId();
+        call(f,put(contract+"/discount"),Map.of("discountType","FIXED","discountValue","10.00","justification","Não pode retirar lastro"),409);
+        call(f,put(contract+"/services/"+two.getId()),Map.of("name","Dois","status","ACTIVE","quantity","1.0000","unitPrice","95.00"),409);
+        var historical=call(f,get("/api/v1/company/billing-installments/"+legacy.at("/billingInstallment/id").asText()),null,200);
+        assertEquals("90.00",historical.path("netAmount").asText());
+        for(var row:historical.path("allocations"))assertTrue(row.path("netBillingGrossAmount").isNull());
+        call(f,post("/api/v1/company/billing-installments/"+last.at("/billingInstallment/id").asText()+"/cancellation"),Map.of("reason","Cancelar preservando base"),200);
+        assertEquals("45.01",netCapacity(f).path("remainingNetAmount").asText());
+        assertEquals("5.01",netCapacity(f).path("remainingDiscountAmount").asText());
+    }
+
+    @Test
+    void netBillingApprovalReservesNothingIsIdempotentAndRejectsStaleCapacity() throws Exception {
+        Fixture f=fixture(true,ContractPricingMode.FIXED);
+        var service=contractServices.save(ContractService.create(f.company.getId(),f.contract.getId(),"Base",null,ContractServiceStatus.ACTIVE,BigDecimal.ONE,new BigDecimal("100.00")));
+        setNetDiscount(f,"FIXED","10.00");
+        Fixture requester=actor(f,Map.of(AccessModule.BILLING,List.of(AccessAction.REQUEST_CREATE)));
+        Fixture approver=actor(f,Map.of(AccessModule.BILLING,List.of(AccessAction.APPROVE)));
+        var capacity=netCapacity(f);var payload=netPayload(f,capacity,service.getId(),null,"45.00");
+        var pending=call(requester,post("/api/v1/company/billing-installments/net"),payload,202);
+        assertEquals(pending,call(requester,post("/api/v1/company/billing-installments/net"),payload,202));
+        assertTrue(pending.path("billingInstallment").isNull());assertTrue(pending.path("receivable").isNull());
+        assertEquals(capacity,netCapacity(f));assertEquals(0,allocations.findByContractIdAndCompanyId(f.contract.getId(),f.company.getId()).size());
+        call(approver,post("/api/v1/company/change-requests/"+pending.path("changeRequestId").asText()+"/approve"),Map.of(),200);
+        assertEquals("45.00",netCapacity(f).path("remainingNetAmount").asText());
+        call(requester,post("/api/v1/company/billing-installments/net"),payload,200);
+        var stale=netPayload(f,capacity,service.getId(),null,"1.00");call(f,post("/api/v1/company/billing-installments/net"),stale,409);
+        var second=call(requester,post("/api/v1/company/billing-installments/net"),netPayload(f,netCapacity(f),service.getId(),null,"10.00"),202);
+        call(f,post("/api/v1/company/billing-installments/net"),netPayload(f,netCapacity(f),service.getId(),null,"5.00"),201);
+        call(approver,post("/api/v1/company/change-requests/"+second.path("changeRequestId").asText()+"/approve"),Map.of(),409);
+        assertEquals("PENDING",changeRequests.findByIdAndCompanyId(UUID.fromString(second.path("changeRequestId").asText()),f.company.getId()).orElseThrow().getStatus().name());
+        assertEquals(2,allocations.findByContractIdAndCompanyId(f.contract.getId(),f.company.getId()).size());
+    }
+
+    @Test
+    void netBillingEnforcesAuthorizationTenantExactOriginsAndStrictPositiveDecimalRequests() throws Exception {
+        Fixture f=fixture(true,ContractPricingMode.FIXED),other=fixture(true);
+        var service=contractServices.save(ContractService.create(f.company.getId(),f.contract.getId(),"Base",null,ContractServiceStatus.ACTIVE,BigDecimal.ONE,new BigDecimal("100.00")));
+        Fixture denied=actor(f,Map.of());var quote=netCapacity(f);var payload=netPayload(f,quote,service.getId(),null,"10.00");
+        String route="/api/v1/company/billing-installments/net",capacity=netPath(f);
+        mvc.perform(get(capacity)).andExpect(status().isUnauthorized());
+        call(denied,get(capacity),null,403);call(denied,post(route),payload,403);call(other,get(capacity),null,404);call(other,post(route),payload,404);
+        call(actor(f,Map.of(AccessModule.BILLING,List.of(AccessAction.READ))),get(capacity),null,403);
+        call(actor(f,Map.of(AccessModule.MEASUREMENTS,List.of(AccessAction.READ))),get(capacity),null,403);
+        call(f,get(capacity).param("size","101"),null,400);call(f,get(capacity).param("page","-1"),null,400);
+        assertEquals(0,call(f,get(capacity).param("contractServiceId",UUID.randomUUID().toString()),null,200).at("/positions/totalItems").asInt());
+        call(f,post(route),netPayload(f,quote,service.getId(),UUID.randomUUID(),"10.00"),404);
+        for(Object amount:List.of(10,new BigDecimal("10.00"),"-1.00","0.00","10","1.001","1e1")) {
+            Map<String,Object> invalid=new HashMap<>(payload);invalid.put("operationId",UUID.randomUUID());invalid.put("allocations",List.of(Map.of("contractServiceId",service.getId(),"netAmount",amount)));
+            var error=call(f,post(route),invalid,400);assertFalse(error.path("correlationId").asText().isBlank());
+        }
+        Map<String,Object> duplicate=new HashMap<>(payload);duplicate.put("allocations",List.of(Map.of("contractServiceId",service.getId(),"netAmount","1.00"),Map.of("contractServiceId",service.getId(),"netAmount","1.00")));
+        call(f,post(route),duplicate,400);
+        Map<String,Object> tooLong=new HashMap<>(payload);tooLong.put("description","x".repeat(1001));call(f,post(route),tooLong,400);
+        call(f,post(route),payload,201);Map<String,Object> changed=new HashMap<>(payload);changed.put("reference","Outra proposta");call(f,post(route),changed,409);
+        Map<String,Object> escaped=new HashMap<>(netPayload(f,netCapacity(f),service.getId(),null,"1.00"));
+        escaped.put("reference","a, description=b");escaped.put("description","c");call(f,post(route),escaped,201);
+        Map<String,Object> ambiguous=new HashMap<>(escaped);ambiguous.put("reference","a");ambiguous.put("description","b, description=c");
+        call(f,post(route),ambiguous,409);
+    }
+
+    @Test
+    void netBillingSerializesConcurrentOriginsAndReplaysTheSameOperationOnlyOnce() throws Exception {
+        Fixture f=fixture(true,ContractPricingMode.FIXED);
+        var service=contractServices.save(ContractService.create(f.company.getId(),f.contract.getId(),"Base",null,ContractServiceStatus.ACTIVE,BigDecimal.ONE,new BigDecimal("100.00")));
+        setNetDiscount(f,"FIXED","10.00");var quote=netCapacity(f);
+        try(var executor=Executors.newVirtualThreadPerTaskExecutor()) {
+            CountDownLatch gate=new CountDownLatch(1);
+            var p1=netPayload(f,quote,service.getId(),null,"60.00");var p2=netPayload(f,quote,service.getId(),null,"60.00");
+            var a=executor.submit(()->{gate.await();return rawStatus(f,post("/api/v1/company/billing-installments/net"),p1);});
+            var b=executor.submit(()->{gate.await();return rawStatus(f,post("/api/v1/company/billing-installments/net"),p2);});
+            gate.countDown();List<Integer> codes=new ArrayList<>(List.of(a.get(60,TimeUnit.SECONDS),b.get(60,TimeUnit.SECONDS)));codes.sort(Integer::compare);assertEquals(List.of(201,409),codes);
+            var current=netCapacity(f);var same=netPayload(f,current,service.getId(),null,"30.00");CountDownLatch again=new CountDownLatch(1);
+            var c=executor.submit(()->{again.await();return rawStatus(f,post("/api/v1/company/billing-installments/net"),same);});
+            var d=executor.submit(()->{again.await();return rawStatus(f,post("/api/v1/company/billing-installments/net"),same);});
+            again.countDown();codes=new ArrayList<>(List.of(c.get(60,TimeUnit.SECONDS),d.get(60,TimeUnit.SECONDS)));codes.sort(Integer::compare);assertEquals(List.of(200,201),codes);
+        }
+        assertEquals(2,allocations.findByContractIdAndCompanyId(f.contract.getId(),f.company.getId()).size());assertEquals("0.00",netCapacity(f).path("remainingNetAmount").asText());
+    }
+
+    @Test
+    void netBillingHandlesFullyDiscountedCapacityRejectedRequestsAndReportsOfficialNetAmounts() throws Exception {
+        Fixture f=fixture(true);UUID mid=measurement(f,true),vid=version(f,mid),sid=service(f,mid,"Relatório líquido","CREATE_NEW_SERVICE",null);
+        item(f,mid,vid,sid,1,"Execução","1.0000","100.00");accept(f,mid,vid);
+        var origin=compositions.findByMeasurementIdAndCompanyId(mid,f.company.getId()).getFirst();
+        setNetDiscount(f,"PERCENTAGE","100.00");var zero=netCapacity(f);
+        assertEquals("0.00",netPosition(zero,origin.getId()).path("netAvailableAmount").asText());
+        assertFalse(netPosition(zero,origin.getId()).path("eligible").asBoolean());
+        call(f,post("/api/v1/company/billing-installments/net"),netPayload(f,zero,origin.getContractServiceId(),origin.getId(),"0.01"),409);
+        setNetDiscount(f,"FIXED","10.00");
+        Fixture requester=actor(f,Map.of(AccessModule.BILLING,List.of(AccessAction.REQUEST_CREATE)));
+        Fixture approver=actor(f,Map.of(AccessModule.BILLING,List.of(AccessAction.APPROVE,AccessAction.REJECT)));
+        Map<String,Object> payload=new HashMap<>(netPayload(f,netCapacity(f),origin.getContractServiceId(),origin.getId(),"90.00"));payload.put("justification","Revisão da cobrança");
+        var proposal=call(requester,post("/api/v1/company/billing-installments/net"),payload,202);
+        call(approver,post("/api/v1/company/change-requests/"+proposal.path("changeRequestId").asText()+"/reject"),Map.of("decisionReason","Aguardando conferência"),200);
+        call(requester,post("/api/v1/company/billing-installments/net"),payload,409);
+        payload.put("operationId",UUID.randomUUID());
+        var pending=call(requester,post("/api/v1/company/billing-installments/net"),payload,202);
+        call(approver,post("/api/v1/company/change-requests/"+pending.path("changeRequestId").asText()+"/approve"),Map.of(),200);
+        var replay=call(requester,post("/api/v1/company/billing-installments/net"),payload,200);
+        call(f,post("/api/v1/company/receivables/"+replay.at("/receivable/id").asText()+"/settlements"),Map.of("receivedOn","2026-10-13","amount","90.00","paymentMethod","PIX"),201);
+        try(var pdf=Loader.loadPDF(download(f,mid,"pdf"))) {
+            String text=new PDFTextStripper().getText(pdf);assertTrue(text.contains("Falta receber"));assertTrue(text.contains("R$ 0,00"));assertTrue(text.contains("R$ 90,00"));
+        }
+        try(var workbook=WorkbookFactory.create(new ByteArrayInputStream(download(f,mid,"spreadsheet")))) {
+            boolean remaining=false;
+            for(var row:workbook.getSheetAt(0))if(row.getCell(0)!=null&&row.getCell(0).toString().equals("Falta receber")) {
+                remaining=true;StringBuilder values=new StringBuilder();row.forEach(cell->values.append(cell.toString()));assertTrue(values.toString().contains("R$ 0,00"));
+            }
+            assertTrue(remaining);
+        }
+    }
+
+    @Test
+    void serviceNetBillingUsesBaseThenOfficialAcceptanceDateAndReplaysWithoutReResolving() throws Exception {
+        Fixture f=fixture(true,ContractPricingMode.FIXED);
+        var target=contractServices.save(ContractService.create(f.company.getId(),f.contract.getId(),"Serviço contínuo",null,ContractServiceStatus.ACTIVE,BigDecimal.ONE,new BigDecimal("600.00")));
+        UUID a=measurement(f,true),av=version(f,a),as=service(f,a,"A","ADD_TO_EXISTING_SERVICE",target.getId());
+        item(f,a,av,as,1,"A","1.0000","300.00");workflow(f,a,av,"SEND",null);workflow(f,a,av,"AWAIT_EXTERNAL_ACCEPTANCE",null);
+        call(f,post(base(a)+"/versions/"+av+"/workflow"),Map.of("action","RECORD_EXTERNAL_ACCEPTANCE","externallyAccepted",true,"externalAcceptanceOn","2026-10-15"),200);
+        UUID b=measurement(f,true),bv=version(f,b),bs=service(f,b,"B","ADD_TO_EXISTING_SERVICE",target.getId());
+        item(f,b,bv,bs,1,"B","1.0000","100.00");workflow(f,b,bv,"SEND",null);workflow(f,b,bv,"AWAIT_EXTERNAL_ACCEPTANCE",null);
+        call(f,post(base(b)+"/versions/"+bv+"/workflow"),Map.of("action","RECORD_EXTERNAL_ACCEPTANCE","externallyAccepted",true,"externalAcceptanceOn","2026-10-14"),200);
+        var earlier=compositions.findByMeasurementIdAndCompanyId(b,f.company.getId()).getFirst();
+        var capacity=call(f,get(netPath(f)+"/services").param("size","1"),null,200);
+        assertTrue(capacity.path("coverageComplete").asBoolean());assertEquals(1,capacity.path("totalServices").asInt());
+        assertEquals("1000.00",capacity.at("/services/items/0/availableNetAmount").asText());assertEquals(3,capacity.at("/services/items/0/originCount").asInt());
+        var payload=serviceNetPayload(f,capacity,target.getId(),"PARTIAL","650.00");String route="/api/v1/company/billing-installments/net/by-service";
+        var created=call(f,post(route),payload,201);var lines=created.at("/billingInstallment/allocations");assertEquals(2,lines.size());
+        for(var line:lines) if(line.path("measurementContractCompositionId").isNull())assertEquals("600.00",line.path("allocatedAmount").asText());
+        else {assertEquals(earlier.getId().toString(),line.path("measurementContractCompositionId").asText());assertEquals("50.00",line.path("allocatedAmount").asText());}
+        assertEquals(created.at("/billingInstallment/id"),call(f,post(route),payload,200).at("/billingInstallment/id"));
+        List<Map<String,Object>> invoiceLines=new ArrayList<>();for(var line:lines)invoiceLines.add(Map.of("billingAllocationId",line.path("id").asText(),"allocatedAmount",line.path("allocatedAmount").asText()));
+        var invoice=call(f,post("/api/v1/company/invoices"),Map.of("contractId",f.contract.getId(),"number","NF-POR-SERVICO","issuedOn","2026-10-26","items",invoiceLines),201);
+        assertEquals("650.00",invoice.at("/invoice/totalAmount").asText());
+        String rid=created.at("/receivable/id").asText();var cash=call(f,post("/api/v1/company/receivables/"+rid+"/settlements"),Map.of("receivedOn","2026-10-26","amount","325.00","paymentMethod","PIX"),201);
+        UUID cashId=UUID.fromString(cash.at("/settlement/id").asText());
+        assertEquals(new BigDecimal("25.00"),jdbc.queryForObject("select sum(s.amount) from receivable_settlement_allocation s join billing_allocation a on a.id=s.billing_allocation_id and a.company_id=s.company_id where s.company_id=? and s.settlement_id=? and a.measurement_contract_composition_id=?",BigDecimal.class,f.company.getId(),cashId,earlier.getId()));
+        var reverse=call(f,post("/api/v1/company/receivables/"+rid+"/settlements/"+cashId+"/reversal"),Map.of("reason","Conferência de origem"),201);
+        assertEquals(new BigDecimal("-25.00"),jdbc.queryForObject("select sum(s.amount) from receivable_settlement_allocation s join billing_allocation a on a.id=s.billing_allocation_id and a.company_id=s.company_id where s.company_id=? and s.settlement_id=? and a.measurement_contract_composition_id=?",BigDecimal.class,f.company.getId(),UUID.fromString(reverse.path("reversalId").asText()),earlier.getId()));
+        var current=call(f,get(netPath(f)+"/services"),null,200);assertEquals("350.00",current.at("/services/items/0/availableNetAmount").asText());
+        var all=call(f,post(route),serviceNetPayload(f,current,target.getId(),"ALL_AVAILABLE",null),201);assertEquals("350.00",all.at("/receivable/originalAmount").asText());
+        var changed=new HashMap<String,Object>(payload);changed.put("reference","Outra intenção");call(f,post(route),changed,409);
+    }
+
+    @Test
+    void serviceNetBillingApprovalReservesNothingAndRejectsChangedCapacity() throws Exception {
+        Fixture f=fixture(true,ContractPricingMode.FIXED);var service=contractServices.save(ContractService.create(f.company.getId(),f.contract.getId(),"Base",null,ContractServiceStatus.ACTIVE,BigDecimal.ONE,new BigDecimal("100.00")));
+        Fixture requester=actor(f,Map.of(AccessModule.BILLING,List.of(AccessAction.REQUEST_CREATE)));
+        Fixture approver=actor(f,Map.of(AccessModule.BILLING,List.of(AccessAction.APPROVE)));
+        String route="/api/v1/company/billing-installments/net/by-service";var quote=call(f,get(netPath(f)+"/services"),null,200);
+        var body=serviceNetPayload(f,quote,service.getId(),"ALL_AVAILABLE",null);
+        var pending=call(requester,post(route),body,202);assertTrue(pending.path("billingInstallment").isNull());
+        assertEquals(pending,call(requester,post(route),body,202));assertEquals(quote.path("capacityVersion"),netCapacity(f).path("capacityVersion"));
+        call(approver,post("/api/v1/company/change-requests/"+pending.path("changeRequestId").asText()+"/approve"),Map.of(),200);
+        assertEquals("100.00",call(requester,post(route),body,200).at("/receivable/originalAmount").asText());
+        Fixture another=fixture(true,ContractPricingMode.FIXED);var s=contractServices.save(ContractService.create(another.company.getId(),another.contract.getId(),"Base",null,ContractServiceStatus.ACTIVE,BigDecimal.ONE,new BigDecimal("100.00")));
+        var req=actor(another,Map.of(AccessModule.BILLING,List.of(AccessAction.REQUEST_CREATE)));var apr=actor(another,Map.of(AccessModule.BILLING,List.of(AccessAction.APPROVE)));
+        var p=call(req,post(route),serviceNetPayload(another,netCapacity(another),s.getId(),"ALL_AVAILABLE",null),202);
+        call(another,post(route),serviceNetPayload(another,netCapacity(another),s.getId(),"PARTIAL","10.00"),201);
+        call(apr,post("/api/v1/company/change-requests/"+p.path("changeRequestId").asText()+"/approve"),Map.of(),409);
+    }
+
+    @Test
+    void serviceNetBillingPreservesDiscountBasisAndEnforcesTenantPermissionsAndModes() throws Exception {
+        Fixture f=fixture(true,ContractPricingMode.FIXED);var service=contractServices.save(ContractService.create(f.company.getId(),f.contract.getId(),"Base",null,ContractServiceStatus.ACTIVE,BigDecimal.ONE,new BigDecimal("100.00")));
+        setNetDiscount(f,"FIXED","10.00");var quote=call(f,get(netPath(f)+"/services"),null,200);
+        String route="/api/v1/company/billing-installments/net/by-service";var body=serviceNetPayload(f,quote,service.getId(),"PARTIAL","45.00");
+        var other=fixture(true);call(other,get(netPath(f)+"/services"),null,404);call(other,post(route),body,404);
+        call(actor(f,Map.of(AccessModule.BILLING,List.of(AccessAction.READ))),get(netPath(f)+"/services"),null,403);
+        call(f,get(netPath(f)+"/services").param("size","101"),null,400);
+        call(f,post(route),serviceNetPayload(f,quote,service.getId(),"ALL_AVAILABLE","1.00"),400);
+        call(f,post(route),serviceNetPayload(f,quote,service.getId(),"PARTIAL",null),400);
+        var result=call(f,post(route),body,201);assertEquals("50.00",result.at("/billingInstallment/allocations/0/netBillingGrossAmount").asText());
+        assertEquals("5.00",result.at("/billingInstallment/allocations/0/netBillingDiscountAmount").asText());
+    }
+
+    @Test
+    void serviceNetBillingSerializesConcurrentPartialsAndWholeAvailableReplays() throws Exception {
+        Fixture f=fixture(true,ContractPricingMode.FIXED);var s=contractServices.save(ContractService.create(f.company.getId(),f.contract.getId(),"Base",null,ContractServiceStatus.ACTIVE,BigDecimal.ONE,new BigDecimal("100.00")));
+        var quote=netCapacity(f);String route="/api/v1/company/billing-installments/net/by-service";
+        try(var pool=Executors.newVirtualThreadPerTaskExecutor()) {
+            var gate=new CountDownLatch(1);var p1=serviceNetPayload(f,quote,s.getId(),"PARTIAL","60.00");var p2=serviceNetPayload(f,quote,s.getId(),"PARTIAL","60.00");
+            var a=pool.submit(()->{gate.await();return rawStatus(f,post(route),p1);});var b=pool.submit(()->{gate.await();return rawStatus(f,post(route),p2);});gate.countDown();
+            var codes=new ArrayList<Integer>(List.of(a.get(60,TimeUnit.SECONDS),b.get(60,TimeUnit.SECONDS)));codes.sort(Integer::compareTo);assertEquals(List.of(201,409),codes);
+            var whole=serviceNetPayload(f,netCapacity(f),s.getId(),"ALL_AVAILABLE",null);var again=new CountDownLatch(1);
+            var c=pool.submit(()->{again.await();return rawStatus(f,post(route),whole);});var d=pool.submit(()->{again.await();return rawStatus(f,post(route),whole);});again.countDown();
+            codes=new ArrayList<>(List.of(c.get(60,TimeUnit.SECONDS),d.get(60,TimeUnit.SECONDS)));codes.sort(Integer::compareTo);assertEquals(List.of(200,201),codes);
+        }
+        assertEquals("0.00",call(f,get(netPath(f)+"/services"),null,200).at("/services/items/0/availableNetAmount").asText());
+    }
+
+    Map<String,Object> serviceNetPayload(Fixture f,JsonNode quote,UUID service,String mode,String amount) {
+        Map<String,Object> line=new HashMap<>();line.put("contractServiceId",service);line.put("mode",mode);if(amount!=null)line.put("netAmount",amount);
+        return Map.of("operationId",UUID.randomUUID(),"contractId",f.contract.getId(),"capacityVersion",quote.path("capacityVersion").asText(),"dueOn","2026-11-01","services",List.of(line));
+    }
+
+    String netPath(Fixture f) {return "/api/v1/company/billing-control/contracts/"+f.contract.getId()+"/net-capacity";}
+    JsonNode netCapacity(Fixture f)throws Exception{return call(f,get(netPath(f)).param("size","100"),null,200);}
+    JsonNode netPosition(JsonNode capacity,UUID origin){for(var p:capacity.at("/positions/items"))if(p.path("measurementContractCompositionId").asText().equals(origin.toString()))return p;throw new AssertionError("Origin not found");}
+    void setNetDiscount(Fixture f,String type,String amount)throws Exception{call(f,put("/api/v1/company/contracts/"+f.contract.getId()+"/discount"),Map.of("discountType",type,"discountValue",amount,"justification","Ajuste contratual"),200);}
+    Map<String,Object> netPayload(Fixture f,JsonNode capacity,UUID service,UUID origin,String amount) {
+        Map<String,Object> line=new HashMap<>();line.put("contractServiceId",service);line.put("measurementContractCompositionId",origin);line.put("netAmount",amount);
+        return Map.of("operationId",UUID.randomUUID(),"contractId",f.contract.getId(),"capacityVersion",capacity.path("capacityVersion").asText(),"dueOn","2026-11-01","allocations",List.of(line));
+    }
+
+    java.util.Set<String> fieldNames(JsonNode node) {
+        java.util.Set<String> names=new java.util.HashSet<>();node.properties().forEach(entry->names.add(entry.getKey()));return names;
+    }
+
+    String originsPath(Fixture f) { return "/api/v1/company/billing-control/contracts/"+f.contract.getId()+"/measurement-origins"; }
+
     JsonNode officialBilling(Fixture f)throws Exception {
         return call(f,get("/api/v1/company/billing-control/contracts/"+f.contract.getId()),null,200);
     }
@@ -819,6 +1395,41 @@ class MeasurementContinuousApiIntegrationTest extends AbstractPostgresIntegratio
         assertEquals(baseAmount,found.path("netAmount").asText());
         assertEquals(composed,found.path("measurementCompositionAmount").asText());
         assertEquals(effective,found.path("effectiveNetAmount").asText());
+    }
+
+    @Test
+    void invoiceReadPreservesTwoExactMeasurementOriginsWithoutRequiringMeasurementContentPermission() throws Exception {
+        Fixture f=fixture(true);UUID a=measurement(f,true),av=version(f,a),as=service(f,a,"Origem A","CREATE_NEW_SERVICE",null);
+        item(f,a,av,as,1,"A","1.0000","100.00");accept(f,a,av);
+        var ca=compositions.findByMeasurementIdAndCompanyId(a,f.company.getId()).getFirst();
+        UUID b=measurement(f,true),bv=version(f,b),bs=service(f,b,"Origem B","ADD_TO_EXISTING_SERVICE",ca.getContractServiceId());
+        item(f,b,bv,bs,1,"B","1.0000","100.00");accept(f,b,bv);
+        var cb=compositions.findByMeasurementIdAndCompanyId(b,f.company.getId()).getFirst();
+        var billing=call(f,post("/api/v1/company/billing-installments"),Map.of("contractId",f.contract.getId(),"dueOn","2026-11-01",
+                "reference","Parcela de origens", "allocations",List.of(
+                Map.of("contractServiceId",ca.getContractServiceId(),"measurementContractCompositionId",ca.getId(),"type","SERVICE","allocatedAmount","30.00"),
+                Map.of("contractServiceId",cb.getContractServiceId(),"measurementContractCompositionId",cb.getId(),"type","SERVICE","allocatedAmount","40.00"))),201);
+        var lines=billing.at("/billingInstallment/allocations");
+        var created=call(f,post("/api/v1/company/invoices"),Map.of("contractId",f.contract.getId(),"number","NF-ORIGENS","issuedOn","2026-10-25",
+                "items",List.of(Map.of("billingAllocationId",lines.get(0).path("id").asText(),"allocatedAmount",lines.get(0).path("allocatedAmount").asText()),
+                Map.of("billingAllocationId",lines.get(1).path("id").asText(),"allocatedAmount",lines.get(1).path("allocatedAmount").asText()))),201);
+        String invoice=created.at("/invoice/id").asText();
+        jdbc.update("delete from role_permission where role_id in (select role_id from user_role where user_id=?) and permission_id not in (select id from permission where module='INVOICES' and action='READ')",f.user.getId());
+        long auditCount=jdbc.queryForObject("select count(*) from audit_event where company_id=?",Long.class,f.company.getId());
+        var detail=call(f,get("/api/v1/company/invoices/"+invoice),null,200);
+        assertEquals("70.00",detail.at("/invoice/totalAmount").asText());
+        assertEquals(2,detail.path("items").size());
+        var origins=new java.util.HashSet<String>();
+        for(var line:detail.path("items")) {
+            origins.add(line.path("measurementContractCompositionId").asText());
+            assertEquals(ca.getContractServiceId().toString(),line.path("contractServiceId").asText());
+            var expected=allocations.findByIdAndCompanyId(UUID.fromString(line.path("billingAllocationId").asText()),f.company.getId()).orElseThrow();
+            assertEquals(expected.getMeasurementContractCompositionId().toString(),line.path("measurementContractCompositionId").asText());
+        }
+        assertEquals(java.util.Set.of(ca.getId().toString(),cb.getId().toString()),origins);
+        assertEquals(1,call(f,get("/api/v1/company/invoices").param("installmentReference","de origens"),null,200).path("totalItems").asInt());
+        assertEquals(auditCount,jdbc.queryForObject("select count(*) from audit_event where company_id=?",Long.class,f.company.getId()));
+        call(f,get(base(a)),null,403);
     }
 
     Fixture fixture(boolean finance) {

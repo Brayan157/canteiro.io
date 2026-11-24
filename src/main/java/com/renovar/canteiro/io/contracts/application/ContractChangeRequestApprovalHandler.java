@@ -16,7 +16,7 @@ class ContractChangeRequestApprovalHandler implements ChangeRequestApprovalHandl
     @Override
     public boolean supports(ChangeRequest changeRequest) {
         return changeRequest.getModule() == AuditModule.CONTRACTS
-                && (changeRequest.getOperation() == ChangeRequestOperation.CREATE || changeRequest.getOperation() == ChangeRequestOperation.UPDATE)
+                && (changeRequest.getOperation() == ChangeRequestOperation.CREATE || changeRequest.getOperation() == ChangeRequestOperation.UPDATE || changeRequest.getOperation() == ChangeRequestOperation.CANCEL)
                 && "Contract".equals(changeRequest.getEntityType());
     }
 

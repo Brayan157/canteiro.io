@@ -8,6 +8,7 @@ public enum AuditModule {
     ROLES,
     CUSTOMERS,
     WORKS,
+    WORK_DIARY,
     CONTRACTS,
     SERVICES,
     DISCOUNTS,

@@ -1,5 +1,6 @@
 package com.renovar.canteiro.io.governance.infrastructure.persistence;
 
+import com.renovar.canteiro.io.governance.domain.AuditModule;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -11,5 +12,5 @@ interface AuditEventJpaRepository extends JpaRepository<AuditEventJpaEntity, UUI
 
     Optional<AuditEventJpaEntity> findByIdAndCompanyId(UUID auditEventId, UUID companyId);
 
-    Page<AuditEventJpaEntity> findByCompanyId(UUID companyId, Pageable pageable);
+    Page<AuditEventJpaEntity> findByCompanyIdAndModuleNot(UUID companyId, AuditModule module, Pageable pageable);
 }

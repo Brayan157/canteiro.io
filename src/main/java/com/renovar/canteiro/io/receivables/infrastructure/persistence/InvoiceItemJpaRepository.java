@@ -13,6 +13,18 @@ interface InvoiceItemJpaRepository extends JpaRepository<InvoiceItemJpaEntity, U
 
     List<InvoiceItemJpaEntity> findByInvoiceIdAndCompanyId(UUID invoiceId, UUID companyId);
 
+    interface AllocationAmount { UUID getAllocationId(); BigDecimal getAmount(); }
+    @Query("""
+            select item.billingAllocationId as allocationId, sum(item.allocatedAmount) as amount
+            from InvoiceItemJpaEntity item, InvoiceJpaEntity invoice
+            where item.invoiceId=invoice.id and item.companyId=:companyId and invoice.companyId=:companyId
+              and item.billingAllocationId in :allocationIds
+              and item.status=com.renovar.canteiro.io.receivables.domain.InvoiceItemStatus.REGISTERED
+              and invoice.status=com.renovar.canteiro.io.receivables.domain.InvoiceStatus.REGISTERED
+            group by item.billingAllocationId
+            """)
+    List<AllocationAmount> registeredAmounts(@Param("companyId") UUID companyId,@Param("allocationIds") java.util.Collection<UUID> allocationIds);
+
     @Query("""
             select coalesce(sum(item.allocatedAmount), 0)
             from InvoiceItemJpaEntity item, InvoiceJpaEntity invoice

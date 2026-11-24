@@ -167,6 +167,15 @@ class CompanyOnboardingApiIntegrationTest extends AbstractPostgresIntegrationTes
         User owner = userRepository.findById(ownerUserId).orElseThrow();
         owner.activate(passwordHasher.hash("CompanyOwner#2026"), Instant.now());
         userRepository.save(owner);
+        mockMvc.perform(get("/api/v1/auth/me")
+                        .with(jwt().jwt(token -> token.subject(ownerUserId.toString()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.permissions", org.hamcrest.Matchers.containsInAnyOrder(
+                        activePermissionCodes.toArray(String[]::new))));
+        mockMvc.perform(get("/api/v1/company/workforce/employments")
+                        .param("employeeId", UUID.randomUUID().toString())
+                        .with(jwt().jwt(token -> token.subject(ownerUserId.toString()))))
+                .andExpect(status().isOk());
         mockMvc.perform(get("/api/v1/company/access/change-authorizations/{module}/{operation}",
                         AccessModule.CUSTOMERS, "CREATE")
                         .with(jwt().jwt(token -> token.subject(ownerUserId.toString()))))

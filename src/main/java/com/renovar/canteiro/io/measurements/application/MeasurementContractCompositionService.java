@@ -185,6 +185,7 @@ public class MeasurementContractCompositionService {
         if(v.getStatus()!=MeasurementVersionStatus.ACCEPTED) conflict("Only ACCEPTED origins can compose a contract");
         if(m.getContractId()==null||m.getWorkId()==null||!m.getContractId().equals(cmd.contractId())) conflict("Link the measurement to the selected contract first");
         Contract contract=contracts.findByIdAndCompanyIdWithBillingLock(cmd.contractId(),company).orElseThrow(()->new TenantResourceNotFoundException("Contract"));
+        com.renovar.canteiro.io.contracts.application.ContractLifecycleService.requireOpen(contract);
         m.getCurrency().requireSame(contract.getCurrency());
         if(!m.getWorkId().equals(contract.getWorkId())) conflict("The measurement and contract must have the same work");
         MeasurementService group=groups.findByIdAndCompanyId(cmd.measurementServiceId(),company)

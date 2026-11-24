@@ -5,5 +5,5 @@ import java.util.UUID;
 
 public record BillingServiceControl(UUID contractServiceId, String serviceName, BigDecimal serviceNetAmount,
                                     BigDecimal activeAllocatedAmount, BigDecimal availableAmount,
-                                    BigDecimal issuedInInvoicesAmount) {
+                                    BigDecimal issuedInInvoicesAmount, BigDecimal activeCapacityAmount, BigDecimal netAvailableToBillAmount) {
 }

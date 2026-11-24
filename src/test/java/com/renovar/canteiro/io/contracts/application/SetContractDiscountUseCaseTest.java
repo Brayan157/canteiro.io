@@ -34,6 +34,7 @@ class SetContractDiscountUseCaseTest {
     @Mock private ContractDiscountRepository contractDiscountRepository;
     @Mock private ContractServiceRepository contractServiceRepository;
     @Mock private ApprovedContractBillingAmountProvider approvedContractBillingAmountProvider;
+    @Mock private ContractDiscountRestrictionProvider discountRestrictions;
 
     @Test
     void blocksReducingDiscountBelowAnAlreadyAllocatedNegativeAdjustment() {
@@ -82,7 +83,7 @@ class SetContractDiscountUseCaseTest {
         lenient().when(approvedContractBillingAmountProvider.approvedDiscountAmount(companyId, contractId)).thenReturn(BigDecimal.ZERO);
         return new Fixture(companyId, contractId, new SetContractDiscountUseCase(
                 contractRepository, contractDiscountRepository, contractServiceRepository,
-                approvedContractBillingAmountProvider
+                approvedContractBillingAmountProvider, discountRestrictions, (tenant, aggregate) -> BigDecimal.ZERO
         ));
     }
 

@@ -14,6 +14,7 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import com.renovar.canteiro.io.platform.subscription.application.PaymentGatewayWebhookAuthenticationException;
@@ -29,7 +30,10 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(ApiException.class)
     ProblemDetail handleApiException(ApiException exception, HttpServletRequest request) {
-        return problem(exception.getStatus(), exception.getErrorCode(), exception.getMessage(), request);
+        ProblemDetail result = problem(exception.getStatus(), exception.getErrorCode(), exception.getMessage(), request);
+        if (!exception.getViolations().isEmpty()) result.setProperty("violations", exception.getViolations());
+        if (exception.getReason() != null) result.setProperty("reason", exception.getReason());
+        return result;
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
@@ -45,6 +49,12 @@ public class GlobalExceptionHandler {
         );
         problem.setProperty("violations", violations);
         return problem;
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    ProblemDetail handleInvalidParameterType(MethodArgumentTypeMismatchException exception, HttpServletRequest request) {
+        return problem(HttpStatus.BAD_REQUEST, ErrorCode.VALIDATION_FAILED,
+                "One or more request parameters have invalid types.", request);
     }
 
     @ExceptionHandler(ConstraintViolationException.class)
@@ -72,14 +82,46 @@ public class GlobalExceptionHandler {
         return problem(HttpStatus.FORBIDDEN, ErrorCode.ACCESS_DENIED, "Access is denied.", request);
     }
 
+    @ExceptionHandler(org.springframework.web.bind.MissingServletRequestParameterException.class)
+    ProblemDetail handleMissingParameter(org.springframework.web.bind.MissingServletRequestParameterException exception, HttpServletRequest request) {
+        return problem(HttpStatus.BAD_REQUEST, ErrorCode.MALFORMED_REQUEST, "A required request parameter is missing.", request);
+    }
+
     @ExceptionHandler(IllegalArgumentException.class)
     ProblemDetail handleIllegalArgument(IllegalArgumentException exception, HttpServletRequest request) {
         return problem(HttpStatus.BAD_REQUEST, ErrorCode.VALIDATION_FAILED, exception.getMessage(), request);
     }
 
+    @ExceptionHandler(com.renovar.canteiro.io.payables.domain.PayableCatalogConflictException.class)
+    ProblemDetail handlePayableCatalogConflict(com.renovar.canteiro.io.payables.domain.PayableCatalogConflictException exception, HttpServletRequest request) {
+        return problem(HttpStatus.CONFLICT, ErrorCode.BUSINESS_RULE_VIOLATION, exception.getMessage(), request);
+    }
+
     @ExceptionHandler(IllegalStateException.class)
     ProblemDetail handleIllegalState(IllegalStateException exception, HttpServletRequest request) {
         return problem(HttpStatus.CONFLICT, ErrorCode.BUSINESS_RULE_VIOLATION, exception.getMessage(), request);
+    }
+
+    @ExceptionHandler(com.renovar.canteiro.io.receivables.domain.InvoiceServiceCoverageViolation.class)
+    ProblemDetail handleInvoiceCoverage(com.renovar.canteiro.io.receivables.domain.InvoiceServiceCoverageViolation exception,HttpServletRequest request){
+        ProblemDetail value=problem(HttpStatus.CONFLICT,ErrorCode.BUSINESS_RULE_VIOLATION,exception.getMessage(),request);
+        value.setProperty("reason",exception.reason());return value;
+    }
+
+    @ExceptionHandler(com.renovar.canteiro.io.receivables.domain.InvoiceFiscalIdentityConflict.class)
+    ProblemDetail handleInvoiceIdentity(com.renovar.canteiro.io.receivables.domain.InvoiceFiscalIdentityConflict exception,HttpServletRequest request){
+        ProblemDetail value=problem(HttpStatus.CONFLICT,ErrorCode.BUSINESS_RULE_VIOLATION,exception.getMessage(),request);
+        value.setProperty("reason","INVOICE_FISCAL_IDENTITY_ALREADY_REGISTERED");return value;
+    }
+
+    @ExceptionHandler(org.springframework.web.multipart.MaxUploadSizeExceededException.class)
+    ProblemDetail handleUploadLimit(org.springframework.web.multipart.MaxUploadSizeExceededException exception,HttpServletRequest request){
+        return problem(HttpStatus.valueOf(413),ErrorCode.VALIDATION_FAILED,"Upload exceeds the configured request size limit.",request);
+    }
+
+    @ExceptionHandler(org.springframework.web.multipart.support.MissingServletRequestPartException.class)
+    ProblemDetail handleMissingUpload(org.springframework.web.multipart.support.MissingServletRequestPartException exception,HttpServletRequest request){
+        return problem(HttpStatus.BAD_REQUEST,ErrorCode.MALFORMED_REQUEST,"A required multipart field is missing.",request);
     }
 
     @ExceptionHandler(OptimisticLockingFailureException.class)
